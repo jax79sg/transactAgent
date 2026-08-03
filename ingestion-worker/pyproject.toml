@@ -1,0 +1,35 @@
+[project]
+name = "ingestion-worker"
+version = "0.1.0"
+description = "Ingestion Worker Service (Unit 3) for the Bank Transaction Insights App"
+requires-python = ">=3.12"
+dependencies = [
+    "transactagent-db",
+    "google-genai>=0.7,<1.0",
+    "openai>=1.30,<2.0",
+    "google-api-python-client>=2.130,<3.0",
+    "google-auth>=2.29,<3.0",
+    "pdf2image>=1.17,<2.0",
+    "rapidfuzz>=3.9,<4.0",
+    "httpx>=0.27,<1.0",
+    "pydantic>=2.6,<3.0",
+    "pydantic-settings>=2.2,<3.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.23,<1.0",
+    "hypothesis>=6.100,<7.0",
+    "testcontainers[postgres]>=4.0,<5.0",
+]
+
+[tool.uv.sources]
+transactagent-db = { path = "../database", editable = true }
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,100 @@
+# Frontend Components — Unit 4: Frontend SPA
+
+Framework-agnostic component hierarchy, state, interaction flows, validation, and API integration points. Consumes Unit 2's REST API exclusively (`api-service/functional-design/domain-entities.md` for DTO shapes, `api-service/code/api-layer-summary.md` for the actual endpoint list including `/drive/*`).
+
+## Component Hierarchy
+
+```
+App
+  AuthProvider                          (session state: token in sessionStorage per Question 1 = C)
+  Router
+    LoginPage                           (/login)
+      LoginForm
+    ProtectedLayout                     (redirects to /login if no valid session)
+      NavBar                            (Addendum 2026-08-02: PendingReviewBadge, US-6.6)
+      DashboardPage                     (/)
+        DateRangeFilter                 (shared across the 3 tabs below)
+        CategoryTrendsTab
+        CashFlowTab
+        BankBreakdownTab
+      TransactionsPage                  (/transactions)
+        TransactionFilterBar
+        TransactionTable
+          TransactionRow                (inline category correction, Question 3 = A)
+        ExportCsvButton
+      IngestionPage                     (/ingestion)
+        TriggerRunButton
+        ActiveRunProgress
+        RunHistoryTable
+          RunFileDrilldown
+      SettingsPage                      (/settings)
+        CategoryManagement
+        DriveConnectionCard
+      ReviewPage                        (/review — Addendum 2026-08-02, Epic 6)
+        ProposalTable
+          ProposalRow                   (per-row approve/reject, select checkbox)
+        BulkActionBar                   (select-all, bulk approve, bulk reject)
+```
+
+## LoginPage / LoginForm
+
+- **Props/State**: local form state `{username, password}`, `submitting` boolean, `error` string
+- **Validation**: both fields required (non-empty) before enabling submit; no client-side password strength rules (this isn't registration)
+- **Interaction flow**: submit -> `POST /auth/login` -> on success, store token in `sessionStorage`, set `AuthProvider` state, redirect to `/`; on 401, show "Invalid username or password" inline (never reveal which field was wrong, matching US-5.1 edge case)
+- **API**: `POST /auth/login`
+
+## AuthProvider
+
+- **State**: `token: string | null`, `expiresAt: datetime | null`
+- **Behavior**: on app load, reads token from `sessionStorage`; every authenticated API call includes `Authorization: Bearer <token>`; on any `401` response from any API call, clears the session and redirects to `/login` (handles both expiry and the sliding-expiry token refresh — see business-logic-model.md)
+- **Logout**: clears `sessionStorage` and in-memory state, redirects to `/login` (client-side only, per Unit 2's stateless-JWT design — no server-side revocation call)
+
+## DashboardPage / DateRangeFilter / *Tab components
+
+- **Shared state** (lifted to `DashboardPage`): `dateFrom`, `dateTo`, `currency?` — changing any of these refetches all 3 tabs' data
+- **CategoryTrendsTab**: chart of category totals per month; disclosure banner shown when `disclosure.approximateCount > 0` or `excludedCount > 0`; clicking a chart segment navigates to `/transactions?category=<name>&dateFrom=<segment month start>&dateTo=<segment month end>` (US-4.5 drill-down)
+- **CashFlowTab**: income/expense/net chart per month; same disclosure pattern
+- **BankBreakdownTab**: per-bank totals per month; same disclosure pattern
+- **API**: `GET /dashboards/category-trends`, `GET /dashboards/cash-flow`, `GET /dashboards/bank-breakdown`
+
+## TransactionsPage / TransactionFilterBar / TransactionTable / TransactionRow
+
+- **Filter state**: `dateFrom, dateTo, bank, category, flowDirection, currency, textSearch, categorySource, groupBy, sortBy, sortDir, page, pageSize` — mirrors `TransactionFilter`/`TransactionListQuery` (Unit 2). Reflected in the URL query string so filtered views are shareable/bookmarkable and drill-down links (from Dashboard) work.
+- **`categorySource=unsure` quick filter**: a single-click toggle/chip (US-3.5), not a raw dropdown value the user has to know to select
+- **TransactionRow inline correction** (Question 3 = A): clicking the category cell swaps it for a `<select>` of active categories; on change, calls `PUT /transactions/{id}/category`; on success, updates the row in place and shows a brief toast noting the retroactive-recategorization job was queued (informational only, no need to poll its completion)
+- **Validation**: the category `<select>` is populated only from currently-active categories (mirrors AR-2 — the UI shouldn't even offer an inactive category as a choice, though the API still enforces it)
+- **Grouping**: a `groupBy` selector; when set, `TransactionTable` renders grouped section headers with subtotals (from `TransactionPage.groups`) above the flat row list
+- **API**: `GET /transactions`, `PUT /transactions/{id}/category`
+
+## ExportCsvButton
+
+- **Behavior**: triggers a browser download from `GET /transactions/export.csv` using the *current* filter state (no pagination params). **Resolved in Code Generation** (2026-08-01): implemented as `fetch` + `Blob` + a programmatically-clicked temporary anchor, not a direct `<a href>` navigation — the export endpoint requires the same JWT as every other route (AR-1), and a plain browser-initiated navigation has no way to attach an `Authorization` header.
+
+## IngestionPage / TriggerRunButton / ActiveRunProgress / RunHistoryTable / RunFileDrilldown
+
+- **TriggerRunButton**: disabled while `ActiveRunProgress` shows a run in `queued`/`running` state; on click, `POST /ingestion/runs`; on `409` (AR-6), shows "A run is already in progress" and switches to showing that run's progress instead of erroring uselessly
+- **ActiveRunProgress**: polls `GET /ingestion/runs/{id}` every 3 seconds while `status` is `queued` or `running`; stops polling once `completed`/`completed_with_failures`/`failed`; displays `filesFoundCount/filesProcessedCount/filesSkippedCount/filesFailedCount` as a live progress readout (US-1.2's "near-live" requirement)
+- **RunHistoryTable**: paginated list from `GET /ingestion/runs`, most recent first
+- **RunFileDrilldown**: expanding a run row calls `GET /ingestion/runs/{id}/files`, shows per-file outcome and `failureReason` when present (US-1.5)
+- **API**: `POST /ingestion/runs`, `GET /ingestion/runs`, `GET /ingestion/runs/{id}`, `GET /ingestion/runs/{id}/files`
+
+## SettingsPage / CategoryManagement / DriveConnectionCard
+
+- **CategoryManagement**: list (`GET /categories`, shows `active`/`isReserved` flags visually), add (form: name, required, non-empty), rename (inline edit, same validation), remove (confirm dialog first since it's a state-changing action per the "explicit permission" pattern for irreversible-feeling actions; on `409` from AR-5, show "N transactions still use this category" and suggest filtering to it in Transactions first)
+- **Reserved category** (`UNSURE`): rename/remove controls are disabled in the UI (not just relying on the API's `400` per AR-3) with a tooltip explaining why
+- **DriveConnectionCard**: shows connected/not-connected state (`GET /drive/status`); "Connect Google Drive" button calls `GET /drive/connect` then does `window.location = authorizationUrl` (full-page navigation to Google, per the standard OAuth web-app pattern); on return, the app lands back on `/settings?driveConnected=true` (Unit 2's callback redirect target) and re-fetches `/drive/status` to confirm
+- **API**: `GET/POST /categories`, `PUT/DELETE /categories/{id}`, `GET /drive/status`, `GET /drive/connect`
+
+## NavBar / PendingReviewBadge (Addendum 2026-08-02 — Epic 6)
+
+- **PendingReviewBadge**: a small count badge next to the "Review" nav link, visible only when `pendingCount > 0` (US-6.6). Polls `GET /recategorization/proposals/pending-count` on an interval — chosen deliberately looser than `ActiveRunProgress`'s 3s (that polls a run the user is actively watching finish; this polls a background number that's fine to be up to a minute stale) — see business-logic-model.md for the exact interval and reasoning.
+- **API**: `GET /recategorization/proposals/pending-count`
+
+## ReviewPage / ProposalTable / ProposalRow / BulkActionBar (Addendum 2026-08-02 — Epic 6)
+
+- **ProposalTable**: paginated list from `GET /recategorization/proposals`, most recent first; each `ProposalRow` shows the candidate transaction (date, description, amount, current category), the proposed category, match score, and source bucket (`unsure`/`categorized` — surfaced as a small label so the user can tell "this was uncategorized" apart from "this already had a category" at a glance, since the latter deserves more scrutiny per FR-RR-4)
+- **ProposalRow**: a checkbox (feeds `BulkActionBar`'s selection state) plus per-row Approve/Reject buttons — `POST /recategorization/proposals/{id}/approve` or `/reject`; on success, the row is removed from the list (React Query cache invalidation) and the nav badge count decrements
+- **BulkActionBar**: a "select all" checkbox (selects every row on the *current page*, not across pages — consistent with `ExportCsvButton`'s existing "acts on what's visible/filtered" precedent rather than an unbounded "select everything ever" action) plus "Approve selected" / "Reject selected" buttons, calling `POST /recategorization/proposals/bulk-approve` / `bulk-reject`; disabled when the selection is empty
+- **Bulk result handling**: the bulk endpoints return `{approvedIds/rejectedIds, failedIds}` (AR-11/AR-12 partial-failure shape) — rows in `*Ids` (succeeded) are removed from the list; rows in `failedIds` stay visible with an inline "couldn't process — it may have already been resolved" note, rather than silently disappearing or erroring the whole action (US-6.4's "select one or more or all" implies partial success is a first-class, expected outcome, not an edge case to hide)
+- **Empty state**: "No proposals waiting for review" when the page has zero items
+- **API**: `GET /recategorization/proposals`, `POST /recategorization/proposals/{id}/approve`, `POST /recategorization/proposals/{id}/reject`, `POST /recategorization/proposals/bulk-approve`, `POST /recategorization/proposals/bulk-reject`

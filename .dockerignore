@@ -1,0 +1,15 @@
+# Applies to the whole build context (workspace root -- all Dockerfiles use
+# `context: .`). Critically excludes node_modules: without this, `COPY frontend/ ./`
+# in frontend/Dockerfile would overwrite the container's freshly-`npm ci`'d Linux
+# node_modules with a locally-installed macOS one (native binary mismatch, e.g.
+# esbuild) -- caught before ever running `docker build`, not discovered as a runtime
+# failure.
+node_modules/
+frontend/dist/
+.env
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.git/

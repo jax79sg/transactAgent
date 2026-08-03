@@ -1,0 +1,117 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: transactagent-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-transactagent}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-transactagent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - transactagent-net
+
+  api-service:
+    build:
+      context: .
+      dockerfile: api-service/Dockerfile
+    container_name: transactagent-api
+    environment:
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-transactagent}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8787}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:7878/drive/callback}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      AI_ASSISTANT_MAX_TRANSACTIONS: ${AI_ASSISTANT_MAX_TRANSACTIONS:-3000}
+    ports:
+      - "7878:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - transactagent-net
+
+  ingestion-worker:
+    build:
+      context: .
+      dockerfile: ingestion-worker/Dockerfile
+    container_name: transactagent-worker
+    environment:
+      DB_HOST: database
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-transactagent}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-1qeJblYSk-E6BH6dhenbc8Vd0xxRkZor0}
+      HEARTBEAT_FILE: /tmp/worker-heartbeat
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/worker-heartbeat -mmin -0.5 | grep -q ."]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - transactagent-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: transactagent-frontend
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-}
+    ports:
+      - "8787:80"
+    depends_on:
+      api-service:
+        condition: service_healthy
+    healthcheck:
+      # nginx:alpine has no curl; Alpine's busybox includes wget by default.
+      # 127.0.0.1, not "localhost": Alpine's resolver tries ::1 (IPv6) first, but
+      # nginx.conf only binds IPv4 (`listen 80;`), so "localhost" gets "connection
+      # refused" despite nginx serving the exact same request fine from the host --
+      # caught by actually running the container, not by inspecting the config.
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - transactagent-net
+
+networks:
+  transactagent-net:
+    driver: bridge
