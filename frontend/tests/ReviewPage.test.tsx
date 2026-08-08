@@ -2,13 +2,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as backupApi from "../src/api/backup";
 import * as recategorizationApi from "../src/api/recategorization";
-import type { ProposalDTO, ProposalPage } from "../src/api/types";
+import type { BackupStatusResponse, ProposalDTO, ProposalPage } from "../src/api/types";
 import { ReviewPage } from "../src/pages/ReviewPage";
 
 vi.mock("../src/api/recategorization");
+vi.mock("../src/api/backup");
+
+const NO_BACKUPS_YET: BackupStatusResponse = {
+  lastRunAt: null,
+  outcome: null,
+  failureCategory: null,
+  transactionCount: null,
+  backupFilename: null,
+};
 
 function makeProposal(overrides: Partial<ProposalDTO> = {}): ProposalDTO {
   return {
@@ -54,6 +64,12 @@ function renderReviewPage() {
 }
 
 describe("ReviewPage", () => {
+  beforeEach(() => {
+    // Sane default so tests that don't care about backup status aren't affected;
+    // tests that do care override with their own mockResolvedValue.
+    vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(NO_BACKUPS_YET);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -168,5 +184,81 @@ describe("ReviewPage", () => {
     await waitFor(() => expect(screen.getByTestId("review-bulk-approve")).toBeInTheDocument());
     expect(screen.getByTestId("review-bulk-approve")).toBeDisabled();
     expect(screen.getByTestId("review-bulk-reject")).toBeDisabled();
+  });
+
+  describe("BackupStatusPanel", () => {
+    it("shows a neutral message when no backup has run yet", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(NO_BACKUPS_YET);
+      renderReviewPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("backup-status-none")).toHaveTextContent("No backups yet");
+      });
+    });
+
+    it("shows the last backup time and transaction count on success", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue({
+        lastRunAt: "2026-08-08T02:00:00Z",
+        outcome: "success",
+        failureCategory: null,
+        transactionCount: 2174,
+        backupFilename: "transactions-backup-20260808T020000Z.csv",
+      });
+      renderReviewPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("backup-status-success")).toHaveTextContent("2174 transactions");
+      });
+    });
+
+    it("prompts to reconnect Google Drive on a drive_connectivity failure", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue({
+        lastRunAt: "2026-08-08T02:00:00Z",
+        outcome: "failed",
+        failureCategory: "drive_connectivity",
+        transactionCount: null,
+        backupFilename: null,
+      });
+      renderReviewPage();
+
+      await waitFor(() => {
+        const panel = screen.getByTestId("backup-status-failed-drive");
+        expect(panel).toHaveTextContent("isn't connected");
+        expect(screen.getByRole("link", { name: /reconnect google drive/i })).toHaveAttribute("href", "/settings");
+      });
+    });
+
+    it("shows a generic failure indicator for a non-drive failure", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue({
+        lastRunAt: "2026-08-08T02:00:00Z",
+        outcome: "failed",
+        failureCategory: "other",
+        transactionCount: null,
+        backupFilename: null,
+      });
+      renderReviewPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("backup-status-failed-other")).toHaveTextContent("Last backup failed");
+      });
+    });
+
+    it("is visually separate from the proposal table", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([makeProposal()]));
+      renderReviewPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("backup-status-panel")).toBeInTheDocument();
+        expect(screen.getByTestId("review-row-proposal-1")).toBeInTheDocument();
+      });
+      // Two independent sections, not nested inside one another.
+      expect(screen.getByTestId("backup-status-panel")).not.toContainElement(
+        screen.getByTestId("review-row-proposal-1"),
+      );
+    });
   });
 });

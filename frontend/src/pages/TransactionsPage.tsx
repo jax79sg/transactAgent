@@ -4,18 +4,25 @@ import { Fragment, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { listCategories } from "../api/categories";
-import { correctTransactionCategory, downloadTransactionsCsv, listTransactions } from "../api/transactions";
+import { correctTransactionCategory, downloadTransactionsCsv, listBanks, listTransactions } from "../api/transactions";
 import type { CategoryDTO, GroupSummary, TransactionDTO, TransactionFilterState } from "../api/types";
 import { useAuth } from "../context/AuthContext";
 import { filterStateToSearchParams, searchParamsToFilterState } from "../lib/urlFilterState";
 
-/** Most-used categories first, so a manual correction rarely needs scrolling past
- * rarely-used ones -- alphabetical is the tiebreak for a stable, predictable order
- * among equally (or un-)used categories. */
+/** The 10 most-used categories first (ties broken alphabetically), so a manual
+ * correction rarely needs scrolling past rarely-used ones -- everything else is
+ * sorted purely alphabetically below them, rather than continuing the usage sort,
+ * so a category the user is hunting for by name (rather than by how common it is)
+ * is easy to scan for once past the top 10. */
+const TOP_USED_CATEGORY_COUNT = 10;
+
 export function byUsageThenName(categories: CategoryDTO[]): CategoryDTO[] {
-  return [...categories].sort(
+  const byUsage = [...categories].sort(
     (a, b) => b.transactionCount - a.transactionCount || a.name.localeCompare(b.name),
   );
+  const topUsed = byUsage.slice(0, TOP_USED_CATEGORY_COUNT);
+  const rest = byUsage.slice(TOP_USED_CATEGORY_COUNT).sort((a, b) => a.name.localeCompare(b.name));
+  return [...topUsed, ...rest];
 }
 
 /** ±30 days around the transaction: wide enough to catch the "other side" of a
@@ -60,7 +67,10 @@ function CategorySelect({
   transaction: TransactionDTO;
   onCorrected: () => void;
 }) {
-  const { data: categories } = useQuery({ queryKey: ["categories"], queryFn: listCategories });
+  const { data: categories, refetch: refetchCategories } = useQuery({
+    queryKey: ["categories"],
+    queryFn: listCategories,
+  });
   const [editing, setEditing] = useState(false);
 
   const mutation = useMutation({
@@ -82,7 +92,15 @@ function CategorySelect({
             ? "rounded bg-amber-100 px-2 py-1 text-amber-800"
             : "rounded px-2 py-1 hover:bg-slate-100"
         }
-        onClick={() => setEditing(true)}
+        onClick={() => {
+          setEditing(true);
+          // The category list is fetched once per row-mount and the app disables
+          // refetch-on-window-focus globally, so a category added/renamed elsewhere
+          // (another tab, or earlier in a long-lived session) wouldn't otherwise
+          // show up here until a full page reload -- refetch right as the dropdown
+          // opens so what the user picks from is always current.
+          void refetchCategories();
+        }}
       >
         {transaction.category.name}
       </button>
@@ -99,7 +117,18 @@ function CategorySelect({
         <Select.Value placeholder={transaction.category.name} />
       </Select.Trigger>
       <Select.Portal>
-        <Select.Content className="rounded border bg-white shadow-lg">
+        <Select.Content className="max-h-80 rounded border bg-white shadow-lg" position="popper">
+          {/* Radix's own viewport already scrolls internally (overflow-y: auto), but
+              with no visible affordance a list this long (50+ categories, alphabetical
+              after the used ones) just looks like it ends at the screen edge on
+              platforms with auto-hiding scrollbars -- a real user report: a just-added
+              category "wasn't showing up" when it was actually there, just below the
+              fold with nothing hinting more existed. These buttons are Radix's built-in
+              fix: a visible chevron at each edge, shown only when there's more to
+              scroll that way, that also auto-scrolls on hover. */}
+          <Select.ScrollUpButton className="flex items-center justify-center bg-white py-1 text-slate-500">
+            ▲
+          </Select.ScrollUpButton>
           <Select.Viewport>
             {activeCategories.map((c) => (
               <Select.Item key={c.id} value={c.id} className="cursor-pointer px-3 py-1 hover:bg-slate-100">
@@ -107,6 +136,9 @@ function CategorySelect({
               </Select.Item>
             ))}
           </Select.Viewport>
+          <Select.ScrollDownButton className="flex items-center justify-center bg-white py-1 text-slate-500">
+            ▼
+          </Select.ScrollDownButton>
         </Select.Content>
       </Select.Portal>
     </Select.Root>
@@ -167,8 +199,19 @@ export function TransactionsPage() {
     queryFn: () => listTransactions(filter),
   });
 
+  const { data: banks, refetch: refetchBanks } = useQuery({ queryKey: ["banks"], queryFn: listBanks });
+  // Same queryKey CategorySelect uses per-row -- react-query dedupes this into one
+  // shared cached request rather than fetching the category list again.
+  const { data: categories, refetch: refetchCategories } = useQuery({
+    queryKey: ["categories"],
+    queryFn: listCategories,
+  });
+
   function updateFilter(patch: Partial<TransactionFilterState>) {
-    setSearchParams(filterStateToSearchParams({ ...filter, ...patch, page: 1 }));
+    // page: 1 is a default that applies when a filter changes (e.g. search text,
+    // grouping) -- it must come BEFORE ...patch so an explicit page change (the
+    // pagination buttons passing { page: n }) isn't immediately clobbered back to 1.
+    setSearchParams(filterStateToSearchParams({ ...filter, page: 1, ...patch }));
   }
 
   function toggleUnsureFilter() {
@@ -205,6 +248,36 @@ export function TransactionsPage() {
         >
           UNSURE only
         </button>
+        <select
+          data-testid="bank-filter-select"
+          className="rounded border border-slate-300 px-2 py-1 text-sm"
+          value={filter.bank ?? ""}
+          onChange={(e) => updateFilter({ bank: e.target.value || undefined })}
+          onFocus={() => void refetchBanks()}
+        >
+          <option value="">All banks</option>
+          {banks?.map((bank) => (
+            <option key={bank} value={bank}>
+              {bank}
+            </option>
+          ))}
+        </select>
+        <select
+          data-testid="category-filter-select"
+          className="rounded border border-slate-300 px-2 py-1 text-sm"
+          value={filter.category ?? ""}
+          onChange={(e) => updateFilter({ category: e.target.value || undefined })}
+          onFocus={() => void refetchCategories()}
+        >
+          <option value="">All categories</option>
+          {[...(categories ?? [])]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((category) => (
+              <option key={category.id} value={category.name}>
+                {category.name}
+              </option>
+            ))}
+        </select>
         <select
           data-testid="group-by-select"
           className="rounded border border-slate-300 px-2 py-1 text-sm"

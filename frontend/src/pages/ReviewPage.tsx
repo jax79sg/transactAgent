@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
+import { getBackupStatus } from "../api/backup";
 import {
   approveProposal,
   bulkApproveProposals,
@@ -10,6 +12,53 @@ import {
 } from "../api/recategorization";
 
 const PAGE_SIZE = 20;
+
+// A backup outcome changes at most once a night (WR-11/BR-17), so this is looser
+// than PendingReviewBadge's 30s -- see business-logic-model.md.
+const BACKUP_STATUS_POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+function BackupStatusPanel() {
+  const { data } = useQuery({
+    queryKey: ["backups", "status"],
+    queryFn: getBackupStatus,
+    refetchInterval: BACKUP_STATUS_POLL_INTERVAL_MS,
+  });
+
+  let content: ReactNode;
+  if (!data || data.outcome === null) {
+    content = <p data-testid="backup-status-none" className="text-sm text-slate-500">No backups yet.</p>;
+  } else if (data.outcome === "success") {
+    content = (
+      <p data-testid="backup-status-success" className="text-sm text-slate-600">
+        Last backup succeeded at {new Date(data.lastRunAt as string).toLocaleString()}
+        {data.transactionCount !== null && ` (${data.transactionCount} transactions)`}.
+      </p>
+    );
+  } else if (data.failureCategory === "drive_connectivity") {
+    content = (
+      <p data-testid="backup-status-failed-drive" className="text-sm text-amber-600">
+        Backup failed -- Google Drive isn't connected.{" "}
+        <Link to="/settings" className="underline">
+          Reconnect Google Drive
+        </Link>
+        .
+      </p>
+    );
+  } else {
+    content = (
+      <p data-testid="backup-status-failed-other" className="text-sm text-amber-600">
+        Last backup failed.
+      </p>
+    );
+  }
+
+  return (
+    <div data-testid="backup-status-panel" className="mb-6 rounded border border-slate-200 p-4">
+      <h2 className="mb-2 font-medium">Backup Status</h2>
+      {content}
+    </div>
+  );
+}
 
 export function ReviewPage() {
   const queryClient = useQueryClient();
@@ -104,6 +153,8 @@ export function ReviewPage() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Review</h1>
+
+      <BackupStatusPanel />
 
       {singleActionError && (
         <p data-testid="review-single-action-error" className="mb-3 text-sm text-amber-600">

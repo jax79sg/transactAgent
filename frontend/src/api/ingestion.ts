@@ -18,6 +18,10 @@ export function getRunStatus(runId: string): Promise<RunStatusResponse> {
   return apiRequest<RunStatusResponse>(`/ingestion/runs/${runId}`);
 }
 
+export function cancelRun(runId: string): Promise<RunStatusResponse> {
+  return apiRequest<RunStatusResponse>(`/ingestion/runs/${runId}/cancel`, { method: "POST" });
+}
+
 export function listRunHistory(page: number, pageSize = 20): Promise<RunHistoryPage> {
   return apiRequest<RunHistoryPage>("/ingestion/runs", { query: { page, pageSize } });
 }

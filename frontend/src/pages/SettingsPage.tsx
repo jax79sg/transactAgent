@@ -30,11 +30,15 @@ function DriveConnectionCard() {
       <p className="mb-3 text-sm text-slate-600">
         {status?.connected ? "Connected" : "Not connected"}
       </p>
-      {!status?.connected && (
-        <button data-testid="connect-drive-button" className="rounded bg-slate-900 px-4 py-2 text-white" onClick={handleConnect}>
-          Connect Google Drive
-        </button>
-      )}
+      {/* Always shown, not just when disconnected: the only way to re-grant consent
+          after a scope change (e.g. Epic 7 needing write access, not just read) is to
+          run the connect flow again -- a "Connected" row from an old, narrower-scope
+          grant otherwise leaves no way back into the flow at all. Caught live: a
+          previously-connected credential silently kept returning 403s for the new
+          write calls with no UI path to fix it (see aidlc-docs/audit.md 2026-08-08). */}
+      <button data-testid="connect-drive-button" className="rounded bg-slate-900 px-4 py-2 text-white" onClick={handleConnect}>
+        {status?.connected ? "Reconnect Google Drive" : "Connect Google Drive"}
+      </button>
     </div>
   );
 }

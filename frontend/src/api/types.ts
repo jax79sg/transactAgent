@@ -129,7 +129,13 @@ export interface AskAiResponse {
   truncated: boolean;
 }
 
-export type IngestionRunStatus = "queued" | "running" | "completed" | "completed_with_failures" | "failed";
+export type IngestionRunStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "completed_with_failures"
+  | "failed"
+  | "cancelled";
 
 export interface RunStatusResponse {
   runId: string;
@@ -140,6 +146,7 @@ export interface RunStatusResponse {
   filesProcessedCount: number;
   filesSkippedCount: number;
   filesFailedCount: number;
+  cancelRequestedAt: string | null;
 }
 
 export interface RunHistoryPage {
@@ -223,4 +230,15 @@ export interface BulkApproveResponse {
 export interface BulkRejectResponse {
   rejectedIds: string[];
   failedIds: string[];
+}
+
+export type BackupOutcome = "success" | "failed" | null;
+export type BackupFailureCategory = "drive_connectivity" | "other" | null;
+
+export interface BackupStatusResponse {
+  lastRunAt: string | null;
+  outcome: BackupOutcome;
+  failureCategory: BackupFailureCategory;
+  transactionCount: number | null;
+  backupFilename: string | null;
 }

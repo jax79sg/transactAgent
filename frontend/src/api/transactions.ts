@@ -6,6 +6,10 @@ export function listTransactions(filter: TransactionFilterState): Promise<Transa
   return apiRequest<TransactionPage>("/transactions", { query: filter as Record<string, string | number> });
 }
 
+export function listBanks(): Promise<string[]> {
+  return apiRequest<string[]>("/transactions/banks");
+}
+
 export function correctTransactionCategory(
   transactionId: string,
   categoryId: string,

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
-import { getRunStatus, listRunFiles, listRunHistory, listRunLogs, startRun } from "../api/ingestion";
+import { cancelRun, getRunStatus, listRunFiles, listRunHistory, listRunLogs, startRun } from "../api/ingestion";
 import type { IngestionRunStatus, RunLogLine } from "../api/types";
 
 const ACTIVE_STATUSES: IngestionRunStatus[] = ["queued", "running"];
@@ -141,6 +141,18 @@ export function IngestionPage() {
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: cancelRun,
+    onSuccess: (updatedRun) => {
+      queryClient.setQueryData(["ingestion", "run", updatedRun.runId], updatedRun);
+    },
+  });
+
+  // A cancel request takes effect between files, not instantly -- while it's
+  // active (status still queued/running) show a distinct "Cancelling..." state
+  // rather than letting it look identical to a normal active run.
+  const isCancelling = activeRun?.cancelRequestedAt != null && isRunActive;
+
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Ingestion</h1>
@@ -156,7 +168,21 @@ export function IngestionPage() {
 
       {activeRun && (
         <div className="mt-4 rounded border border-slate-200 p-4 text-sm">
-          <p className="font-medium">Run status: {activeRun.status}</p>
+          <div className="flex items-center justify-between">
+            <p className="font-medium">
+              Run status: {isCancelling ? "Cancelling... (stops after the current file)" : activeRun.status}
+            </p>
+            {isRunActive && (
+              <button
+                data-testid="cancel-run-button"
+                disabled={isCancelling || cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate(activeRun.runId)}
+                className="rounded border border-slate-300 px-3 py-1 text-xs disabled:opacity-50"
+              >
+                {isCancelling ? "Cancelling..." : "Cancel"}
+              </button>
+            )}
+          </div>
           <p>
             Found {activeRun.filesFoundCount} / Processed {activeRun.filesProcessedCount} / Skipped{" "}
             {activeRun.filesSkippedCount} / Failed {activeRun.filesFailedCount}
