@@ -4,6 +4,9 @@ Extract the following as JSON matching exactly this shape, with no extra comment
 {
   "bank_name": string or null,
   "currency": 3-letter ISO currency code or null (the statement's primary currency),
+  "statement_date": "YYYY-MM-DD" or null (the date printed on the statement itself, \
+often labelled "Statement Date" -- NOT a transaction date. Read it using the same \
+day-first rule described below if the printed format is ambiguous),
   "confidence": "low" | "medium" | "high" (your overall confidence in this extraction),
   "transactions": [
     {

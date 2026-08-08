@@ -16,9 +16,20 @@ from transactagent_db.models import (
 
 
 def list_similarity_candidates(db: Session) -> list[SimilarityCandidate]:
-    """Past transactions with a confirmed category (excludes UNSURE, per business-logic-model.md)."""
+    """Past transactions with a confirmed category (excludes UNSURE, per business-logic-model.md).
+
+    `amount` is out_flow or in_flow, whichever is set (BR-2: exactly one always is)
+    -- the sign/direction doesn't matter for similarity matching, only the
+    magnitude, per find_best_match's amount-range gate.
+    """
     stmt = (
-        select(Transaction.id, Transaction.description, Category.name, Transaction.category_source)
+        select(
+            Transaction.id,
+            Transaction.description,
+            Category.name,
+            Transaction.category_source,
+            func.coalesce(Transaction.out_flow, Transaction.in_flow).label("amount"),
+        )
         .join(Category, Transaction.category_id == Category.id)
         .where(Transaction.category_source != CategorySource.UNSURE)
     )
@@ -28,6 +39,7 @@ def list_similarity_candidates(db: Session) -> list[SimilarityCandidate]:
             description=row.description,
             category_name=row.name,
             category_source=row.category_source.value,
+            amount=row.amount,
         )
         for row in db.execute(stmt)
     ]

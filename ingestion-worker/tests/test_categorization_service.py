@@ -36,13 +36,13 @@ def _make_statement(db):
     return stmt
 
 
-def _make_transaction(db, description, category, source):
+def _make_transaction(db, description, category, source, amount=Decimal("10.00")):
     statement = _make_statement(db)
     txn = Transaction(
         bank_statement_id=statement.id,
         transaction_date=date(2026, 1, 1),
         description=description,
-        out_flow=Decimal("10.00"),
+        out_flow=amount,
         currency="SGD",
         bank_name="DBS",
         category_id=category.id,
@@ -65,18 +65,31 @@ class TestCategorize:
         # Confirms the threshold is workable for near-duplicate merchant strings, but
         # is genuinely tunable per FR-5.2's config option, not an exact science.
         with patch("ingestion_worker.categorization.service.llm_classifier.classify") as mock_llm:
-            result = categorize(db_session, "NTUC FAIRPRICE #124")
+            result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"))
 
         assert result.source == "similarity"
         assert result.category_name == "Groceries"
         mock_llm.assert_not_called()
+
+    def test_similarity_match_rejected_when_amount_far_outside_range(self, db_session):
+        """Regression: same fix as the AXS incident, exercised through categorize()
+        (the ingestion-time fallback chain) rather than the recategorization re-scan
+        -- both share find_best_match, so both needed the amount gate."""
+        groceries = _make_category(db_session, "Groceries")
+        _make_category(db_session, "UNSURE")
+        _make_transaction(db_session, "NTUC FAIRPRICE #123", groceries, CategorySource.SIMILARITY, amount=Decimal("10.00"))
+
+        with patch("ingestion_worker.categorization.service.llm_classifier.classify", return_value="UNSURE"):
+            result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("500.00"))
+
+        assert result.source == "unsure"  # text match alone isn't enough; falls through to LLM -> UNSURE
 
     def test_falls_back_to_llm_when_no_similar_precedent(self, db_session):
         _make_category(db_session, "Dining")
         _make_category(db_session, "UNSURE")
 
         with patch("ingestion_worker.categorization.service.llm_classifier.classify", return_value="Dining") as mock_llm:
-            result = categorize(db_session, "SOME BRAND NEW MERCHANT XYZ")
+            result = categorize(db_session, "SOME BRAND NEW MERCHANT XYZ", Decimal("10.00"))
 
         assert result.source == "llm"
         assert result.category_name == "Dining"
@@ -87,7 +100,7 @@ class TestCategorize:
         _make_category(db_session, "UNSURE")
 
         with patch("ingestion_worker.categorization.service.llm_classifier.classify", return_value="UNSURE"):
-            result = categorize(db_session, "TOTALLY AMBIGUOUS TRANSACTION")
+            result = categorize(db_session, "TOTALLY AMBIGUOUS TRANSACTION", Decimal("10.00"))
 
         assert result.source == "unsure"
         assert result.category_name == "UNSURE"
@@ -237,3 +250,97 @@ class TestRecategorizeUnsureFromPrecedent:
         updated_ids = recategorize_unsure_from_precedent(db_session, job.id, auto_txn.id)
 
         assert updated_ids == []
+
+    def test_same_merchant_wildly_different_amount_is_not_proposed(self, db_session):
+        """Real reported incident, reproduced end-to-end: two OCBC "FAST PAYMENT via
+        PayNow-UEN to AXS PTE. LTD." transactions -- AXS is a bill-payment kiosk used
+        for many unrelated bill types -- with near-identical description text (only
+        the trailing reference number differs -- single-digit here, scoring 98.57 via
+        rapidfuzz, comfortably above both similarity_threshold=85 and
+        recategorization_auto_apply_threshold=97, verified by actually running
+        rapidfuzz rather than assumed) but wildly different amounts: $699 a car loan
+        installment, $81.70 a conservancy fee. Correcting the car loan one must NOT
+        surface the conservancy one as a match, in either bucket. See
+        aidlc-docs/audit.md 2026-08-06."""
+        car_loan = _make_category(db_session, "Car Loan")
+        conservancy = _make_category(db_session, "Conservancy")
+        unsure_category = _make_category(db_session, "UNSURE")
+
+        corrected = _make_transaction(
+            db_session,
+            "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147661",  # corrected precedent
+            car_loan,
+            CategorySource.MANUAL,
+            amount=Decimal("699.00"),
+        )
+        job = self._make_job(db_session, corrected.id)
+
+        conservancy_unsure = _make_transaction(
+            db_session,
+            "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147662",  # 1 digit different
+            unsure_category,
+            CategorySource.UNSURE,
+            amount=Decimal("81.70"),
+        )
+        conservancy_categorized = _make_transaction(
+            db_session,
+            "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147663",  # 1 digit different
+            conservancy,
+            CategorySource.MANUAL,
+            amount=Decimal("81.70"),
+        )
+
+        auto_applied_ids = recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        db_session.refresh(conservancy_unsure)
+        db_session.refresh(conservancy_categorized)
+        assert conservancy_unsure.id not in auto_applied_ids
+        assert conservancy_unsure.category_source == CategorySource.UNSURE  # untouched
+        assert conservancy_categorized.category_id == conservancy.id  # untouched
+
+        # Neither bucket should have recorded a proposal at all -- the amount gate
+        # rejects the candidate before a score is even eligible.
+        assert (
+            db_session.scalars(
+                select(RecategorizationProposal).where(
+                    RecategorizationProposal.candidate_transaction_id == conservancy_unsure.id
+                )
+            ).first()
+            is None
+        )
+        assert (
+            db_session.scalars(
+                select(RecategorizationProposal).where(
+                    RecategorizationProposal.candidate_transaction_id == conservancy_categorized.id
+                )
+            ).first()
+            is None
+        )
+
+    def test_same_merchant_similar_amount_is_still_proposed(self, db_session):
+        """The amount gate must not become so strict that legitimate same-category
+        precedent (a second car loan installment, similar amount) stops matching."""
+        car_loan = _make_category(db_session, "Car Loan")
+        unsure_category = _make_category(db_session, "UNSURE")
+
+        corrected = _make_transaction(
+            db_session,
+            "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147661",  # corrected precedent
+            car_loan,
+            CategorySource.MANUAL,
+            amount=Decimal("699.00"),
+        )
+        job = self._make_job(db_session, corrected.id)
+        next_installment = _make_transaction(
+            db_session,
+            "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147662",  # 1 digit different
+            unsure_category,
+            CategorySource.UNSURE,
+            amount=Decimal("699.00"),
+        )
+
+        auto_applied_ids = recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        db_session.refresh(next_installment)
+        assert next_installment.id in auto_applied_ids
+        assert next_installment.category_id == car_loan.id

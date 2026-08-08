@@ -4,6 +4,7 @@ external clients (Drive, Gemini, OpenRouter, FX) mocked at their client-module b
 
 import json
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from ingestion_worker.clients.drive_client import DriveFileRef
@@ -257,6 +258,103 @@ class TestProcessRunLogAttribution:
             pipeline.process_run(db_session, run)
 
         assert logging_capture._current_run_id is None
+
+
+class TestProcessRunCancellation:
+    """User-initiated cancellation (2026-08-05, see aidlc-docs/audit.md): checked
+    between files, never mid-file, so a file already being processed always
+    finishes and gets recorded -- only files not yet started are skipped. Real
+    IngestionRun.cancel_requested_at is written only by the API in production; here
+    it's set directly on the row (same effect a committed cross-process write would
+    have, since the pipeline's is_cancellation_requested() does a fresh query)."""
+
+    def test_cancellation_requested_mid_run_stops_before_next_file(self, db_session):
+        _seed_whitelist(db_session)
+        run = _make_run(db_session)
+        file1 = DriveFileRef(id="drive-cancel-1", name="file1.pdf")
+        file2 = DriveFileRef(id="drive-cancel-2", name="file2.pdf")
+
+        def fake_download(db, file_ref):
+            return b"fake-pdf-bytes-" + file_ref.id.encode()
+
+        def classify_and_request_cancellation(description, whitelist, model=None):
+            # Simulates the API committing cancel_requested_at while file1 (the
+            # only file with a transaction to classify) is still being processed --
+            # file1 must still finish and be recorded; only file2 gets skipped.
+            run.cancel_requested_at = datetime.now(timezone.utc)
+            db_session.commit()
+            return "Groceries"
+
+        with (
+            patch(
+                "ingestion_worker.clients.drive_client.list_folder_pdf_files", return_value=[file1, file2]
+            ),
+            patch("ingestion_worker.clients.drive_client.download_file", side_effect=fake_download),
+            patch("ingestion_worker.extraction.service._pdf_to_page_images", return_value=[b"page"]),
+            patch(
+                "ingestion_worker.extraction.service.extract_statement_raw",
+                return_value=_VALID_EXTRACTION_RESPONSE,
+            ),
+            # Patched where llm_classifier looks it up (its own `from ... import
+            # classify_description` binding), not where it's defined -- patching
+            # clients.openrouter_client.classify_description alone would leave
+            # llm_classifier's already-bound reference untouched, so this side
+            # effect would silently never run (the real function would, and fail
+            # closed to UNSURE -- see categorization/llm_classifier.py's catch-all).
+            patch(
+                "ingestion_worker.categorization.llm_classifier.classify_description",
+                side_effect=classify_and_request_cancellation,
+            ),
+        ):
+            pipeline.process_run(db_session, run)
+
+        db_session.refresh(run)
+        assert run.status == IngestionRunStatus.CANCELLED
+        assert run.completed_at is not None
+        assert run.files_found_count == 2
+        assert run.files_processed_count == 1  # file1 finished before the checkpoint saw cancellation
+
+        # file1's data is durable -- cancellation never rolls back already-committed work.
+        transactions = db_session.query(Transaction).all()
+        assert len(transactions) == 1
+        assert transactions[0].description == "NTUC FAIRPRICE"
+
+        files = db_session.query(IngestionRunFile).filter_by(ingestion_run_id=run.id).all()
+        assert len(files) == 1  # file2 was never attempted, so it has no run-file record at all
+        assert files[0].drive_file_id == "drive-cancel-1"
+
+    def test_cancellation_requested_before_any_file_processes_nothing(self, db_session):
+        _seed_whitelist(db_session)
+        run = _make_run(db_session)
+        run.cancel_requested_at = datetime.now(timezone.utc)
+        db_session.commit()
+        file_ref = DriveFileRef(id="drive-cancel-early", name="never-touched.pdf")
+
+        with patch(
+            "ingestion_worker.clients.drive_client.list_folder_pdf_files", return_value=[file_ref]
+        ) as mock_list, patch("ingestion_worker.clients.drive_client.download_file") as mock_download:
+            pipeline.process_run(db_session, run)
+
+        db_session.refresh(run)
+        assert run.status == IngestionRunStatus.CANCELLED
+        mock_list.assert_called_once()  # listing still happens (cheap, needed for files_found_count)
+        mock_download.assert_not_called()  # but no file is ever downloaded/processed
+        assert db_session.query(Transaction).count() == 0
+
+    def test_cancelling_a_run_frees_the_single_active_run_slot_for_a_new_one(self, db_session):
+        _seed_whitelist(db_session)
+        run = _make_run(db_session)
+        run.cancel_requested_at = datetime.now(timezone.utc)
+        db_session.commit()
+
+        with patch("ingestion_worker.clients.drive_client.list_folder_pdf_files", return_value=[]):
+            pipeline.process_run(db_session, run)
+
+        # The whole point of reaching a real terminal status immediately: the next
+        # run must not be blocked by ingestion_runs' single-active-run constraint.
+        new_run = IngestionRun(triggered_by_user_id=run.triggered_by_user_id, status=IngestionRunStatus.QUEUED)
+        db_session.add(new_run)
+        db_session.flush()  # would raise IntegrityError if the cancelled row still counted as active
 
 
 class TestProcessRunUnexpectedErrors:

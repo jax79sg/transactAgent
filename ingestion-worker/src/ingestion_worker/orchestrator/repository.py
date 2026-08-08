@@ -11,6 +11,48 @@ from transactagent_db.models import (
 )
 
 
+def fail_stale_runs(db: Session) -> int:
+    """Marks any IngestionRun left in QUEUED or RUNNING as FAILED. Meant to be
+    called once at worker startup, before the poll loop begins: this is a
+    single-worker system (WR-8, one run at a time) with a DB-level unique
+    constraint enforcing at most one active (queued/running) run, so any such row
+    still present when a fresh process starts can only be orphaned -- left behind
+    by a previous process that died or hung without ever reaching complete_run/
+    fail_run, rather than genuinely still being worked on by anyone.
+
+    Without this, an orphaned "running" row blocks EVERY future run forever (the
+    unique constraint rejects new ones), requiring manual DB surgery to recover --
+    confirmed live: a categorization call to a local model server hung
+    indefinitely (2026-08-04, see aidlc-docs/audit.md), leaving a run stuck
+    "running" with no live process ever going to finish it. A restart now
+    self-heals instead.
+    """
+    stale = db.scalars(
+        select(IngestionRun).where(IngestionRun.status.in_([IngestionRunStatus.QUEUED, IngestionRunStatus.RUNNING]))
+    ).all()
+    for run in stale:
+        fail_run(db, run)
+    return len(stale)
+
+
+def fail_stale_recategorize_jobs(db: Session) -> int:
+    """Same reasoning as fail_stale_runs, applied to RecategorizationJob: a job
+    left QUEUED/RUNNING when a fresh worker process starts can only be orphaned.
+    Unlike ingestion runs, jobs don't have a single-active-job DB constraint, so an
+    orphaned job doesn't lock out future jobs -- but it would still sit unresolved
+    forever with no automatic re-queue, so it's cleaned up here too for the same
+    self-healing-on-restart behavior.
+    """
+    stale = db.scalars(
+        select(RecategorizationJob).where(
+            RecategorizationJob.status.in_([RecategorizationJobStatus.QUEUED, RecategorizationJobStatus.RUNNING])
+        )
+    ).all()
+    for job in stale:
+        fail_recategorize_job(db, job)
+    return len(stale)
+
+
 def find_queued_run(db: Session) -> IngestionRun | None:
     return db.scalar(select(IngestionRun).where(IngestionRun.status == IngestionRunStatus.QUEUED))
 
@@ -59,6 +101,26 @@ def fail_run(db: Session, run: IngestionRun) -> None:
     from datetime import datetime, timezone
 
     run.status = IngestionRunStatus.FAILED
+    run.completed_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def is_cancellation_requested(db: Session, run_id) -> bool:
+    """Checked between files (never mid-file) by the pipeline's main loop. A plain
+    scalar query rather than touching the caller's ORM-managed `run` object: the API
+    writes `cancel_requested_at` from a separate process/transaction, and the
+    previous file's update_run_progress() commit already ended this session's prior
+    transaction, so a fresh query here (READ COMMITTED) reliably sees it as soon as
+    the API's own commit lands -- no explicit refresh/merge needed."""
+    return (
+        db.scalar(select(IngestionRun.cancel_requested_at).where(IngestionRun.id == run_id)) is not None
+    )
+
+
+def cancel_run(db: Session, run: IngestionRun) -> None:
+    from datetime import datetime, timezone
+
+    run.status = IngestionRunStatus.CANCELLED
     run.completed_at = datetime.now(timezone.utc)
     db.commit()
 

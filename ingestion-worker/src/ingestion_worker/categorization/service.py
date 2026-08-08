@@ -4,6 +4,7 @@ re-scan.
 """
 
 from dataclasses import dataclass
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -27,10 +28,23 @@ class CategorizationResult:
     matched_precedent_transaction_id: str | None = None
 
 
-def categorize(db: Session, description: str) -> CategorizationResult:
+def _transaction_amount(txn) -> Decimal:
+    """out_flow or in_flow, whichever is set (BR-2: exactly one always is) -- see
+    repository.list_similarity_candidates's docstring for why only magnitude matters."""
+    return txn.out_flow if txn.out_flow is not None else txn.in_flow
+
+
+def categorize(db: Session, description: str, amount: Decimal) -> CategorizationResult:
     """FR-5.2 fallback chain: similarity match -> LLM fallback -> UNSURE."""
     candidates = repository.list_similarity_candidates(db)
-    match = find_best_match(description, candidates, threshold=settings.similarity_threshold)
+    match = find_best_match(
+        description,
+        amount,
+        candidates,
+        threshold=settings.similarity_threshold,
+        amount_ratio_tolerance=settings.similarity_amount_ratio_tolerance,
+        amount_absolute_floor=Decimal(str(settings.similarity_amount_absolute_floor)),
+    )
     if match is not None:
         return CategorizationResult(
             category_name=match.candidate.category_name,
@@ -78,16 +92,24 @@ def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transac
         description=source_transaction.description,
         category_name=source_transaction.category.name,
         category_source="manual",
+        amount=_transaction_amount(source_transaction),
     )
     proposed_category = repository.find_category_by_name(db, source_transaction.category.name)
     if proposed_category is None:
         return []
 
+    amount_ratio_tolerance = settings.similarity_amount_ratio_tolerance
+    amount_absolute_floor = Decimal(str(settings.similarity_amount_absolute_floor))
     auto_applied_ids: list[UUID] = []
 
     for unsure_txn in repository.find_unsure_transactions(db):
         match = find_best_match(
-            unsure_txn.description, [source_candidate], threshold=settings.similarity_threshold
+            unsure_txn.description,
+            _transaction_amount(unsure_txn),
+            [source_candidate],
+            threshold=settings.similarity_threshold,
+            amount_ratio_tolerance=amount_ratio_tolerance,
+            amount_absolute_floor=amount_absolute_floor,
         )
         if match is None:
             continue
@@ -119,7 +141,12 @@ def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transac
         db, exclude_transaction_id=source_transaction.id, exclude_category_id=proposed_category.id
     ):
         match = find_best_match(
-            candidate_txn.description, [source_candidate], threshold=settings.similarity_threshold
+            candidate_txn.description,
+            _transaction_amount(candidate_txn),
+            [source_candidate],
+            threshold=settings.similarity_threshold,
+            amount_ratio_tolerance=amount_ratio_tolerance,
+            amount_absolute_floor=amount_absolute_floor,
         )
         if match is None:
             continue

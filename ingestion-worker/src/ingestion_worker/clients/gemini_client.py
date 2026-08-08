@@ -12,9 +12,18 @@ from ingestion_worker.config import settings
 
 _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 
+# Explicit, bounded timeout rather than relying on the SDK's own default -- see
+# clients/openrouter_client.py's _REQUEST_TIMEOUT_SECONDS for the real incident
+# (2026-08-04) this class of risk caused elsewhere in the same pipeline. Extraction
+# involves larger payloads (page images) than categorization, so a longer ceiling.
+_REQUEST_TIMEOUT_MS = 120_000
+
 
 def _client() -> genai.Client:
-    return genai.Client(api_key=settings.gemini_api_key)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=genai.types.HttpOptions(timeout=_REQUEST_TIMEOUT_MS),
+    )
 
 
 @retry_with_backoff()

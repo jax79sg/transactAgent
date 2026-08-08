@@ -39,4 +39,9 @@ class RawExtractedStatement(BaseModel):
     bank_name: str | None = None
     currency: str | None = None
     confidence: ConfidenceLevel
+    # The date printed on the statement itself (e.g. "Statement Date"), if present.
+    # Used as a cross-checked anchor for ambiguous-date correction -- see
+    # extraction/service.py's _resolve_statement_date. Never required: WR-2 only
+    # gates on bank_name/currency, so a statement missing this field still commits.
+    statement_date: date | None = None
     transactions: list[RawExtractedTransaction] = Field(default_factory=list)

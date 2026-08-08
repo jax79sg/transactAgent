@@ -5,16 +5,27 @@ fallback. Defaults to OpenRouter but works against any OpenAI-compatible endpoin
 Text-only, constrained to the whitelist + "UNSURE" (WR-4).
 """
 
-from openai import APIStatusError, OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from ingestion_worker.clients.retry import TransientError, retry_with_backoff
 from ingestion_worker.config import settings
 
 _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 
+# Explicit, bounded timeout rather than relying on the SDK's own default -- a
+# real incident (2026-08-04, see aidlc-docs/audit.md) showed a call to a local
+# model server (host.docker.internal, likely orphaned by the host machine
+# sleeping/waking mid-request) hang for 9+ hours with no timeout ever firing,
+# blocking the entire single-worker ingestion run indefinitely.
+_REQUEST_TIMEOUT_SECONDS = 60.0
+
 
 def _client() -> OpenAI:
-    return OpenAI(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url)
+    return OpenAI(
+        api_key=settings.openrouter_api_key,
+        base_url=settings.openrouter_base_url,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+    )
 
 
 @retry_with_backoff()
@@ -53,7 +64,14 @@ def classify_description(description: str, whitelist: list[str], model: str | No
                 f"status {exc.status_code}): {exc}"
             ) from exc
         raise
-    except (TimeoutError, ConnectionError) as exc:
+    # APIConnectionError covers APITimeoutError too (it's a subclass) -- the openai
+    # SDK never raises builtin TimeoutError/ConnectionError, so the previous
+    # `except (TimeoutError, ConnectionError)` here never actually matched a real
+    # SDK error; genuine timeouts/connection failures fell through uncaught (past
+    # retry_with_backoff, which only retries TransientError) straight to
+    # categorization/llm_classifier.py's outer `except Exception: return UNSURE` --
+    # silently giving up after zero retries instead of retrying a transient blip.
+    except (APIConnectionError, APITimeoutError, TimeoutError, ConnectionError) as exc:
         raise TransientError(
             f"Categorization LLM network error ({settings.openrouter_base_url}): {exc}"
         ) from exc

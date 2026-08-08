@@ -55,6 +55,17 @@ def _process_run(db: Session, run) -> None:
 
     try:
         for index, file_ref in enumerate(files, start=1):
+            # Checked between files, never mid-file -- a file is either fully
+            # processed or not started, so this can't leave a half-written
+            # statement/transaction behind. cancel_requested_at is written only by
+            # the API (a separate process); status is written only here, so the two
+            # never race on the same column (see aidlc-docs/audit.md 2026-08-05).
+            if orchestrator_repository.is_cancellation_requested(db, run.id):
+                logger.info(
+                    "Ingestion run %s: cancellation requested, stopping before file %d/%d", run.id, index, len(files)
+                )
+                orchestrator_repository.cancel_run(db, run)
+                return
             logger.info("Ingestion run %s: processing file %d/%d: %s", run.id, index, len(files), file_ref.name)
             _process_one_file(db, run, file_ref)
     except Exception:  # noqa: BLE001 - same reasoning: an unexpected bug per-file must not
@@ -123,7 +134,7 @@ def _process_one_file(db: Session, run, file_ref) -> None:
 
 
 def _persist_transaction(db: Session, statement, currency: str, raw_txn) -> Transaction:
-    categorization = categorize(db, raw_txn.description)
+    categorization = categorize(db, raw_txn.description, raw_txn.amount)
     category = categorization_repository.find_category_by_name(db, categorization.category_name)
     # find_category_by_name always resolves here: categorize() only ever returns a
     # whitelist name or "UNSURE", both of which are guaranteed to exist as Category rows.

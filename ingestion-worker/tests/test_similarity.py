@@ -4,6 +4,8 @@ Partial PBT mode (requirements.md NFR-5.2): this is exactly the kind of pure,
 no-I/O function PBT is meant for.
 """
 
+from decimal import Decimal
+
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -11,6 +13,17 @@ from ingestion_worker.categorization.similarity import SimilarityCandidate, find
 
 _descriptions = st.text(min_size=1, max_size=100, alphabet=st.characters(blacklist_categories=("Cs",)))
 _sources = st.sampled_from(["manual", "similarity", "llm"])
+
+# A fixed amount shared by the description-side and every candidate in the
+# text-matching property tests below: trivially "in range" of itself under any
+# tolerance, so these tests continue to exercise only the text-matching behavior
+# they're named for, unaffected by the amount gate (which has its own dedicated
+# test class further down). Real, non-trivial ratio_tolerance/absolute_floor
+# values are used regardless (not e.g. math.inf) so a bug that broke the gate
+# entirely wouldn't be masked by a permissive test setup.
+_FIXED_AMOUNT = Decimal("10.00")
+_RATIO_TOLERANCE = 4.0
+_ABSOLUTE_FLOOR = Decimal("5.00")
 
 
 def _candidate_strategy():
@@ -20,13 +33,25 @@ def _candidate_strategy():
         description=_descriptions,
         category_name=st.text(min_size=1, max_size=30),
         category_source=_sources,
+        amount=st.just(_FIXED_AMOUNT),
+    )
+
+
+def _find_best_match(description, candidates, threshold):
+    return find_best_match(
+        description,
+        _FIXED_AMOUNT,
+        candidates,
+        threshold,
+        amount_ratio_tolerance=_RATIO_TOLERANCE,
+        amount_absolute_floor=_ABSOLUTE_FLOOR,
     )
 
 
 class TestFindBestMatchProperties:
     @given(description=_descriptions, candidates=st.lists(_candidate_strategy(), max_size=20), threshold=st.floats(min_value=0, max_value=100))
     def test_result_is_none_or_a_candidate_from_the_input_list(self, description, candidates, threshold):
-        result = find_best_match(description, candidates, threshold)
+        result = _find_best_match(description, candidates, threshold)
         if result is not None:
             assert result.candidate in candidates
             assert 0 <= result.score <= 100
@@ -34,49 +59,181 @@ class TestFindBestMatchProperties:
     @given(description=_descriptions, candidates=st.lists(_candidate_strategy(), max_size=20))
     def test_higher_threshold_never_yields_more_permissive_result(self, description, candidates):
         """Property: raising the threshold can only ever exclude matches, never include more."""
-        loose = find_best_match(description, candidates, threshold=0)
-        strict = find_best_match(description, candidates, threshold=100)
+        loose = _find_best_match(description, candidates, threshold=0)
+        strict = _find_best_match(description, candidates, threshold=100)
         if strict is not None:
             assert loose is not None
             assert strict.score >= loose.score or strict.score == 100
 
     @given(description=_descriptions)
     def test_empty_candidate_list_never_matches(self, description):
-        assert find_best_match(description, [], threshold=0) is None
+        assert _find_best_match(description, [], threshold=0) is None
 
     @given(description=_descriptions, candidates=st.lists(_candidate_strategy(), min_size=1, max_size=20))
     def test_all_scores_below_threshold_yields_none(self, description, candidates):
         # threshold=101 is unreachable (scores are 0-100), so nothing can ever qualify
-        assert find_best_match(description, candidates, threshold=101) is None
+        assert _find_best_match(description, candidates, threshold=101) is None
 
     def test_exact_match_scores_100(self):
         candidate = SimilarityCandidate(
-            transaction_id="t1", description="NTUC FAIRPRICE", category_name="Groceries", category_source="llm"
+            transaction_id="t1",
+            description="NTUC FAIRPRICE",
+            category_name="Groceries",
+            category_source="llm",
+            amount=_FIXED_AMOUNT,
         )
-        result = find_best_match("NTUC FAIRPRICE", [candidate], threshold=50)
+        result = _find_best_match("NTUC FAIRPRICE", [candidate], threshold=50)
         assert result is not None
         assert result.score == 100
 
     def test_manual_precedence_over_higher_scoring_non_manual(self):
         """WR-3: a manual match wins even if a non-manual candidate scores higher."""
         manual = SimilarityCandidate(
-            transaction_id="m1", description="STARBUCKS COFFEE SG", category_name="Dining", category_source="manual"
+            transaction_id="m1",
+            description="STARBUCKS COFFEE SG",
+            category_name="Dining",
+            category_source="manual",
+            amount=_FIXED_AMOUNT,
         )
         higher_scoring_llm = SimilarityCandidate(
-            transaction_id="l1", description="STARBUCKS", category_name="Entertainment", category_source="llm"
+            transaction_id="l1",
+            description="STARBUCKS",
+            category_name="Entertainment",
+            category_source="llm",
+            amount=_FIXED_AMOUNT,
         )
-        result = find_best_match("STARBUCKS COFFEE", [manual, higher_scoring_llm], threshold=50)
+        result = _find_best_match("STARBUCKS COFFEE", [manual, higher_scoring_llm], threshold=50)
         assert result is not None
         assert result.candidate.category_source == "manual"
         assert result.candidate.category_name == "Dining"
 
     def test_no_manual_candidate_falls_back_to_highest_scoring(self):
         similarity_match = SimilarityCandidate(
-            transaction_id="s1", description="GRAB RIDE", category_name="Transport", category_source="similarity"
+            transaction_id="s1",
+            description="GRAB RIDE",
+            category_name="Transport",
+            category_source="similarity",
+            amount=_FIXED_AMOUNT,
         )
         llm_match = SimilarityCandidate(
-            transaction_id="l1", description="GRAB", category_name="Others", category_source="llm"
+            transaction_id="l1", description="GRAB", category_name="Others", category_source="llm", amount=_FIXED_AMOUNT
         )
-        result = find_best_match("GRAB RIDE HOME", [similarity_match, llm_match], threshold=30)
+        result = _find_best_match("GRAB RIDE HOME", [similarity_match, llm_match], threshold=30)
         assert result is not None
         assert result.candidate.transaction_id == "s1"  # closer textual match, no manual present
+
+
+class TestAmountRangeGating:
+    """Regression coverage for a real incident: two OCBC "FAST PAYMENT via
+    PayNow-UEN to AXS PTE. LTD." transactions -- AXS is a bill-payment kiosk used
+    for many unrelated bill types -- had near-identical description text but wildly
+    different amounts ($699 a car loan installment, $81.70 a conservancy fee).
+    Correcting one surfaced the other as a suggested match purely on text
+    similarity. See aidlc-docs/audit.md 2026-08-06."""
+
+    # The two exact transaction reference numbers the user reported
+    # ("...251129591611147661" and "...260201413718399401") only score 84.29 via
+    # rapidfuzz token_sort_ratio -- just under the app's default similarity_threshold
+    # of 85 -- so they wouldn't be text-eligible at all in isolation (verified by
+    # actually running rapidfuzz, not assumed). The real, live-database mechanism
+    # (confirmed by querying the account's actual 24+ AXS transactions) is that
+    # SOME reference-number pairs among many do cross the threshold and, once one
+    # is mismatched, itself becomes a bad precedent for the next -- a slow
+    # cross-contamination across the whole history. A single-digit-different
+    # reference (below) reproduces that in miniature: 98.57, comfortably above both
+    # similarity_threshold (85) and recategorization_auto_apply_threshold (97).
+    _AXS_DESCRIPTION = "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147661"
+    _AXS_DESCRIPTION_OTHER_REF = "FAST PAYMENT via PayNow-UEN to AXS PTE. LTD. OTHR - 251129591611147662"
+
+    def test_same_merchant_wildly_different_amount_does_not_match(self):
+        """The reported case in miniature: near-identical AXS reference numbers
+        (real mechanism: some pairs among many score this closely), $699 car loan
+        vs $81.70 conservancy fee."""
+        car_loan_candidate = SimilarityCandidate(
+            transaction_id="c1",
+            description=self._AXS_DESCRIPTION,
+            category_name="Car Loan",
+            category_source="manual",
+            amount=Decimal("699.00"),
+        )
+        result = find_best_match(
+            self._AXS_DESCRIPTION_OTHER_REF,
+            Decimal("81.70"),
+            [car_loan_candidate],
+            threshold=85,
+            amount_ratio_tolerance=4.0,
+            amount_absolute_floor=Decimal("5.00"),
+        )
+        assert result is None
+
+    def test_same_merchant_similar_amount_still_matches(self):
+        """A legitimate near-duplicate (e.g. two car loan installments a month
+        apart) must still match -- the gate targets wildly different amounts, not
+        any variance at all."""
+        car_loan_candidate = SimilarityCandidate(
+            transaction_id="c1",
+            description=self._AXS_DESCRIPTION,
+            category_name="Car Loan",
+            category_source="manual",
+            amount=Decimal("699.00"),
+        )
+        result = find_best_match(
+            self._AXS_DESCRIPTION_OTHER_REF,
+            Decimal("705.00"),
+            [car_loan_candidate],
+            threshold=85,
+            amount_ratio_tolerance=4.0,
+            amount_absolute_floor=Decimal("5.00"),
+        )
+        assert result is not None
+        assert result.candidate.category_name == "Car Loan"
+
+    def test_small_value_line_items_match_via_absolute_floor_despite_large_ratio(self):
+        """Two currency-conversion fees of $0.01 and $0.27 -- a 27x ratio, but
+        trivially close in real terms -- must still match via the absolute floor."""
+        fee_candidate = SimilarityCandidate(
+            transaction_id="f1",
+            description="CCY CONVERSION FEE FOR: 1.48 SGD",
+            category_name="Bank charges",
+            category_source="manual",
+            amount=Decimal("0.01"),
+        )
+        result = find_best_match(
+            "CCY CONVERSION FEE FOR: 26.86 SGD",
+            Decimal("0.27"),
+            [fee_candidate],
+            threshold=85,
+            amount_ratio_tolerance=4.0,
+            amount_absolute_floor=Decimal("5.00"),
+        )
+        assert result is not None
+
+    def test_ratio_just_over_tolerance_excluded_just_under_included(self):
+        candidate = SimilarityCandidate(
+            transaction_id="c1", description="SOME MERCHANT", category_name="Bills", category_source="manual",
+            amount=Decimal("100.00"),
+        )
+        # 4.0x tolerance: $400 is exactly at the boundary (included), $400.01 just over.
+        at_boundary = find_best_match(
+            "SOME MERCHANT", Decimal("400.00"), [candidate], threshold=85,
+            amount_ratio_tolerance=4.0, amount_absolute_floor=Decimal("5.00"),
+        )
+        just_over = find_best_match(
+            "SOME MERCHANT", Decimal("400.01"), [candidate], threshold=85,
+            amount_ratio_tolerance=4.0, amount_absolute_floor=Decimal("5.00"),
+        )
+        assert at_boundary is not None
+        assert just_over is None
+
+    def test_text_match_alone_is_not_enough_when_amount_gate_fails(self):
+        """An exact text match (score 100) is still excluded if the amounts are
+        out of range -- the amount gate is a hard AND, not folded into the score."""
+        candidate = SimilarityCandidate(
+            transaction_id="c1", description="IDENTICAL TEXT", category_name="Car Loan", category_source="manual",
+            amount=Decimal("699.00"),
+        )
+        result = find_best_match(
+            "IDENTICAL TEXT", Decimal("81.70"), [candidate], threshold=85,
+            amount_ratio_tolerance=4.0, amount_absolute_floor=Decimal("5.00"),
+        )
+        assert result is None

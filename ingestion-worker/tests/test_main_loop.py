@@ -64,11 +64,98 @@ class TestPollOnce:
             patch("ingestion_worker.main.repository.find_queued_recategorize_job", return_value=None),
             patch("ingestion_worker.main.pipeline.process_run") as mock_process_run,
             patch("ingestion_worker.main.pipeline.process_recategorize_job") as mock_process_job,
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=False),
+            patch("ingestion_worker.main.backup_service.run_backup") as mock_run_backup,
         ):
             main.poll_once()
 
         mock_process_run.assert_not_called()
         mock_process_job.assert_not_called()
+        mock_run_backup.assert_not_called()
+
+    def test_backup_runs_only_when_nothing_else_queued_and_due(self):
+        """Epic 7: the third, lowest-priority branch -- checked only when no run
+        or job was found this cycle."""
+        fake_db = MagicMock()
+
+        with (
+            patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db)),
+            patch("ingestion_worker.main.repository.find_queued_run", return_value=None),
+            patch("ingestion_worker.main.repository.find_queued_recategorize_job", return_value=None),
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=True) as mock_due,
+            patch("ingestion_worker.main.backup_service.run_backup") as mock_run_backup,
+        ):
+            main.poll_once()
+
+        mock_due.assert_called_once_with(fake_db)
+        mock_run_backup.assert_called_once_with(fake_db)
+
+    def test_backup_is_never_checked_when_a_run_was_found(self):
+        fake_db = MagicMock()
+        fake_run = MagicMock()
+
+        with (
+            patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db)),
+            patch("ingestion_worker.main.repository.find_queued_run", return_value=fake_run),
+            patch("ingestion_worker.main.repository.claim_run"),
+            patch("ingestion_worker.main.pipeline.process_run"),
+            patch("ingestion_worker.main.backup_service.is_backup_due_now") as mock_due,
+            patch.object(fake_db, "merge", return_value=fake_run),
+        ):
+            main.poll_once()
+
+        mock_due.assert_not_called()
+
+    def test_backup_is_never_checked_when_a_job_was_found(self):
+        fake_db = MagicMock()
+        fake_job = MagicMock()
+
+        with (
+            patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db)),
+            patch("ingestion_worker.main.repository.find_queued_run", return_value=None),
+            patch("ingestion_worker.main.repository.find_queued_recategorize_job", return_value=fake_job),
+            patch("ingestion_worker.main.repository.claim_recategorize_job"),
+            patch("ingestion_worker.main.pipeline.process_recategorize_job"),
+            patch("ingestion_worker.main.backup_service.is_backup_due_now") as mock_due,
+            patch.object(fake_db, "merge", return_value=fake_job),
+        ):
+            main.poll_once()
+
+        mock_due.assert_not_called()
+
+
+class TestRecoverStaleState:
+    """Regression coverage for a real incident: a categorization call hung
+    indefinitely (2026-08-04), leaving an IngestionRun stuck "running" forever and
+    blocking every future run via the single-active-run DB constraint. This is
+    called once at startup so a plain restart self-heals instead of needing manual
+    DB surgery."""
+
+    def test_logs_a_warning_when_stale_state_is_found(self):
+        fake_db = MagicMock()
+        with (
+            patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db)),
+            patch("ingestion_worker.main.repository.fail_stale_runs", return_value=1) as mock_fail_runs,
+            patch("ingestion_worker.main.repository.fail_stale_recategorize_jobs", return_value=2) as mock_fail_jobs,
+            patch("ingestion_worker.main.logger") as mock_logger,
+        ):
+            main.recover_stale_state()
+
+        mock_fail_runs.assert_called_once_with(fake_db)
+        mock_fail_jobs.assert_called_once_with(fake_db)
+        mock_logger.warning.assert_called_once()
+
+    def test_no_warning_when_nothing_is_stale(self):
+        fake_db = MagicMock()
+        with (
+            patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db)),
+            patch("ingestion_worker.main.repository.fail_stale_runs", return_value=0),
+            patch("ingestion_worker.main.repository.fail_stale_recategorize_jobs", return_value=0),
+            patch("ingestion_worker.main.logger") as mock_logger,
+        ):
+            main.recover_stale_state()
+
+        mock_logger.warning.assert_not_called()
 
 
 class TestHeartbeat:
