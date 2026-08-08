@@ -5,7 +5,19 @@ Retroactively added during Unit 3's NFR Requirements — see aidlc-docs/audit.md
 Unit 2 handles the interactive OAuth handshake and persists the resulting refresh
 token to the shared database for Unit 3 to read.
 
-Least-privilege scope: read-only Drive access, since the app only ever reads PDFs.
+Scope was originally read-only Drive access, since the app only ever read PDFs.
+Epic 7 (Nightly Transaction Backup) needs to create/write/delete files in a
+dedicated backup folder identified by an arbitrary folder ID the user shares (not
+a folder the app itself created, and not selected via a Drive file picker) --
+`drive.file` scope only grants access to app-created/app-opened files, which a
+live 403 "insufficientPermissions" test against the real API confirmed does not
+cover writing into an arbitrary externally-shared folder ID the same way
+`drive.readonly` already covers *reading* an arbitrary shared folder ID for
+ingestion. The full `drive` scope is the narrowest scope that reliably supports
+that "arbitrary folder ID, not app-created" access pattern for both read and
+write -- see aidlc-docs/audit.md 2026-08-08. Existing connections must be
+re-authorized (Settings -> Connect Google Drive) for this broader scope to take
+effect; a previously-granted refresh token cannot retroactively gain scope.
 """
 
 import secrets
@@ -18,7 +30,7 @@ from api_service.config import settings
 from api_service.drive_connect import repository
 from api_service.errors import ApiError
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 # In-memory CSRF state store: single-process personal app, no need for a DB/cache
 # table for a short-lived (few-minutes) OAuth handshake token. Also holds each

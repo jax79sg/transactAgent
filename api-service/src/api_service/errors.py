@@ -62,6 +62,14 @@ class IngestionRunAlreadyActiveError(ApiError):
     error_code = "ingestion_run_already_active"
 
 
+class RunNotCancellableError(ApiError):
+    """A run can only be cancelled while queued or running -- it's already reached
+    a terminal status (completed/failed/cancelled)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "run_not_cancellable"
+
+
 class CategoryNotFoundError(ApiError):
     """AR-7: correction target category does not exist."""
 

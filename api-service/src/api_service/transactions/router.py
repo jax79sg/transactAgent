@@ -51,6 +51,11 @@ def list_transactions(query: TransactionListQuery = Depends(), db: Session = Dep
     )
 
 
+@router.get("/banks", response_model=list[str])
+def list_banks(db: Session = Depends(get_db)) -> list[str]:
+    return service.list_distinct_banks(db)
+
+
 @router.get("/export.csv", response_class=PlainTextResponse)
 def export_transactions_csv(filters: TransactionFilter = Depends(), db: Session = Depends(get_db)) -> str:
     return service.export_transactions_csv(db, filters)

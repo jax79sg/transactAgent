@@ -37,6 +37,10 @@ def list_transactions(db: Session, query: TransactionListQuery) -> tuple[list[Tr
     return items, total_count, groups
 
 
+def list_distinct_banks(db: Session) -> list[str]:
+    return repository.list_distinct_banks(db)
+
+
 def export_transactions_csv(db: Session, filters: TransactionFilter) -> str:
     _validate_currency(filters.currency)
     rows = repository.query_all_for_export(db, filters, max_rows=settings.csv_export_max_rows)

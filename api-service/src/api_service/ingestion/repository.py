@@ -27,6 +27,18 @@ def find_by_id(db: Session, run_id: UUID) -> IngestionRun | None:
     return db.get(IngestionRun, run_id)
 
 
+def request_cancellation(db: Session, run: IngestionRun) -> None:
+    """Sets cancel_requested_at only -- never touches `status`. The worker (a
+    separate process) is the sole writer of `status`; it checks this column
+    between files (never mid-file) and transitions the run to CANCELLED itself.
+    This split keeps the two processes from ever racing on the same column."""
+    from datetime import datetime, timezone
+
+    if run.cancel_requested_at is None:
+        run.cancel_requested_at = datetime.now(timezone.utc)
+        db.commit()
+
+
 def list_runs(db: Session, page: int, page_size: int) -> tuple[list[IngestionRun], int]:
     total_count = db.scalar(select(func.count()).select_from(IngestionRun)) or 0
     stmt = (

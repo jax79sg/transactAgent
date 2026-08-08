@@ -139,6 +139,11 @@ def query_group_summaries(db: Session, query) -> list[dict]:
     ]
 
 
+def list_distinct_banks(db: Session) -> list[str]:
+    stmt = select(Transaction.bank_name).distinct().order_by(Transaction.bank_name)
+    return list(db.scalars(stmt))
+
+
 def find_by_id(db: Session, transaction_id: UUID) -> Transaction | None:
     return db.get(Transaction, transaction_id, options=[joinedload(Transaction.category)])
 

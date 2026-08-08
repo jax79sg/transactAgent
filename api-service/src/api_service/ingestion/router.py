@@ -27,6 +27,7 @@ def _to_status_dto(run) -> RunStatusResponse:
         files_processed_count=run.files_processed_count,
         files_skipped_count=run.files_skipped_count,
         files_failed_count=run.files_failed_count,
+        cancel_requested_at=run.cancel_requested_at,
     )
 
 
@@ -41,6 +42,12 @@ def start_run(
 @router.get("/runs/{run_id}", response_model=RunStatusResponse)
 def get_run_status(run_id: UUID, db: Session = Depends(get_db)) -> RunStatusResponse:
     run = service.get_run_status(db, run_id)
+    return _to_status_dto(run)
+
+
+@router.post("/runs/{run_id}/cancel", response_model=RunStatusResponse)
+def cancel_run(run_id: UUID, db: Session = Depends(get_db)) -> RunStatusResponse:
+    run = service.cancel_run(db, run_id)
     return _to_status_dto(run)
 
 

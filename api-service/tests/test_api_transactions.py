@@ -4,7 +4,9 @@ from decimal import Decimal
 from transactagent_db.models import BankStatement, Category, CategorySource, Transaction
 
 
-def _seed_transaction(db_session, category_name="Groceries", description="NTUC FAIRPRICE", category=None):
+def _seed_transaction(
+    db_session, category_name="Groceries", description="NTUC FAIRPRICE", category=None, bank_name="DBS"
+):
     # category/pdf_content_hash are unique-constrained columns -- a caller seeding
     # multiple transactions in one test must pass an existing `category` to reuse (a
     # fresh hash is always generated here, one per call, to dodge that constraint too).
@@ -23,7 +25,7 @@ def _seed_transaction(db_session, category_name="Groceries", description="NTUC F
         description=description,
         out_flow=Decimal("25.50"),
         currency="SGD",
-        bank_name="DBS",
+        bank_name=bank_name,
         category_id=category.id,
         category_source=CategorySource.SIMILARITY,
     )
@@ -47,6 +49,41 @@ class TestTransactionsApi:
         response = client.get("/transactions", params={"currency": "nope"}, headers=auth_headers)
         assert response.status_code == 400
         assert response.json()["error"] == "invalid_currency"
+
+    def test_bank_filter_returns_only_matching_bank(self, client, auth_headers, db_session):
+        _, category = _seed_transaction(db_session, bank_name="UOB")
+        _seed_transaction(db_session, category=category, bank_name="DBS")
+
+        response = client.get("/transactions", params={"bank": "UOB"}, headers=auth_headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalCount"] == 1
+        assert body["items"][0]["bankName"] == "UOB"
+
+    def test_category_filter_returns_only_matching_category(self, client, auth_headers, db_session):
+        _seed_transaction(db_session, category_name="Groceries")
+        _seed_transaction(db_session, category_name="Dining Out")
+
+        response = client.get("/transactions", params={"category": "Dining Out"}, headers=auth_headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalCount"] == 1
+        assert body["items"][0]["category"]["name"] == "Dining Out"
+
+
+class TestListBanksApi:
+    def test_requires_auth(self, client):
+        response = client.get("/transactions/banks")
+        assert response.status_code == 401
+
+    def test_returns_distinct_sorted_banks(self, client, auth_headers, db_session):
+        _, category = _seed_transaction(db_session, bank_name="UOB")
+        _seed_transaction(db_session, category=category, bank_name="DBS")
+        _seed_transaction(db_session, category=category, bank_name="DBS")  # duplicate, should not repeat
+
+        response = client.get("/transactions/banks", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json() == ["DBS", "UOB"]
 
     def test_correct_category_creates_recategorization_job(self, client, auth_headers, db_session):
         txn, _old_category = _seed_transaction(db_session)

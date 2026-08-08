@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api_service.ai_assistant.router import router as ai_assistant_router
 from api_service.auth.router import router as auth_router
+from api_service.backup.router import router as backup_router
 from api_service.categories.router import router as categories_router
 from api_service.config import settings
 from api_service.dashboards.router import router as dashboards_router
@@ -62,6 +63,7 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     app.include_router(drive_connect_router)
     app.include_router(ai_assistant_router)
     app.include_router(recategorization_router)
+    app.include_router(backup_router)
 
     return app
 

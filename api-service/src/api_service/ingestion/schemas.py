@@ -17,6 +17,7 @@ class RunStatusResponse(CamelModel):
     files_processed_count: int
     files_skipped_count: int
     files_failed_count: int
+    cancel_requested_at: datetime | None
 
 
 class RunHistoryPage(CamelModel):

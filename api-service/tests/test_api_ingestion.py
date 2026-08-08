@@ -19,6 +19,42 @@ class TestIngestionApi:
         assert response.status_code == 404
 
 
+class TestCancelRunApi:
+    def test_cancel_requires_auth(self, client):
+        import uuid
+
+        response = client.post(f"/ingestion/runs/{uuid.uuid4()}/cancel")
+        assert response.status_code == 401
+
+    def test_cancel_unknown_run_returns_404(self, client, auth_headers):
+        import uuid
+
+        response = client.post(f"/ingestion/runs/{uuid.uuid4()}/cancel", headers=auth_headers)
+        assert response.status_code == 404
+
+    def test_cancel_an_active_run_sets_requested_at_not_status(self, client, auth_headers):
+        started = client.post("/ingestion/runs", headers=auth_headers).json()
+
+        response = client.post(f"/ingestion/runs/{started['runId']}/cancel", headers=auth_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["cancelRequestedAt"] is not None
+        assert body["status"] == "queued"  # unchanged -- only the worker transitions status
+
+    def test_cancel_an_already_terminal_run_returns_409(self, client, auth_headers, db_session, test_user):
+        from transactagent_db.models import IngestionRun, IngestionRunStatus
+
+        run = IngestionRun(triggered_by_user_id=test_user.id, status=IngestionRunStatus.COMPLETED)
+        db_session.add(run)
+        db_session.flush()
+
+        response = client.post(f"/ingestion/runs/{run.id}/cancel", headers=auth_headers)
+
+        assert response.status_code == 409
+        assert response.json()["error"] == "run_not_cancellable"
+
+
 class TestIngestionRunLogsApi:
     def _start_run(self, client, auth_headers):
         return client.post("/ingestion/runs", headers=auth_headers).json()["runId"]

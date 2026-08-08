@@ -6,9 +6,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from api_service.errors import IngestionRunAlreadyActiveError, NotFoundError
+from api_service.errors import IngestionRunAlreadyActiveError, NotFoundError, RunNotCancellableError
 from api_service.ingestion import repository
 from transactagent_db.models import IngestionRun, IngestionRunStatus
+
+_CANCELLABLE_STATUSES = (IngestionRunStatus.QUEUED, IngestionRunStatus.RUNNING)
 
 
 def start_run(db: Session, triggered_by_user_id: UUID) -> IngestionRun:
@@ -25,6 +27,23 @@ def get_run_status(db: Session, run_id: UUID) -> IngestionRun:
     run = repository.find_by_id(db, run_id)
     if run is None:
         raise NotFoundError(f"Ingestion run {run_id} not found")
+    return run
+
+
+def cancel_run(db: Session, run_id: UUID) -> IngestionRun:
+    """Requests cancellation of a queued/running run -- doesn't cancel it directly
+    (that would race with the worker, the sole writer of `status`); see
+    repository.request_cancellation. Idempotent: cancelling an already
+    cancel-requested run is a no-op, not an error."""
+    run = repository.find_by_id(db, run_id)
+    if run is None:
+        raise NotFoundError(f"Ingestion run {run_id} not found")
+    if run.status not in _CANCELLABLE_STATUSES:
+        raise RunNotCancellableError(
+            f"Ingestion run {run_id} cannot be cancelled (status: {run.status.value})",
+            details={"status": run.status.value},
+        )
+    repository.request_cancellation(db, run)
     return run
 
 
