@@ -2,6 +2,8 @@
 
 A self-hosted, single-user web app that pulls your bank statement PDFs from a private Google Drive folder, extracts transactions with an LLM, auto-categorizes them (learning from your corrections over time), and gives you a filterable transaction table plus financial dashboards. Fully containerized — one `docker-compose up` runs the whole thing on your own machine.
 
+📘 **[User Guide](https://jax79sg.github.io/transactAgent/)** — a screenshot walkthrough of every page (login, dashboard, transactions, Ask AI, ingestion, review, settings). Screenshots use AI-generated sample data, not real transactions.
+
 ## What it does
 
 - **Manually-triggered ingestion**: you click "Run Ingestion" in the UI; nothing happens automatically or on a schedule
