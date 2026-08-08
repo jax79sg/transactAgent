@@ -11,8 +11,10 @@
 | Ingestion Trigger & Status Component | Shared DB (ingestion-runs/jobs table) | In-process DB query (writes `queued` rows; reads status rows) |
 | Configuration Component | Shared DB (categories table); validates against transactions table for in-use check | In-process DB query |
 | Recategorization Review Component *(added 2026-08-02)* | Shared DB (recategorization-proposals table; transactions table on approval) | In-process DB query — no dependency on Ingestion Worker Service |
+| Backup Status Component *(added 2026-08-08)* | Shared DB (`backup_runs` table) | In-process DB query — no dependency on Ingestion Worker Service |
 | Ingestion Orchestrator Component | Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine, Currency Conversion (all same service); Shared DB (ingestion-runs/jobs table, transactions table) | In-process method calls; in-process DB query |
-| Drive Connector Component | Google Drive API (external) | OAuth 2.0 + REST (external) |
+| Backup Manager Component *(added 2026-08-08)* | Drive Connector Component (same service); Shared DB (transactions table for export, `backup_runs` table for status) | In-process method calls; in-process DB query |
+| Drive Connector Component | Google Drive API (external) — read scopes (existing) + write scopes (new, for the dedicated backup folder) | OAuth 2.0 + REST (external) |
 | Duplicate Detection Component | Shared DB (processed-statements table) | In-process DB query |
 | Statement Extraction Component | OCR engine/library (external or embedded); LLM API (external, for layout-adaptive parsing) | Library call; REST (external) |
 | Categorization Engine Component | Shared DB (transactions table, for similarity search); LLM API (external) | In-process DB query; REST (external) |
@@ -21,7 +23,7 @@
 ## Communication Patterns Summary
 
 - **Frontend ↔ API Service**: REST over HTTP, synchronous request/response
-- **API Service ↔ Ingestion Worker Service**: **No direct call** — fully decoupled via the shared DB's run/job table (see `services.md` — Cross-Service Coordination). *Addendum (2026-08-02)*: the new Recategorization Review Component holds to this same rule — it reads/writes proposal rows the Worker wrote, never calling it directly.
+- **API Service ↔ Ingestion Worker Service**: **No direct call** — fully decoupled via the shared DB's run/job table (see `services.md` — Cross-Service Coordination). *Addendum (2026-08-02)*: the new Recategorization Review Component holds to this same rule — it reads/writes proposal rows the Worker wrote, never calling it directly. *Addendum (2026-08-08)*: the new Backup Status Component holds to the same rule — it only reads `backup_runs` rows the Worker's Backup Manager wrote.
 - **Within API Service**: in-process method calls between components (modular monolith internally, per this service's own boundary)
 - **Within Ingestion Worker Service**: in-process method calls, orchestrated by the Ingestion Orchestrator
 - **Both services ↔ Shared DB**: direct DB connections; no ORM/library is shared between the two services' codebases — they coordinate only through the documented schema (a data contract), consistent with Question 1 = B (separate, independently deployable services)
@@ -44,6 +46,7 @@
           | - Ingestion Trigger       |
           | - Configuration           |
           | - Recateg. Review         |
+          | - Backup Status           |
           +---------------------------+
                         |
                         v
@@ -56,6 +59,7 @@
           | - ingestion-runs          |
           | - fx-rate-cache           |
           | - recateg-proposals       |
+          | - backup-runs             |
           +---------------------------+
                         ^
                         |
@@ -67,6 +71,7 @@
           | - Statement Extract       |
           | - Categorization          |
           | - Currency Convert        |
+          | - Backup Manager          |
           +---------------------------+
                         |
                         v
@@ -78,4 +83,4 @@
           +---------------------------+
 ```
 
-**Text validation**: All lines are ASCII-only (`+ - | v ^`), no unicode box-drawing characters; every box's border and content lines are exactly 29 characters wide (programmatically verified), consistent with `common/ascii-diagram-standards.md`.
+**Text validation**: All lines are ASCII-only (`+ - | v ^`), no unicode box-drawing characters; every box's border and content lines are exactly 29 characters wide (programmatically verified), consistent with `common/ascii-diagram-standards.md`. Re-verified after the 2026-08-08 Nightly Transaction Backup addenda (Backup Status, Backup Manager, backup-runs lines).

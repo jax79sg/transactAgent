@@ -119,4 +119,40 @@ Tracked separately from the original build above (base project status unchanged:
 ## CONSTRUCTION PHASE (this feature): COMPLETE
 
 ## FEATURE STATUS: COMPLETE — Recategorization Review Panel (Epic 6)
-- [ ] Build and Test — pending
+
+---
+
+## Post-Completion Change: Nightly Transaction Backup to CSV
+
+Tracked separately from the original build and from Epic 6 (base project status unchanged: COMPLETE). Feature-scoped filenames used.
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-08; `aidlc-docs/inception/requirements/nightly-backup-requirements.md`; 11 FRs, 4 NFRs; 2 rounds of clarifying questions resolved backup destination [separate dedicated Drive folder, not same-folder subfolder], retention semantics, missed-schedule catch-up, failure/notification behavior, and frontend panel placement on the Review page)
+- [x] User Stories — Complete & Approved (2026-08-08; `aidlc-docs/inception/user-stories/nightly-backup-stories.md`; Epic 7, 4 stories US-7.1..7.4; personas.md unchanged, single existing persona reused)
+- [x] Workflow Planning — Complete & Approved (2026-08-08; `aidlc-docs/inception/plans/nightly-backup-execution-plan.md`; Application Design EXECUTE, Units Generation SKIP, per-unit NFR Requirements/Design + Infrastructure Design SKIP, Code Generation + Build and Test ALWAYS; sequence Database → {Ingestion Worker Service, API Service} → Frontend SPA)
+- [x] Application Design — Complete & Approved (2026-08-08; updated `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`, `application-design.md` in place with dated addenda; new Backup Manager Component (Ingestion Worker) + Backup Status Component (API Service); Drive Connector Component extended with upload/create-folder/list/delete; ASCII diagram width-verified after edit)
+
+## INCEPTION PHASE (this feature): COMPLETE
+- [ ] Construction (per affected unit: database, ingestion-worker, api-service, frontend) — pending
+  - [x] Database — Functional Design: Complete & Approved (2026-08-08; `domain-entities.md` +BackupRun, `business-rules.md` BR-17..18, `business-logic-model.md` +write-once lifecycle explanation)
+  - [x] Database — Code Generation: Complete & Approved (2026-08-08; `models.py` +BackupRun/BackupRunOutcome/BackupRunFailureCategory, migration `0006_backup_runs.py`, `test_models.py` +TestBackupRun 6 tests, 24/24 unit tests passing, migration live-verified against real Postgres incl. upgrade/downgrade/idempotent-reupgrade; found+flagged pre-existing out-of-scope bug in migration 0005 against a fresh DB, spawned as separate task, not fixed here)
+
+**UNIT: DATABASE — COMPLETE (for this feature)**
+  - [x] Ingestion Worker Service — Functional Design: Complete & Approved (2026-08-08; WR-11..15 added to `business-rules.md`, new Backup Manager Component section + Drive Connector addendum in `business-logic-model.md`, `domain-entities.md` addendum)
+  - [x] Ingestion Worker Service — Code Generation: Complete & Approved (2026-08-08; new `backup/` package [`repository.py`, `service.py`], `clients/drive_client.py` +4 methods, `config.py` +3 settings, `main.py` poll_once() third branch, 133/133 unit tests passing)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for this feature)**
+  - [x] API Service — Functional Design: Complete & Approved (2026-08-08; AR-14 added, `BackupStatusResponse` DTO, Backup Status Component logic in `business-logic-model.md`)
+  - [x] API Service — Code Generation: Complete & Approved (2026-08-08; new `backup/` module [`repository.py`, `service.py`, `schemas.py`, `router.py`], `main.py` router registration, `GET /backups/status`, 8 new tests, 113/113 api-service unit tests passing, OpenAPI schema smoke-tested)
+
+**UNIT: API SERVICE — COMPLETE (for this feature)**
+  - [x] Frontend SPA — Functional Design: Complete & Approved (2026-08-08; BackupStatusPanel addendum in `frontend-components.md`, polling-interval reasoning in `business-logic-model.md`)
+  - [x] Frontend SPA — Code Generation: Complete & Approved (2026-08-08; new `api/backup.ts`, `types.ts` +BackupStatusResponse, `BackupStatusPanel` inline in `ReviewPage.tsx`, 5 new tests, 68/68 frontend tests passing, clean `tsc`+`vite build`)
+
+**UNIT: FRONTEND SPA — COMPLETE (for this feature)**
+**ALL 4 UNITS COMPLETE (for this feature) — proceeding to Build and Test**
+
+- [x] Build and Test — Complete (2026-08-08; `aidlc-docs/construction/build-and-test/nightly-backup-build-and-test-summary.md`; full stack rebuilt + redeployed, migration 0006 live-verified, genuine live end-to-end verification against the real connected Google Drive account per explicit user confirmation [real backup upload, real retention deletion, real API status, real browser session] with full artifact cleanup afterward; 2 real bugs found and fixed [Drive OAuth scope too narrow for writes; no UI path to re-grant consent]; 1 pre-existing out-of-scope migration bug found and flagged, not fixed; 340/340 unit tests passing across all 4 units)
+
+## CONSTRUCTION PHASE (this feature): COMPLETE
+
+## FEATURE STATUS: COMPLETE — Nightly Transaction Backup (Epic 7)

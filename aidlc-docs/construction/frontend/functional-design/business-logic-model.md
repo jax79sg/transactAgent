@@ -37,6 +37,11 @@ Client-side logic beyond simple "call an endpoint and render the response."
 - `PendingReviewBadge` polls `GET /recategorization/proposals/pending-count` every 30 seconds, regardless of which page is active (mounted once at `NavBar`, not per-page) — deliberately much looser than the Ingestion 3-second poll: that poll is watching one specific run the user just triggered and is actively waiting on, while this is an ambient "is there anything waiting" indicator nobody is staring at in real time. 30s keeps the badge reasonably fresh without adding meaningful load for a single-user app.
 - Any successful approve/reject/bulk-approve/bulk-reject action on `ReviewPage` immediately invalidates the pending-count query (React Query cache invalidation) rather than waiting for the next 30s tick — so the badge updates instantly for actions the user just took, and only relies on polling to catch changes from elsewhere (e.g. a new correction generating fresh auto-applied/pending proposals via the next ingestion-worker poll cycle).
 
+## Backup Status Panel Polling (added 2026-08-08 — Epic 7)
+
+- `BackupStatusPanel` polls `GET /backups/status` every 5 minutes, mounted only on `ReviewPage` (unlike `PendingReviewBadge`, this isn't shown in the nav, so it only needs to be fresh while that page is open). Looser than `PendingReviewBadge`'s 30s deliberately: a backup outcome changes at most once a night (WR-11/BR-17 — at most one `BackupRun` row per day), so sub-minute freshness has no value here, unlike the pending-proposal count which can change every few seconds as ingestion runs land.
+- No cache-invalidation trigger exists for this query (unlike the pending-count badge, which invalidates on approve/reject) — nothing on the Frontend ever writes a `BackupRun` row, so there's no local action that could make the cached status stale ahead of the next poll.
+
 ## Review Selection State (added 2026-08-02 — Epic 6)
 
 - `ReviewPage` holds a `Set<proposalId>` of the current page's selected rows, reset whenever the page number or the underlying proposal list changes (e.g. after a bulk action removes resolved rows) — never carried across pages, consistent with `BulkActionBar`'s "acts on the current page" scope (frontend-components.md).

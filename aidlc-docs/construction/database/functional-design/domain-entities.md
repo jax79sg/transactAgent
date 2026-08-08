@@ -111,6 +111,18 @@ Technology-agnostic domain model. Exact column types/engine choice (PostgreSQL, 
 
 **Purpose**: Records every candidate match found by the broadened recategorization search (FR-RR-1/2), whether it was auto-applied (FR-RR-3) or is awaiting human review (FR-RR-4/US-6.4). `status = auto_applied` rows are a record of what happened automatically, not an action item — the Recategorization Review Component's pending list (US-6.4) and count (US-6.6) only ever query `status = 'pending'`.
 
+## Entity: BackupRun (added 2026-08-08 — Nightly Transaction Backup, Epic 7)
+- `id` (PK)
+- `backup_date` (date, unique) — the calendar day this attempt belongs to
+- `started_at`
+- `completed_at`
+- `outcome` (enum: `success` | `failed`)
+- `failure_category` (enum: `drive_connectivity` | `other`, nullable) — set only when `outcome = 'failed'`
+- `transaction_count` (nullable int) — number of transactions included in the CSV snapshot; set only on success
+- `backup_filename` (nullable string) — the uploaded file's name in the `backup` Drive subfolder; set only on success
+
+**Purpose**: One row per nightly backup attempt (FR-1..FR-11, Epic 7), written once at completion by the Ingestion Worker's Backup Manager, read read-only by the API Service's Backup Status Component. Unlike `IngestionRun`/`RecategorizationJob`, this entity has no `queued`/`running` interim status — see `business-logic-model.md` for why. Standalone entity: it does not reference individual `Transaction` rows (it's a per-attempt summary, not a per-item audit trail like `IngestionRunFile`).
+
 ## Entity: OAuthCredential (added 2026-08-01, retroactively — see audit.md)
 - `id` (PK)
 - `provider` (unique, e.g. `google_drive`)

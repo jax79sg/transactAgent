@@ -98,3 +98,12 @@ App
 - **Bulk result handling**: the bulk endpoints return `{approvedIds/rejectedIds, failedIds}` (AR-11/AR-12 partial-failure shape) — rows in `*Ids` (succeeded) are removed from the list; rows in `failedIds` stay visible with an inline "couldn't process — it may have already been resolved" note, rather than silently disappearing or erroring the whole action (US-6.4's "select one or more or all" implies partial success is a first-class, expected outcome, not an edge case to hide)
 - **Empty state**: "No proposals waiting for review" when the page has zero items
 - **API**: `GET /recategorization/proposals`, `POST /recategorization/proposals/{id}/approve`, `POST /recategorization/proposals/{id}/reject`, `POST /recategorization/proposals/bulk-approve`, `POST /recategorization/proposals/bulk-reject`
+
+## BackupStatusPanel (Addendum 2026-08-08 — Epic 7)
+
+- **BackupStatusPanel**: rendered on the Review page, visually separate (its own bordered section) from `ProposalTable` — per the requirements clarification that explicitly asked for this, not folded into the proposal review UI. Polls `GET /backups/status` on an interval (looser than `PendingReviewBadge`'s 30s — a nightly backup changes at most once a day, so this is an even less time-sensitive ambient indicator; see `business-logic-model.md` for the exact interval).
+- **Three display states**, driven directly by `BackupStatusResponse.outcome` (AR-14):
+  - `outcome === null` (no backup has run yet): a neutral "No backups yet" message
+  - `outcome === 'success'`: last backup time and transaction count
+  - `outcome === 'failed'`: `failureCategory === 'driveConnectivity'` shows a prompt to reconnect Google Drive (linking to the existing Settings page's connect flow); any other failure category shows a generic "Backup failed" indicator — both per FR-11's explicit dual-message requirement
+- **API**: `GET /backups/status`

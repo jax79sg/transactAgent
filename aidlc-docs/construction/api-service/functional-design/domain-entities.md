@@ -47,6 +47,10 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `BulkApproveResponse`: `{ approvedIds: uuid[], failedIds: uuid[] }`
 - `BulkRejectResponse`: `{ rejectedIds: uuid[], failedIds: uuid[] }`
 
+## Backup Status (added 2026-08-08 — Epic 7)
+
+- `BackupStatusResponse`: `{ lastRunAt: datetime | null, outcome: 'success'|'failed'|null, failureCategory: 'driveConnectivity'|'other'|null, transactionCount: int | null, backupFilename: string | null }` — `outcome = null` means no backup has ever run yet (AR-14), distinct from a recorded `failed` outcome.
+
 ## Error Shape (all endpoints)
 
 - `ErrorResponse`: `{ error: string, message: string, details?: object }` — consistent shape across all `400`/`401`/`404`/`409` responses so the Frontend has one error-handling code path.

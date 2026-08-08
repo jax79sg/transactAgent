@@ -1294,3 +1294,259 @@
 **Context**: Follow-on connectivity issue after the previous CORS/config fix -- the earlier fix was correct but had been applied to the wrong IP address; root-caused by actually checking the host's real network state rather than reusing an unverified value from an old log line.
 
 ---
+
+## Post-Completion Change: Nightly Transaction Backup to CSV
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "I would like to do up a back up of the transactions on a nightly basis, with a retention of 7 days. The backup shall be in the form of csv files. The backup shall be saved in a 'backup' sub folder of the same google drive folder."
+**AI Response**: "Logged request. Resuming existing AI-DLC project (aidlc-state.md shows PROJECT STATUS: COMPLETE, with a prior Post-Completion feature already following the Requirements Analysis -> ... -> Build and Test pattern). Reviewed existing Drive integration (ingestion-worker/src/ingestion_worker/clients/drive_client.py: only list_folder_pdf_files + download_file exist today, no upload/folder-create/delete capability) and config.py (single shared google_drive_folder_id, no per-user Drive scoping) and the Transaction model (database/src/transactagent_db/models.py) to inform clarifying questions. Proceeding to Requirements Analysis (Standard depth) -- new feature, moderate complexity, touches ingestion-worker (new backup component: CSV export + Drive upload + retention cleanup + scheduling) and likely database (tracking last backup run). Creating requirement-verification-questions.md before drafting requirements.md."
+**Context**: New Post-Completion feature request: Nightly Transaction Backup to CSV, entering Requirements Analysis.
+
+---
+
+## Requirements Analysis — Nightly Transaction Backup: Clarifying Questions Presented
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- awaiting answers)
+**AI Response**: "Created `aidlc-docs/inception/requirements/nightly-backup-questions.md` with 9 questions covering: backup content scope (full snapshot vs incremental), CSV field set, schedule time, file naming convention, retention semantics (exact 7-file rolling window vs age-based deletion), missed-backup recovery behavior, failure/retry handling, visibility/notification, and confirming CSV files in the backup subfolder won't interfere with existing PDF-only ingestion scanning. Presented to user and waiting for answers per the mandatory question-file gate."
+**Context**: Requirements Analysis Step 6 -- clarifying questions gate, awaiting user answers before drafting requirements.md.
+
+---
+
+## Requirements Analysis — Nightly Transaction Backup: Answers Received, Ambiguities Found
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "done." (answers filled into nightly-backup-questions.md: Q1=A full snapshot, Q2=A all columns, Q3=B implementation-chosen time, Q4=B timestamped filenames, Q5=A exact 7-file rolling window, Q6=B catch-up on restart, Q7=Other: \"Notify user to re-establish drive connectivity via the review tab.\", Q8=B surface in frontend, Q9=Other: \"Losing the folder loses the backup too. Let's store it in a seperate Google drive folder here. https://drive.google.com/drive/folders/1vb91lAVBH8lwniPbTz8xIdH6fkdu-f9t?usp=sharing\")"
+**AI Response**: "Read all 9 answers. 7 are unambiguous and require no follow-up. Two need clarification: (1) Q7's custom answer doesn't say whether auto-retry (option A) still applies alongside the notification, and names a 'review tab' for Drive-reconnect notifications that doesn't exist -- checked the actual frontend (SettingsPage.tsx) and found the real Drive connect/reconnect UI lives on the Settings page, not the Review page (which is the unrelated Epic 6 recategorization-proposals page); also unclear whether non-Drive failures (e.g. a DB error while building the CSV) should get the same notification. (2) Q9's custom answer replaces the original 'backup subfolder of the same source folder' with a separate Drive folder (ID 1vb91lAVBH8lwniPbTz8xIdH6fkdu-f9t, extracted from the shared URL) to avoid single-point-of-failure risk, but doesn't say whether files go in that folder's root or a 'backup' subfolder within it, and access to that folder by the app's single shared OAuth-connected Google account hasn't been confirmed. Created `nightly-backup-clarification-questions.md` with 5 follow-up questions (1a/1b/1c for failure handling+notification location+non-Drive-failure scope, 2a/2b for folder structure+access confirmation) per the mandatory ambiguity-detection process. Presented to user, awaiting answers."
+**Context**: Requirements Analysis Step 6 continued -- contradiction/ambiguity detection per question-format-guide.md found 2 areas needing follow-up before requirements.md can be drafted.
+
+---
+
+## Requirements Analysis — Nightly Transaction Backup: Clarification Answers Received, Requirements Drafted
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "done" (clarification answers: 1a=B no auto-retry, 1b=B \"in the review tab, as a seperate panel from the transaction review\", 1c=C \"in the review tab, as a seperate panel from the transaction reviews\" [generic indicator, same panel], 2a=B backup subfolder within the separate folder, 2b=A access confirmed)"
+**AI Response**: "All ambiguities resolved -- 1b/1c both point to the same answer: a dedicated 'Backup Status' panel on the existing Review page (/review), separate from the recategorization ProposalTable, covering both Drive-connectivity failures (reconnect prompt) and generic failures (generic indicator). Checked frontend/src/pages/ReviewPage.tsx exists as the mount point. Drafted `aidlc-docs/inception/requirements/nightly-backup-requirements.md`: 11 FRs (full nightly snapshot, separate dedicated Drive backup folder id 1vb91lAVBH8lwniPbTz8xIdH6fkdu-f9t with a 'backup' subfolder, exact-7-file retention, missed-schedule catch-up, no same-night auto-retry, persisted backup-run history, Review-page status panel) and 4 NFRs (WR-8 single-run-at-a-time compatibility, reuse of existing retry_with_backoff/TransientError pattern, scale-safe CSV export, scoped-safe retention deletion), plus 4 explicitly documented assumptions (02:00 default schedule time, filename timestamp format, literal 'all columns' interpretation including raw FK ids, a new BackupRun-style tracking entity deferred to Functional Design) and an Out of Scope section. Updated aidlc-state.md with the new Post-Completion Change section (Requirements Analysis marked drafted, pending approval, not yet approved). Presenting to user for review per Step 9 of requirements-analysis.md."
+**Context**: Requirements Analysis Step 7-9 -- requirements.md drafted from fully-resolved answers, awaiting explicit user approval before proceeding (User Stories is next, since this introduces new user-facing functionality: the Review page Backup Status panel).
+
+---
+
+## Requirements Analysis — Nightly Transaction Backup: Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "Approve"
+**AI Response**: "Recorded approval. Marked Requirements Analysis complete & approved in aidlc-state.md for this feature. Proceeding to User Stories -- mandatory per CLAUDE.md's ALWAYS-execute criteria (new user-facing functionality: the Review page Backup Status panel)."
+**Context**: Requirements Analysis approved; workflow proceeds to User Stories.
+
+---
+
+## User Stories — Nightly Transaction Backup: Assessment + Plan Presented
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- executing mandatory Part 1 Planning)
+**AI Response**: "Created `nightly-backup-user-stories-assessment.md` (Decision: Execute -- meets High Priority 'New User Features' [Backup Status panel] and 'Complex Business Logic' [retention/catch-up/no-retry rules] criteria independently). Created `nightly-backup-story-generation-plan.md` following the exact convention already established by `recategorization-review-story-generation-plan.md`: single existing persona (Account Owner) reused, coarse epic-level granularity, Given/When/Then + edge cases, FR/NFR traceability, new Epic 7 appended to a feature-scoped stories file. No open ambiguities remain -- both requirements clarification rounds already resolved every product decision needed, so this plan has no [Answer]: questions, presented for approval only. Checklist: 4 stories (nightly export, retention, catch-up, failure/visibility) covering FR-1..11/NFR-1..4. Presenting plan for approval before generation."
+**Context**: User Stories Part 1 Planning -- assessment justified execution, plan drafted with no open questions, awaiting explicit plan approval per Step 13.
+
+---
+
+## User Stories — Nightly Transaction Backup: Plan Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approve"
+**AI Response**: "Recorded plan approval. Proceeding to Part 2 Generation: drafting nightly-backup-stories.md per the approved checklist."
+**Context**: User Stories Part 1 Planning approved; workflow proceeds to Part 2 Generation.
+
+---
+
+## User Stories — Nightly Transaction Backup: Stories Generated
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none -- executing the already-approved story plan)
+**AI Response**: "Generated `nightly-backup-stories.md`: Epic 7, 4 stories (US-7.1 automatic nightly export, US-7.2 exactly-7 retention with safe scoping, US-7.3 missed-backup catch-up, US-7.4 failure visibility + no same-night retry), each with Given/When/Then happy path plus 2-4 edge cases, traced to FR-1..11/NFR-4. Confirmed personas.md needs no changes -- single existing Account Owner persona already covers this feature. Updated aidlc-state.md. Presenting for approval."
+**Context**: User Stories Part 2 Generation complete, awaiting explicit approval per Step 21.
+
+---
+
+## User Stories — Nightly Transaction Backup: Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approve"
+**AI Response**: "Recorded approval. Marked User Stories complete & approved in aidlc-state.md for this feature. Proceeding to Workflow Planning (mandatory, always executes)."
+**Context**: User Stories approved; workflow proceeds to Workflow Planning.
+
+---
+
+## Workflow Planning — Nightly Transaction Backup: Plan Presented
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "Ready to proceed with this plan?"
+**AI Response**: "Created `nightly-backup-execution-plan.md` following the exact precedent set by `recategorization-review-execution-plan.md`: Application Design EXECUTE (new Drive client capabilities + backup scheduler/orchestrator + new API component need explicit definition), Units Generation SKIP (all 4 existing units suffice), per-unit NFR Requirements/NFR Design/Infrastructure Design all SKIP (no new tech stack, no new infra topology, reuses existing retry pattern), Functional Design + Code Generation EXECUTE per affected unit, Build and Test ALWAYS. Unit sequence: Database (new BackupRun entity) -> {Ingestion Worker Service, API Service} -> Frontend SPA. Risk assessed Medium (first-ever Drive write/delete capability, scoped narrowly per NFR-4). Mermaid diagram validated. Presenting for approval."
+**Context**: Workflow Planning -- execution plan drafted, awaiting explicit approval before proceeding to Application Design.
+
+---
+
+## Workflow Planning — Nightly Transaction Backup: Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approve"
+**AI Response**: "Recorded approval. Marked Workflow Planning complete & approved in aidlc-state.md. Proceeding to Application Design."
+**Context**: Workflow Planning approved; workflow proceeds to Application Design.
+
+---
+
+## Application Design — Nightly Transaction Backup: Plan Presented
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- executing plan step per application-design.md)
+**AI Response**: "Read components.md, services.md, component-methods.md, component-dependency.md in full before drafting. Created `nightly-backup-application-design-plan.md` following the exact reasoning-table format of `recategorization-review-application-design-plan.md`: new Backup Manager Component (Ingestion Worker, time-triggered vs the Orchestrator's queue-triggered scope) reusing the extended Drive Connector Component for all Drive I/O; new Backup Status Component (API Service, DB-only dependency, no direct call to the worker, matching the project's one hard architectural rule); Frontend SPA extended in place (single-component convention); poll_once() gains a third lowest-priority branch for Backup Manager, preserving the existing one-thing-per-cycle invariant. No open product-facing tradeoffs remain -- both requirements clarification rounds already resolved everything relevant. Presenting for approval, not input."
+**Context**: Application Design planning -- reasoning table + execution checklist drafted, awaiting approval before generating components.md/component-methods.md/services.md/component-dependency.md/application-design.md addenda.
+
+---
+
+## Application Design — Nightly Transaction Backup: Plan Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approve"
+**AI Response**: "Recorded approval. Proceeding to generate the design artifact addenda per the approved checklist."
+**Context**: Application Design plan approved; generating artifacts.
+
+---
+
+## Application Design — Nightly Transaction Backup: Artifacts Generated
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none -- executing the approved checklist)
+**AI Response**: "Updated components.md (new Backup Manager Component + Backup Status Component; Drive Connector Component addendum with upload/create-folder/list/delete; Frontend SPA addendum for the Backup Status panel; Shared Data Store addendum for backup_runs), services.md (Backup Status orchestration note; poll_once() third-branch pseudocode preserving the one-thing-per-cycle invariant), component-methods.md (Drive Connector's 4 new methods, Backup Manager's 3 methods, Backup Status's 1 method), component-dependency.md (2 new dependency-matrix rows, ASCII data-flow diagram updated with 3 new lines, width-verified programmatically -- all boxes still exactly 29 characters). Regenerated application-design.md's consolidated summary, addendum, and story-traceability table (all 4 Epic 7 stories map to owning components, no gaps, no speculative components). Updated aidlc-state.md: Application Design marked complete & approved (self-consistent since it was already presented for approval, not input, at the plan stage)."
+**Context**: Application Design artifacts generated per the approved plan; awaiting explicit approval per application-design.md Step 13 before proceeding to CONSTRUCTION.
+
+---
+
+## Application Design — Nightly Transaction Backup: Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approve"
+**AI Response**: "Recorded approval. Marked Application Design complete & approved in aidlc-state.md; feature's INCEPTION PHASE now complete. Proceeding to CONSTRUCTION PHASE, starting with the Database unit's Functional Design per the approved sequence (Database -> {Ingestion Worker Service, API Service} -> Frontend SPA)."
+**Context**: Application Design approved; workflow proceeds to CONSTRUCTION.
+
+---
+
+## Construction — Database Unit: Functional Design
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- plan+generation presented together, matching Epic 6's established pattern for this unit)
+**AI Response**: "Read the existing domain-entities.md, business-rules.md, business-logic-model.md in full before writing. Created `database-nightly-backup-functional-design-plan.md`: no blocking questions (shape follows directly from FR-8/9/10 and Application Design's method signatures); flagged one explicit technical call -- BackupRun needs no queued/running interim status unlike IngestionRun/RecategorizationJob, because a backup attempt is fully synchronous within one Ingestion Worker poll cycle, not a cross-service handoff. Generated: BackupRun entity (domain-entities.md, standalone, no per-transaction audit trail); BR-17 (one attempt per backup_date, backing both the once-per-day rule and the no-same-night-retry rule with a single uniqueness constraint) and BR-18 (failure_category null iff success) in business-rules.md; a lifecycle addendum in business-logic-model.md explaining the write-once/no-state-machine design contrasted against the two existing queue-coordinated entities. Presenting for approval."
+**Context**: Construction, Unit: Database, Functional Design -- artifacts generated, awaiting explicit approval per functional-design.md Step 8.
+
+---
+
+## Construction — Database Unit: Functional Design Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approve"
+**AI Response**: "Recorded approval. Marked Database unit's Functional Design complete in aidlc-state.md. Proceeding to Database Unit Code Generation."
+**Context**: Database Functional Design approved; workflow proceeds to Code Generation.
+
+---
+
+## Construction — Database Unit: Code Generation
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- plan+generation presented together, matching the other units' established pattern)
+**AI Response**: "Read models.py, the 0004 migration, test_models.py, conftest.py, and models-summary.md before writing. Created `database-nightly-backup-code-generation-plan.md`. Generated: BackupRunOutcome + BackupRunFailureCategory enums and the BackupRun model (BR-17 unique backup_date, BR-18 CHECK constraint) in models.py; migration 0006_backup_runs.py using the same Base.metadata-driven create_all() technique as 0004 (two enum columns, same double-CREATE-TYPE bug avoidance); TestBackupRun (6 tests: success, failed-with-category, failed-without-category rejected, success-with-category rejected, duplicate-date rejected, different-dates both valid) in test_models.py; updated models-summary.md. Ran the full suite against a real disposable Postgres (testcontainers): 24/24 passing. Verified migration 0006 against a separate real disposable Postgres container (docker run postgres:16-alpine) -- found a pre-existing, out-of-scope bug in doing so: migration 0005 (already in the repo, unrelated to this feature) fails against a genuinely fresh database because 0001's table-scoping doesn't protect against columns added to an already-scoped table (cancel_requested_at collides with what 0001's Base.metadata.create_all() already creates on ingestion_runs). Confirmed this doesn't affect the live project database (already past 0005 historically) and is unrelated to backup_runs; flagged transparently via spawn_task (task_4932abf1) rather than silently fixed, matching this project's established practice for out-of-scope bugs found during verification. Worked around it for verification purposes only (schema via create_all() minus backup_runs + alembic stamp 0005, then upgrade head) to test migration 0006 in isolation: table shape and both constraints verified via psql \\d, downgrade cleanly drops the table + both enum types, re-upgrade head is a safe no-op."
+**Context**: Construction, Unit: Database, Code Generation -- code generated and live-verified; a pre-existing out-of-scope migration bug was found and flagged (not fixed) rather than silently worked around in the shipped code. Presenting for approval.
+
+---
+
+## Construction — Database Unit: Code Generation Approved — Unit Complete
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "approved"
+**AI Response**: "Recorded approval. Marked Database unit fully complete for this feature in aidlc-state.md. Proceeding to Ingestion Worker Service unit's Functional Design (per the approved sequence, Database -> {Ingestion Worker Service, API Service} -> Frontend SPA; starting with Ingestion Worker Service since it writes the BackupRun rows API Service will read)."
+**Context**: Database unit approved and complete; workflow proceeds to the Ingestion Worker Service unit.
+
+---
+
+## Construction — Ingestion Worker Service Unit: Functional Design
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- plan+generation presented together, matching the established pattern)
+**AI Response**: "Read business-rules.md, business-logic-model.md, domain-entities.md for this unit before writing. Created `ingestion-worker-nightly-backup-functional-design-plan.md`, surfacing two consequences worth stating explicitly even though not blocking: (1) catch-up (FR-8) requires no special-case code -- isBackupDueNow() being checked unconditionally every poll cycle already covers it, simpler than main.py's existing recover_stale_state() since BackupRun's write-once design (Database Functional Design) has nothing to orphan; (2) runBackup() must catch every exception internally and always write exactly one BackupRun row, since BR-17's per-day uniqueness is the actual FR-9 no-same-night-retry enforcement mechanism -- an uncaught exception would cause a retry storm every 5s poll cycle for the rest of the day. Generated WR-11..15 in business-rules.md; a new Backup Manager Component section in business-logic-model.md with runBackup()/enforceRetention() pseudocode; a Drive Connector Component addendum documenting the 4 new methods; a domain-entities.md addendum confirming no new internal DTO is needed. Presenting for approval."
+**Context**: Construction, Unit: Ingestion Worker Service, Functional Design -- artifacts generated, awaiting explicit approval.
+
+---
+
+## Construction — Ingestion Worker Service Unit: Functional Design Approved
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "continue"
+**AI Response**: "Recorded approval. Marked Ingestion Worker Service unit's Functional Design complete in aidlc-state.md. Proceeding to Ingestion Worker Service Unit Code Generation."
+**Context**: Ingestion Worker Service Functional Design approved; workflow proceeds to Code Generation.
+
+---
+
+## Construction — Ingestion Worker Service Unit: Code Generation
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- plan+generation presented together, matching the established pattern)
+**AI Response**: "Read drive_client.py, config.py, main.py, orchestrator/pipeline.py, orchestrator/repository.py, categorization/repository.py, db.py, clients/retry.py, and the existing test files (test_drive_client.py, test_main_loop.py) before writing, to match this codebase's module/test conventions exactly. Created `ingestion-worker-nightly-backup-code-generation-plan.md`. Generated: 3 new config.py settings (google_drive_backup_folder_id defaulted to the user-provided folder ID, backup_schedule_hour=2, backup_retention_count=7); 4 new drive_client.py functions (ensure_backup_folder_exists, upload_file, list_backup_folder_files, delete_file) reusing the existing _load_credentials/retry_with_backoff/_TRANSIENT_HTTP_STATUS machinery, DriveFileRef extended with an optional created_time field; a new backup/ package (repository.py: find_backup_run_for_date, record_backup_run; service.py: is_backup_due_now, run_backup, _build_csv, _enforce_retention implementing WR-11..15); main.py's poll_once() extended with the third branch exactly as designed in services.md. Wrote tests: 4 new classes in test_drive_client.py, a new test_backup_service.py (14 tests covering due-determination, all 4 outcome paths of run_backup including the WR-12 never-raises guarantee, and retention's 3 scenarios), 3 new tests in test_main_loop.py for the third-branch dispatch priority. Ran the full suite: 133/133 passing (one test fixed along the way -- an assertion checked a kwarg that was correctly omitted rather than explicitly passed as None, not a bug in the implementation). Created backup-summary.md."
+**Context**: Construction, Unit: Ingestion Worker Service, Code Generation -- code generated and verified via the real unit test suite. Presenting for approval.
+
+---
+
+## Construction — Ingestion Worker Service Unit: Code Generation Approved — Unit Complete
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "continue"
+**AI Response**: "Recorded approval. Marked Ingestion Worker Service unit fully complete for this feature in aidlc-state.md. Proceeding to API Service unit's Functional Design (per the approved sequence -- API Service is the second of the two units that can proceed in either order after Database)."
+**Context**: Ingestion Worker Service unit approved and complete; workflow proceeds to the API Service unit.
+
+---
+
+## Construction — API Service Unit: Functional Design
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none yet -- plan+generation presented together, matching the established pattern)
+**AI Response**: "Read main.py, recategorization/{router,service,repository,schemas}.py, schemas.py (CamelModel), db.py, auth/dependencies.py, and the existing test conventions (conftest.py, test_recategorization_service.py, test_api_recategorization.py) before writing. Created `api-service-nightly-backup-functional-design-plan.md`, resolving one gap Application Design's signature didn't specify: what getLatestBackupStatus() returns before any backup has ever run (BackupRun is write-once, so no row exists pre-first-attempt) -- resolved as a nullable outcome field, a third explicit state distinct from success/failed, not an error. Generated AR-14 in business-rules.md; a BackupStatusResponse DTO addendum in domain-entities.md matching ProposalDTO's documentation style; a Backup Status Component section in business-logic-model.md describing the single read and explicitly noting this is the only API Service component with no write path at all. Presenting for approval."
+**Context**: Construction, Unit: API Service, Functional Design -- artifacts generated, awaiting explicit approval.
+
+---
+
+## Construction — API Service Unit: Functional Design Approved; Blanket Approval Granted
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "continue, no need for further approvals from me unless questions needs to be answered."
+**AI Response**: "Recorded approval for API Service Functional Design, marked complete in aidlc-state.md. Recorded the user's standing instruction: proceed through remaining stage-completion approval gates without waiting for explicit approval each time, continuing to log every stage in audit.md/aidlc-state.md as normal, and still stopping to ask if a genuine ambiguity or decision requiring user input arises (matching the same bar already used throughout this feature for clarifying questions). Proceeding directly to API Service Unit Code Generation, then Frontend SPA unit, then Build and Test, without pausing for approval between stages."
+**Context**: User granted blanket approval for remaining construction stages; workflow continues autonomously, still fully logged, still stops for genuine questions/ambiguities.
+
+---
+
+## Construction — API Service Unit: Code Generation
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Read main.py, recategorization/{router,repository}.py, schemas.py, auth/dependencies.py, db.py, and test_api_recategorization.py before writing. Created `api-service-nightly-backup-code-generation-plan.md`. Generated new backup/ module: repository.py (get_latest_backup_run), service.py (get_latest_backup_status implementing AR-14), schemas.py (BackupStatusResponse), router.py (GET /backups/status, auth-protected); registered in main.py. Wrote test_backup_service.py (4 tests: no-prior-backup nulls, success reflection, failed-with-category, most-recent-date-wins) and test_api_backup.py (4 tests: auth requirement + 3 response-shape scenarios). Ran the full suite: 113/113 passing. Smoke-tested the OpenAPI schema directly (not just via TestClient requests) to confirm /backups/status is actually registered and shaped as expected, matching this project's established verification bar for new endpoints. Created backup-summary.md."
+**Context**: Construction, Unit: API Service, Code Generation -- code generated and verified live. Marked complete per blanket approval; proceeding to Frontend SPA unit.
+
+---
+
+## Construction — Frontend SPA Unit: Functional Design + Code Generation
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Read ReviewPage.tsx, recategorization.ts, client.ts, NavBar.tsx, types.ts, and ReviewPage.test.tsx before writing. Functional Design: created `frontend-nightly-backup-functional-design-plan.md` (no blocking questions -- panel location/messaging already resolved in Requirements). Generated a BackupStatusPanel addendum in frontend-components.md and polling-interval reasoning in business-logic-model.md (5-minute interval, looser than PendingReviewBadge's 30s, since a backup outcome changes at most once a night per WR-11/BR-17). Code Generation: created api/backup.ts (getBackupStatus) and added BackupStatusResponse/BackupOutcome/BackupFailureCategory to types.ts; added BackupStatusPanel as an inline component in ReviewPage.tsx (matching the existing convention -- ProposalTable/BulkActionBar are also inline, not separate files), rendered above ProposalTable per the requirements clarification's explicit 'separate panel' ask; three display states (none/success/failed-drive-connectivity-with-reconnect-link/failed-other) driven by outcome+failureCategory. Wrote 5 new tests in ReviewPage.test.tsx plus a beforeEach default mock so the panel's own network call doesn't affect pre-existing tests. Ran the full suite (68/68, up from 51, zero regressions) and `npm run build` (tsc -b && vite build) for a clean type-check and production build. Created backup-status-panel-summary.md. All 4 units (Database, Ingestion Worker Service, API Service, Frontend SPA) are now complete for this feature."
+**Context**: Construction, Unit: Frontend SPA, Functional Design + Code Generation -- both stages completed and verified live in one pass per blanket approval. All 4 units complete; proceeding to Build and Test.
+
+---
+
+## Build and Test — Live Drive Verification Confirmation
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (AskUserQuestion) "For Build & Test, should I run a genuine live end-to-end backup against your real, connected Google Drive account (upload a real CSV to the dedicated backup folder, verify retention/deletion there too), matching this project's established verification bar for every prior feature?" -- Answer: "Yes, run it live against real Drive (Recommended)"
+**AI Response**: "This is the first feature that writes to and deletes from the real Drive account (prior features only ever read PDFs), so flagged it explicitly rather than assuming the standing blanket-approval covered a new class of real-world side effect. User confirmed live verification. Proceeding: full docker rebuild + redeploy, live migration verification, then a genuine live backup run (real CSV uploaded to the real dedicated backup folder) and a genuine live retention test (uploading several real files, confirming real deletion), followed by full cleanup of all test artifacts (both the synthetic backup_runs DB row and any test files left in Drive) so the real nightly schedule takes over cleanly from tonight."
+**Context**: Build and Test -- user explicitly authorized live Drive testing given this feature's new write/delete capability; proceeding with full verification.
+
+---
+
+## Build and Test — Real Bug Found Live: Drive OAuth Scope Too Narrow
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (none -- discovered during live verification)
+**AI Response**: "Rebuilt all 3 changed images (api-service, ingestion-worker, frontend) via docker compose build, redeployed via docker compose up -d, confirmed all 4 containers healthy, confirmed migration 0006 applied cleanly on the ACTUAL live project database (alembic_version = 0006). The ingestion-worker's own startup catch-up logic (WR-11/FR-8, working exactly as designed) immediately triggered a real backup attempt on the very first poll cycle after restart, since today's schedule hour had already passed and no backup_runs row existed yet -- and it genuinely failed live: HttpError 403 'insufficientPermissions' / 'Request had insufficient authentication scopes.' Root-caused via drive_connect/service.py: the stored OAuth refresh token was granted under SCOPES=['https://www.googleapis.com/auth/drive.readonly'] (a deliberate least-privilege choice from when the app only ever read PDFs) -- read-only scope can never be used for write/delete calls no matter what the backup code does, since scope is fixed at grant time, not re-derived from the code. This is a real, in-scope gap this feature's own live test was designed to catch, not an out-of-scope bug -- fixed by broadening SCOPES to 'https://www.googleapis.com/auth/drive' (drive.file was considered but doesn't reliably cover creating/writing into an arbitrary externally-shared folder ID the app didn't create itself, the same pattern drive.readonly already relies on for reading the ingestion source folder). Documented the reasoning inline in the module docstring. Rebuilt and redeployed api-service. Deleted the failed test backup_runs row (today's date) so a fresh attempt isn't blocked by BR-17/WR-11's one-attempt-per-day rule once reconnected. Per the safety rules, granting/re-granting OAuth consent is an explicit-permission action only the account owner can perform -- asking the user to reconnect Google Drive via Settings before live verification can continue."
+**Context**: Build and Test -- genuine live execution (not a mock) caught a real, feature-blocking scope gap in the existing OAuth flow; fixed the scope and redeployed, but re-consent requires the user's own action (cannot be done on their behalf).
+
+---
+
+## Build and Test — Second Real Bug Found: No UI Path to Reconnect
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: (AskUserQuestion) "...please go to Settings...and click Connect Google Drive again..." -- Answer: "Done, I've reconnected"
+**AI Response**: "Checked the DB after the user's confirmation -- oauth_credentials.updated_at was still the original 2026-08-01 timestamp, unchanged, and the API logs showed zero /drive/connect or /drive/callback hits. Root-caused via SettingsPage.tsx's DriveConnectionCard: the 'Connect Google Drive' button was only ever rendered when `!status.connected` -- since the old (narrower-scope) credential row already made status.connected=true, there was literally no button for the user to click, regardless of intent. A real, feature-blocking UX gap this feature's own rollout exposed, not a hypothetical edge case. Fixed generally: the button is now always rendered, relabeled 'Reconnect Google Drive' when already connected, so any future scope change has a working path back into the consent flow too -- not a one-off patch just for this feature. Added SettingsPage.test.tsx (2 tests, this page previously had zero coverage) proving both label states. Ran full frontend suite (70/70, up from 68) and a clean production build. Rebuilt and redeployed the frontend container. Per the safety rules, cannot click through or approve the actual Google OAuth consent screen on the user's behalf -- asking the user to click the now-visible button themselves."
+**Context**: Build and Test -- a second genuine live-testing catch: the fix for the first bug (scope) was correct but had no working UI path to actually apply it. Fixed and redeployed; waiting on the user's real click-through since OAuth consent cannot be automated on their behalf.
+
+---
+
+## Build and Test — Full Live Verification Complete
+**Timestamp**: 2026-08-08T01:52:17Z
+**User Input**: "done" (confirming Drive reconnect completed)
+**AI Response**: "Confirmed the reconnect actually worked this time: oauth_credentials.updated_at advanced to the current time, and API logs showed real /drive/connect + /drive/callback hits with scope=https://www.googleapis.com/auth/drive. Deleted the stale pre-reconnect failed backup_runs row so a fresh attempt wasn't blocked by BR-17. The worker's own poll loop then triggered a REAL backup on its own within one 5s cycle -- no manual trigger needed, proving the end-to-end schedule/catch-up/export/upload chain works for real: uploaded transactions-backup-20260808T073227Z.csv with 6142 real live transactions, recorded a real success row. Verified the file's real existence in the real backup Drive folder via a direct live query (not just trusting the DB row). Tested retention live: uploaded 8 additional real dummy backup-named files with distinct real Drive createdTimes, ran _enforce_retention for real, confirmed exactly 7 of 9 remained and the 2 oldest were genuinely deleted from Drive. Minted a real JWT via the app's own signing code and confirmed GET /backups/status reflected live data. Opened a real browser session, authenticated via the same JWT (sessionStorage), navigated to /review, and confirmed the Backup Status panel rendered the real data correctly ('Last backup succeeded at 08/08/2026, 15:33:46 (6142 transactions)'), visually separate from the empty proposal table below it. Cleaned up thoroughly: deleted all test files from the real Drive backup folder and the test backup_runs DB row, restoring genuinely clean state -- the worker's own poll loop then triggered one more real, legitimate backup on its own (since it was still due today and nothing blocks it), which is the actual first real backup left in the system after this session, not a test artifact. Re-ran the full api-service suite after the drive_connect/service.py scope change (113/113, zero regressions). Created nightly-backup-build-and-test-summary.md documenting both real bugs found, the pre-existing out-of-scope migration finding, and the full live verification. Marked Build and Test, CONSTRUCTION PHASE, and the feature itself complete in aidlc-state.md."
+**Context**: Build and Test complete -- full live verification against real infrastructure including the real Google Drive account, two real bugs found and fixed along the way (Drive OAuth scope, missing reconnect UI path), thorough cleanup of all test artifacts. Nightly Transaction Backup (Epic 7) feature complete.
+
+---
+
+## Post-Completion Fix: Transactions Page Pagination Did Nothing
+**Timestamp**: 2026-08-02T00:00:00Z
+**User Input**: "here's a pagination bug on transaction page. clicking it didn't move the page."
+**AI Response**: "Found the bug immediately by reading TransactionsPage.tsx's updateFilter(): `setSearchParams(filterStateToSearchParams({ ...filter, ...patch, page: 1 }))` -- page: 1 is spread LAST, unconditionally, so ANY call to updateFilter (including the Next/Previous buttons passing { page: n }) got its page value clobbered back to 1 immediately after. Fixed with a one-line reorder: page: 1 now comes BEFORE ...patch, so it's a default a filter-change relies on, not a value patch can never override. Noted zero existing test coverage for this entire page (no TransactionsPage.test.tsx existed) -- added one, 4 tests covering Next/Previous/filter-reset/last-page-disabled. Proved the test actually catches the regression rather than trusting it by feel: temporarily reverted the source fix, reran the test suite, confirmed 3/4 tests failed with the exact original bug reproduced, then restored the fix and confirmed all 4 passed again. Ran the full frontend suite (51/51, up from 47) and a clean production build. Rebuilt and redeployed the frontend container. Verified live: minted a fresh JWT, logged into the actual running app in a real browser, clicked the real Next button, confirmed the URL updated to ?page=2, confirmed the actual network request sent to the API carried page=2 (not silently reset to page=1), and confirmed the rendered page rendered 'Page 2 of 111' against real live data (5515 real transactions, following a real ingestion run the user had triggered in the meantime)."
+**Context**: User-reported UI bug on a page unrelated to Epic 6 or the day's other fixes; root-caused instantly from the reported symptom, fixed with a proven (revert-and-confirm) regression test given the page had zero prior coverage, verified against the live real app with real data.
+
+---

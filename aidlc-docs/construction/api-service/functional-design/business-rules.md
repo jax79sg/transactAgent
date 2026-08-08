@@ -40,3 +40,6 @@ Approving or rejecting a proposal whose `status` is not `pending` MUST be reject
 
 ## AR-13: Approval Writes Through, Rejection Never Touches the Transaction (added 2026-08-02 — Epic 6)
 Approving a proposal MUST set the candidate transaction's `category_id` to the proposal's `proposed_category_id` and `category_source` to `similarity` (not `manual` — same reasoning as WR-5/AR-10: the change is applied algorithmically via a human's *review* action, not a direct edit to that specific transaction's fields). Rejecting a proposal MUST NOT modify the candidate transaction at all — only the proposal's own `status`/`resolved_at`. **Traces to**: FR-RR-7, FR-RR-8, US-6.4, US-6.5.
+
+## AR-14: No-Prior-Backup Is a Valid, Distinct Response (added 2026-08-08 — Epic 7)
+`GET /backups/status` MUST NOT error when no `BackupRun` row exists yet (e.g. immediately after this feature is first deployed, before the first scheduled attempt) — it returns a response with `outcome = null`, a third state the Frontend distinguishes from both `success` and `failed`. This endpoint performs a read-only query only; it never writes a `BackupRun` row itself (that remains exclusively the Ingestion Worker Service's responsibility, per `component-dependency.md`'s no-direct-call rule). **Traces to**: FR-10, FR-11.

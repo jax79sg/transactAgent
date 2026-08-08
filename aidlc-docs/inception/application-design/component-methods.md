@@ -37,6 +37,10 @@ High-level method signatures per component. Types are conceptual (language-agnos
 - `bulkApprove(proposalIds) -> {approved: [], failed: []}`
 - `bulkReject(proposalIds) -> {rejected: []}`
 
+### Backup Status Component
+*Addendum (2026-08-08, Nightly Transaction Backup feature)*
+- `getLatestBackupStatus() -> BackupStatus` (`lastRunAt`, `outcome`: `success`|`failed`, `failureCategory?`: `drive_connectivity`|`other`) — backs the Review page's Backup Status panel (US-7.4)
+
 ### Configuration Component
 - `listCategories() -> Category[]`
 - `addCategory(name) -> Category`
@@ -51,6 +55,17 @@ High-level method signatures per component. Types are conceptual (language-agnos
 - `ensureAuthenticated() -> Success | ReauthRequiredError`
 - `listFolderPdfFiles() -> DriveFileRef[]` (id, name, modifiedTime)
 - `downloadFile(driveFileRef) -> PdfBytes`
+- *Addendum (2026-08-08, Nightly Transaction Backup feature)*:
+  - `ensureBackupFolderExists(parentFolderId) -> FolderId` — idempotent; creates the `backup` subfolder under the dedicated backup Drive folder if it doesn't already exist
+  - `uploadFile(folderId, filename, bytes, mimeType) -> DriveFileRef`
+  - `listBackupFolderFiles(folderId) -> DriveFileRef[]` (id, name, createdTime) — used by retention (`enforceRetention`)
+  - `deleteFile(driveFileRef) -> Success`
+
+### Backup Manager Component
+*Addendum (2026-08-08, Nightly Transaction Backup feature)*
+- `isBackupDueNow() -> boolean` — true when today's backup hasn't run yet and either the scheduled time has passed, or this is startup catch-up (FR-8)
+- `runBackup() -> BackupRunResult` — exports all transactions to CSV, uploads via Drive Connector, calls `enforceRetention`, records a `backup_runs` row (outcome + failure category if applicable); does not retry within the same invocation beyond the Drive Connector's existing transient-error retries (FR-9: no next-day-early retry is a caller-level/scheduling concern, not this method's)
+- `enforceRetention(folderId) -> {deletedCount}` — keeps the 7 most recent backup files (by creation time), deletes the rest; only considers files matching this feature's own naming convention (NFR-4)
 
 ### Duplicate Detection Component
 - `computeFileHash(pdfBytes) -> Hash`

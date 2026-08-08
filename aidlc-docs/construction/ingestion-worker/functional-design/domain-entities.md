@@ -33,3 +33,5 @@ No new persisted entities — this unit reads/writes Unit 1's schema. These are 
 
 ## `RunProgressUpdate`
 - Internal shape the Orchestrator uses to update `IngestionRun` counters after each file — not a new entity, just a note that these are incremental updates (`files_processed_count += 1`, etc.), not a full row replace, so concurrent reads (Unit 2's status polling) always see monotonically-increasing progress.
+
+**Addendum (2026-08-08, Nightly Transaction Backup, Epic 7)**: No new internal DTO is introduced. The Backup Manager writes directly to Unit 1's `BackupRun` schema, matching this module's existing pattern of not modeling a separate transient shape for a simple repository write (same reasoning already used for `RecategorizationProposal`). The CSV export itself is a direct column-for-column dump of `Transaction` rows (WR-13) — not a transformed/derived shape worth naming as its own DTO.

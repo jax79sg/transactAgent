@@ -29,3 +29,18 @@ The retroactive re-scan (FR-5.4, WR-5) is broadened to search two candidate buck
 
 ## WR-10: Already-Categorized Matches Never Auto-Apply (added 2026-08-02 — Epic 6)
 A match against an already-categorized transaction (the bucket added by WR-9) is recorded as a `pending` proposal regardless of how high its similarity score is — the auto-apply threshold in WR-9 applies only to the `UNSURE` bucket. A candidate already assigned the exact category being proposed is skipped entirely (not proposed against itself, a no-op change). **Traces to**: FR-RR-4, US-6.3.
+
+## WR-11: Backup Due Determination (added 2026-08-08 — Epic 7)
+A backup attempt is due when both are true: (a) the current time is at or past today's configured nightly schedule time, and (b) no `BackupRun` row exists yet for today's calendar date. This single check, evaluated on every poll cycle, is both the normal nightly trigger and the FR-8 catch-up trigger — a worker that was offline at the scheduled time satisfies condition (a) as soon as it's back online, with no separate startup/catch-up code path needed. **Traces to**: FR-1, FR-2, FR-8.
+
+## WR-12: Every Attempt Records Exactly One Outcome (added 2026-08-08 — Epic 7)
+`runBackup()` MUST catch every exception internally and MUST always write exactly one `BackupRun` row (BR-17, Unit 1) before returning — no exception may propagate out uncaught. This is the actual enforcement mechanism for FR-9's no-same-night-retry rule: without a written row, WR-11's due-check would keep returning true on every subsequent poll cycle for the rest of the day, causing a silent retry storm. **Traces to**: FR-9.
+
+## WR-13: CSV Snapshot Content (added 2026-08-08 — Epic 7)
+Each backup attempt exports a full snapshot of every row currently in `transactions`, with all columns as stored (per FR-6's documented assumption: raw columns/foreign-key IDs, not human-readable joins) — never an incremental/delta export. **Traces to**: FR-1, FR-6.
+
+## WR-14: Backup Folder Resolution and Retention Scope (added 2026-08-08 — Epic 7)
+Backup uploads and retention operate exclusively within the `backup` subfolder of the dedicated backup Drive folder (a separate config value from the ingestion source folder, per FR-3/FR-4) — never the ingestion source folder itself. The subfolder is created if it doesn't already exist (idempotent check, every attempt). Retention (`enforceRetention`) only ever considers files whose name matches this feature's own naming convention (`transactions-backup-*.csv`) — a file that doesn't match is never a deletion candidate, even if it's the oldest file present (NFR-4). **Traces to**: FR-3, FR-4, FR-7, NFR-4.
+
+## WR-15: Failure Classification (added 2026-08-08 — Epic 7)
+A failed attempt's `failure_category` is `drive_connectivity` if the failure originated from `DriveNotConnectedError`, `DriveReauthRequiredError`, or a Drive-API `TransientError`/`HttpError` raised by any of `ensureBackupFolderExists`/`uploadFile`/`listBackupFolderFiles`/`deleteFile`; every other exception (e.g. a database error while querying transactions for the export) is classified `other`. **Traces to**: FR-10, FR-11.

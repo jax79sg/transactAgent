@@ -79,6 +79,19 @@ queued --> running --> completed
 - `pending` is the only status the Recategorization Review Component's list/count queries ever return (US-6.4/US-6.6) — `auto_applied`, `approved`, and `rejected` rows remain in the table as a historical record but never appear as an action item.
 - Rejection intentionally has no further state — there is no "permanently suppressed" status, per FR-RR-8's explicit no-memory decision (US-6.5). A future correction can generate a fresh `pending` proposal for the same candidate+category combination.
 
+## Lifecycle: BackupRun (added 2026-08-08 — Epic 7)
+
+Unlike `IngestionRun.status` and `RecategorizationJob.status` above, `BackupRun` has no `queued`/`running` interim state and no state machine to diagram:
+
+```
+(nothing) --> [backup attempt runs synchronously within one Ingestion Worker poll cycle] --> success | failed
+```
+
+- `IngestionRun`/`RecategorizationJob` need an interim status because they coordinate *across* services — the API Service inserts a `queued` row, and the Ingestion Worker Service claims and updates it asynchronously, from a separate process, at a separate time (`services.md`'s Cross-Service Coordination pattern).
+- A `BackupRun` attempt has no such handoff: it is entirely synchronous within a single Ingestion Worker poll cycle (Application Design `services.md` addendum — `poll_once()`'s third branch calls `Backup Manager.runBackup()` directly, to completion, before the cycle ends). Nothing else claims it mid-flight, so there is nothing for an interim status to represent.
+- The row is therefore written exactly once, already in its terminal state (`success` or `failed`, BR-17/BR-18), at the moment the attempt finishes — not created early and updated later.
+- `Backup Status Component.getLatestBackupStatus()` (API Service) simply reads the most recent `BackupRun` row by `backup_date` — there is never a "backup in progress" state for it to observe or display.
+
 ## Cross-Entity Rule: Statement Processing Idempotency
 
 Given the same PDF bytes (same `pdf_content_hash`), processing MUST be idempotent at the `BankStatement`/`Transaction` level: a second ingestion run encountering that hash creates an `IngestionRunFile` with `outcome = 'skipped_duplicate'` and inserts **zero** new `Transaction` rows (BR-3, FR-3.2). This is the schema-level guarantee that makes FR-1.4/US-1.4 safe to re-trigger repeatedly.

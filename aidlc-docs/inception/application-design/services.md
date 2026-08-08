@@ -10,6 +10,8 @@ Per Question 1 (separate services) and Question 2 (async background job), there 
 
 **Addendum (2026-08-02, Recategorization Review Panel feature)**: The new **Recategorization Review Component** is a second, independent orchestration point within API Service — it does not sit in the `correctCategory()` call chain above. Its approve/reject actions are synchronous, direct DB writes (analogous to `correctCategory()` itself), not routed through the job queue. Only *proposal generation* stays async, on the existing Worker-side path — the human review step is a separate, synchronous concern layered on top of that async output. See `recategorization-review-application-design-plan.md` for why this split was made rather than asked.
 
+**Addendum (2026-08-08, Nightly Transaction Backup feature)**: The new **Backup Status Component** is a third, independent, read-only orchestration point — a single-method component that only queries `backup_runs`. No write path exists in API Service for backups; all backup writes happen in the Ingestion Worker Service.
+
 ## Service: Ingestion Worker Service
 
 **Responsibility**: All heavy/slow/external-integration work: Drive access, OCR, LLM-assisted extraction, categorization, FX conversion, and persisting the results. Runs asynchronously relative to any user-facing request (Question 2 = A).
@@ -32,6 +34,18 @@ Drive Connector.downloadFile
 ```
 
 For a retroactive re-categorization job (triggered by the API Service after a manual correction), the Orchestrator instead calls `Categorization Engine.recategorizeUnsureFromPrecedent()` directly (no Drive/Extraction steps involved). **Addendum (2026-08-02)**: this method now writes some results directly (high-confidence `UNSURE` matches, US-6.2) and others as pending proposal rows instead (US-6.3) — see `component-methods.md` for the exact split. The job's external shape (queued row in → processed row out) is unchanged.
+
+**Addendum (2026-08-08, Nightly Transaction Backup feature)**: `poll_once()` gains a third, lowest-priority branch:
+
+```
+poll_once():
+  if a queued IngestionRun exists: claim + process it via the Orchestrator; return
+  elif a queued RecategorizationJob exists: claim + process it via the Orchestrator; return
+  elif Backup Manager.isBackupDueNow(): Backup Manager.runBackup(); return
+  else: nothing to do this cycle
+```
+
+At most one of {run, job, backup} is ever processed per poll cycle — the existing "one thing at a time" invariant (WR-8/NFR-1) is preserved by simply extending its existing if/elif chain, not by adding new locking. The Backup Manager never runs concurrently with an active run or job, and is only ever checked when the worker would otherwise have been idle that cycle.
 
 ## Cross-Service Coordination: The Run/Job Queue
 

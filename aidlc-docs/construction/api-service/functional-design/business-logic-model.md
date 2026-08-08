@@ -45,6 +45,12 @@ Technology-agnostic business logic for each of Unit 2's 5 components. Builds on 
 - **Reject** (US-6.5, AR-11/AR-12/AR-13): find the proposal by id (404 if missing); reject (409) if not `pending`; otherwise set `status='rejected'`/`resolved_at=now()` only — the candidate transaction is never touched, and no suppression record is kept (FR-RR-8 — the same category may be proposed again later).
 - **Bulk approve/reject** (US-6.4): applies the single-item logic per id in the request; a per-item 404/409 is collected into the response's `failedIds` rather than aborting the batch (AR-11/AR-12) — one bad id in a 20-item selection shouldn't block the other 19 from going through.
 
+## Backup Status Component: Status Read Logic (added 2026-08-08 — Epic 7)
+
+- **Get latest status** (US-7.4): a single query for the `BackupRun` row with the most recent `backup_date`, mapped to `BackupStatusResponse`. Deliberately "dumb," same reasoning as Ingestion Trigger & Status and Recategorization Review above — this component never talks to Unit 3 directly, it only reads what Unit 3's Backup Manager already wrote.
+- **No-prior-backup case** (AR-14): if no `BackupRun` row exists at all, return `BackupStatusResponse` with every field `null` rather than a `404` — an empty result is a normal, expected state for a feature that hasn't reached its first scheduled run yet, not an error condition.
+- **No write path**: unlike every other component in this service, Backup Status has no create/update/delete logic at all — `BackupRun` rows are written exclusively by the Ingestion Worker Service (component-dependency.md).
+
 ## Configuration Component: Category CRUD Logic
 
 - **List** (US-5.2): returns all categories, `active` and inactive, with the `active` flag so the UI can visually distinguish and optionally hide inactive ones from selection dropdowns while still showing them in a "manage categories" admin view.

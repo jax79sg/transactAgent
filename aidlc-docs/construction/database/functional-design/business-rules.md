@@ -53,3 +53,9 @@ A `RecategorizationProposal.candidate_transaction_id` MUST NOT equal `Recategori
 
 ## BR-16: Proposals Are Resolved Exactly Once (added 2026-08-02 — Epic 6)
 A `RecategorizationProposal` may only transition out of `pending` once (to `approved` or `rejected` by a user action, or to `auto_applied` at creation time — never both created-as-pending-then-auto-applied). Approving or rejecting a proposal that is not currently `pending` MUST be rejected as an error, not silently accepted. **Traces to**: FR-RR-7, FR-RR-8, US-6.4 edge case (prevents double-processing under concurrent bulk actions).
+
+## BR-17: One Backup Attempt Per Calendar Day (added 2026-08-08 — Epic 7)
+`BackupRun.backup_date` MUST be unique across all rows — at most one attempt (success or failure) per calendar day. This single constraint backs both "don't run a duplicate backup the same day" (US-7.1 edge case) and "don't auto-retry a failed backup the same night" (FR-9, US-7.4 edge case): once a row exists for a given date, no further attempt is made until the next calendar day. **Traces to**: FR-1, FR-9.
+
+## BR-18: Failure Category Requires Failed Outcome (added 2026-08-08 — Epic 7)
+`BackupRun.failure_category` MUST be null when `outcome = 'success'`, and MUST be one of `drive_connectivity` | `other` when `outcome = 'failed'`. This is the data-layer signal the Backup Status Component relies on to choose which message to show (reconnect-Drive prompt vs. generic failure indicator). **Traces to**: FR-10, FR-11.

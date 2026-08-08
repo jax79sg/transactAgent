@@ -14,7 +14,8 @@ Implemented in [`database/src/transactagent_db/models.py`](../../../../database/
 | `RecategorizationJob` | `recategorization_jobs` | references the manually-corrected source transaction |
 | `OAuthCredential` | `oauth_credentials` | unique `provider`; added 2026-08-01 via migration 0002, retroactively during Unit 3 NFR Requirements (see audit.md) |
 | `RecategorizationProposal` | `recategorization_proposals` | added 2026-08-02 via migration 0004 (Epic 6, Recategorization Review Panel); BR-14 (one pending proposal per candidate+job) enforced via raw-SQL partial unique index, same pattern as `IngestionRun`'s BR-10 |
+| `BackupRun` | `backup_runs` | added 2026-08-08 via migration 0006 (Epic 7, Nightly Transaction Backup); BR-17 (one attempt per calendar day) enforced via a standard unique constraint on `backup_date`; BR-18 (failure_category consistency) enforced via a standing CHECK constraint. Standalone entity, no relationship edges to other tables — write-once, no `queued`/`running` interim status (see `business-logic-model.md`) |
 
-All enums (`CategorySource`, `IngestionRunStatus`, `IngestionRunFileOutcome`, `RecategorizationJobStatus`, `RecategorizationProposalSourceBucket`, `RecategorizationProposalStatus`) are defined as Python `str, enum.Enum` classes and mapped natively by SQLAlchemy 2.0's declarative type system.
+All enums (`CategorySource`, `IngestionRunStatus`, `IngestionRunFileOutcome`, `RecategorizationJobStatus`, `RecategorizationProposalSourceBucket`, `RecategorizationProposalStatus`, `BackupRunOutcome`, `BackupRunFailureCategory`) are defined as Python `str, enum.Enum` classes and mapped natively by SQLAlchemy 2.0's declarative type system.
 
 Business rules not expressible as standing SQL constraints (BR-5's "exactly one reserved row", BR-6's "inactive categories not selectable going forward", BR-11, BR-12) are documented in the model docstrings/comments as application-layer responsibilities for Units 2 and 3.

@@ -12,6 +12,7 @@ Architectural style: **Separate services** (Question 1 = B) — an **API Service
 - **Interfaces**: Consumes the API Service's REST API (Question 4 = A) exclusively — never talks to the Ingestion Worker or database directly.
 - **Stories covered**: All 24 (as the presentation layer for every capability).
 - **Addendum (2026-08-02, Recategorization Review Panel feature)**: Adds a Review page (US-6.4) and a pending-proposal-count nav badge (US-6.6), consuming the new Recategorization Review Component's endpoints. Follows this component's existing convention of one Frontend SPA component covering every page, not a component per page.
+- **Addendum (2026-08-08, Nightly Transaction Backup feature)**: Adds a "Backup Status" panel to the Review page (US-7.4), visually separate from the existing ProposalTable, consuming the new Backup Status Component's endpoint. Same convention — one Frontend SPA component, no new component for the panel.
 
 ---
 
@@ -45,6 +46,13 @@ Architectural style: **Separate services** (Question 1 = B) — an **API Service
 - **Interfaces**: New REST endpoints, consumed by the Frontend SPA's new Review page. Depends only on the Shared Data Store (reads/writes proposal rows and, on approval, the `transactions` table) — never calls the Ingestion Worker Service directly, matching this project's one hard architectural rule.
 - **Stories covered**: US-6.4, US-6.5, US-6.6
 
+### Backup Status Component
+- **Addendum (2026-08-08, Nightly Transaction Backup feature — see `nightly-backup-application-design-plan.md`)**
+- **Purpose**: Exposes the Ingestion Worker Service's nightly backup history/status to the Frontend, read-only.
+- **Responsibilities**: Report the outcome of the most recent backup attempt (success, or failure with a failure category — `drive_connectivity` vs `other`) so the Review page's Backup Status panel can render the right message.
+- **Interfaces**: New REST endpoint(s), consumed by the Frontend SPA's Backup Status panel. Depends only on the Shared Data Store (reads the new `backup_runs` table) — never calls the Ingestion Worker Service directly, matching this project's one hard architectural rule (same as the Recategorization Review Component).
+- **Stories covered**: US-7.4
+
 ### Configuration Component
 - **Purpose**: Manage user-editable configuration that isn't a secret.
 - **Responsibilities**: List/add/rename/remove categories in the whitelist; validate that a category removal doesn't orphan existing transactions (block or require reassignment first).
@@ -60,6 +68,13 @@ Architectural style: **Separate services** (Question 1 = B) — an **API Service
 - **Purpose**: All interaction with Google Drive.
 - **Responsibilities**: Perform/refresh OAuth authentication; list PDF files in the configured folder; download file bytes for processing.
 - **Stories covered**: US-1.1, part of US-1.2
+- **Addendum (2026-08-08, Nightly Transaction Backup feature)**: Adds write-side operations against the separate, dedicated backup Drive folder (distinct from the ingestion source folder): ensure the `backup` subfolder exists (creating it if needed), upload a file, list files in that subfolder, and delete a file. Reuses the same shared OAuth credential and the existing retry/transient-error pattern already used for list/download. Still "all interaction with Google Drive" — no new component needed.
+
+### Backup Manager Component
+- **Addendum (2026-08-08, Nightly Transaction Backup feature — see `nightly-backup-application-design-plan.md`)**
+- **Purpose**: Owns the nightly transaction backup capability — a time-triggered concern, distinct from the queue-triggered Ingestion Orchestrator.
+- **Responsibilities**: Detect when a backup is due (scheduled time reached, or a missed backup needs to catch up per FR-8); export a full snapshot of all transactions to CSV; upload it via the Drive Connector Component to the dedicated backup folder's `backup` subfolder; enforce retention (keep the 7 most recent, delete older, scoped only to this feature's own files); record the outcome (success, or failure with a failure category) for the Backup Status Component to read.
+- **Stories covered**: US-7.1, US-7.2, US-7.3, US-7.4 (status-recording side)
 
 ### Duplicate Detection Component
 - **Purpose**: Prevent reprocessing of already-imported statements.
@@ -95,3 +110,4 @@ Architectural style: **Separate services** (Question 1 = B) — an **API Service
 - Owns: users/credentials, transactions, processed-statements, category whitelist, ingestion runs (job/status/history), FX-rate cache.
 - Both the API Service and the Ingestion Worker Service connect to it directly with their own data-access code — they are **not** coupled via a shared in-process library (they're separate deployables per Question 1 = B), only via the shared schema (a data contract, documented in `component-dependency.md`).
 - **Addendum (2026-08-02, Recategorization Review Panel feature)**: Adds a recategorization-proposal record, child of the existing `recategorization_jobs` row — written by the Ingestion Worker's Categorization Engine, read/updated by the API Service's new Recategorization Review Component. Exact table shape is a Functional Design (Database unit) decision.
+- **Addendum (2026-08-08, Nightly Transaction Backup feature)**: Adds a `backup_runs` tracking table — written by the Ingestion Worker's new Backup Manager Component, read by the API Service's new Backup Status Component. Exact table shape is a Functional Design (Database unit) decision.

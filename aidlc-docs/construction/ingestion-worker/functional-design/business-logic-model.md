@@ -31,6 +31,12 @@ poll ingestion_runs for status='queued' (every 5s, Question 6 = A)
 - **Authenticate**: on first use, complete interactive OAuth (Question 2=A from Requirements Analysis); store refresh token securely (encrypted at rest is out of scope per opted-out Security extension, but the token itself is treated as a secret per NFR-4.1 and never logged).
 - **Reauth handling**: if a Drive API call fails with an auth error, mark the run `failed` (run-level, not per-file) with a reason indicating reconnection is needed (US-1.1 edge case) — this is a run-level failure since no files can be processed at all, distinct from a per-file `failed` outcome.
 - **List/download**: list PDF files in the configured folder only (FR-1.3); download raw bytes per file.
+- **Addendum (2026-08-08, Nightly Transaction Backup, Epic 7)**: 4 new methods, all scoped to the separate, dedicated backup Drive folder (never the ingestion source folder):
+  - `ensureBackupFolderExists(parentFolderId)`: query Drive for a child folder named `backup` under `parentFolderId`; create it if not found; return its folder ID. Idempotent — safe to call on every backup attempt.
+  - `uploadFile(folderId, filename, bytes, mimeType)`: standard Drive file create/upload call, same OAuth credential and retry/transient-error handling as the existing list/download methods.
+  - `listBackupFolderFiles(folderId)`: same pagination pattern as `listFolderPdfFiles`, but queries `folderId` (the `backup` subfolder) with no MIME-type filter (backup files are CSV, not PDF) and returns `createdTime` in addition to id/name, for retention's most-recent-7 sort.
+  - `deleteFile(driveFileRef)`: standard Drive file delete call.
+  - Reauth handling is identical to the existing pattern: a Drive-API auth failure on any of these 4 methods is classified `drive_connectivity` by the Backup Manager (WR-15), not treated as a run-level ingestion failure — backups and ingestion runs are entirely independent attempts.
 
 ## Statement Extraction Component
 
@@ -63,3 +69,42 @@ poll ingestion_runs for status='queued' (every 5s, Question 6 = A)
 ## Duplicate Detection Component
 
 - Unchanged from Application Design: hash raw PDF bytes, check against `bank_statements.pdf_content_hash`, record on success.
+
+## Backup Manager Component (added 2026-08-08 — Nightly Transaction Backup, Epic 7)
+
+Checked as the third, lowest-priority branch of `poll_once()` (`services.md` addendum) — only when no ingestion run or recategorization job was found that cycle:
+
+```
+isBackupDueNow():
+  today = current server/container date
+  return (current time >= configured schedule time)
+     AND (no BackupRun row exists where backup_date = today)   [WR-11]
+
+runBackup():                                                    [WR-12: must never raise]
+  backup_date = today
+  started_at = now
+  try:
+    transactions = query all Transaction rows                  [WR-13, full snapshot]
+    csv_bytes = build CSV (all columns, header row)
+    folder_id = Drive Connector.ensureBackupFolderExists(dedicated_backup_folder_id)
+    filename = f"transactions-backup-{timestamp}.csv"
+    Drive Connector.uploadFile(folder_id, filename, csv_bytes, "text/csv")
+    enforceRetention(folder_id)
+    write BackupRun(backup_date, started_at, completed_at=now,
+                     outcome=success, transaction_count=len(transactions),
+                     backup_filename=filename)
+  except (DriveNotConnectedError, DriveReauthRequiredError, TransientError, HttpError) as e:
+    write BackupRun(backup_date, started_at, completed_at=now,
+                     outcome=failed, failure_category=drive_connectivity)   [WR-15]
+  except Exception:
+    write BackupRun(backup_date, started_at, completed_at=now,
+                     outcome=failed, failure_category=other)                [WR-15]
+
+enforceRetention(folder_id):                                     [WR-14, US-7.2]
+  files = Drive Connector.listBackupFolderFiles(folder_id)
+  candidates = files matching this feature's naming convention (transactions-backup-*.csv)
+  sort candidates by createdTime descending
+  for each file beyond the 7 most recent: Drive Connector.deleteFile(file)
+```
+
+Note that `enforceRetention` only runs after a successful upload — a failed attempt (e.g. Drive not connected before any file could be listed) leaves the existing backup set untouched, since there's nothing new to make room for.

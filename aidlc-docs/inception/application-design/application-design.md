@@ -14,8 +14,8 @@ This document consolidates `components.md`, `component-methods.md`, `services.md
 ## Services
 
 1. **Frontend SPA** — the only UI surface; talks to API Service only
-2. **API Service** — Auth, Transaction Management, Dashboard/Insights, Ingestion Trigger & Status, Configuration, **Recategorization Review** *(added 2026-08-02)*
-3. **Ingestion Worker Service** — Ingestion Orchestrator, Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine, Currency Conversion
+2. **API Service** — Auth, Transaction Management, Dashboard/Insights, Ingestion Trigger & Status, Configuration, **Recategorization Review** *(added 2026-08-02)*, **Backup Status** *(added 2026-08-08)*
+3. **Ingestion Worker Service** — Ingestion Orchestrator, Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine, Currency Conversion, **Backup Manager** *(added 2026-08-08)*
 4. **Shared Database** — the only integration point between API Service and Worker Service (data contract, not code contract)
 
 ## Key Design Consequence Flagged During Design
@@ -23,6 +23,8 @@ This document consolidates `components.md`, `component-methods.md`, `services.md
 Manual category correction (US-3.4) is handled entirely in the API Service, but the retroactive re-categorization of existing `UNSURE` transactions (FR-5.4) requires the Categorization Engine, which lives in the Worker Service. This is implemented as another async job (consistent with the ingestion-run pattern), not a direct synchronous call — keeping the two services fully decoupled. This means a manual correction's ripple effect on other `UNSURE` transactions completes shortly after the correction, not instantaneously — acceptable per the approved acceptance criteria, which do not require synchronous completion.
 
 **Addendum (2026-08-02, Recategorization Review Panel — Epic 6)**: That same async job (FR-5.4) is now broadened to search already-categorized transactions too, and split by confidence: very-high-confidence `UNSURE` matches still auto-apply as before; everything else — lower-confidence `UNSURE` matches, and *every* match against an already-categorized transaction regardless of score — now creates a pending proposal instead of writing to `transactions`. Reviewing those proposals (approve/reject, individually or in bulk) is a **new, separate, synchronous** path in a new API Service component (Recategorization Review), analogous to `correctCategory()` itself rather than routed through the async job queue — a human clicking "approve" is a request/response action, not background work. See `recategorization-review-application-design-plan.md` for the full reasoning behind each of these calls.
+
+**Addendum (2026-08-08, Nightly Transaction Backup — Epic 7)**: A new, third kind of background work — time-triggered rather than queue-triggered — is added to the Worker Service's `poll_once()` loop as a lowest-priority branch (checked only when no run/job was found that cycle), owned by the new **Backup Manager** component. It reuses the existing Drive Connector for all Google Drive I/O (extended with write/delete methods against a separate, dedicated backup Drive folder — distinct from the ingestion source folder, per the user's explicit single-point-of-failure concern) and writes status to a new `backup_runs` table. The API Service's new **Backup Status** component reads that table read-only, exposing it to the Frontend's new Review-page panel — holding the same "no direct service-to-service call" rule as Recategorization Review. See `nightly-backup-application-design-plan.md` for the full reasoning.
 
 ## Story Traceability Validation (Step 10)
 
@@ -69,3 +71,14 @@ All 24 approved stories map to at least one component:
 | US-6.6 | Recategorization Review, Frontend SPA (nav badge) |
 
 **Result (Epic 6)**: Complete — no gaps, no new speculative components. All 6 stories map to either the extended Categorization Engine or the new Recategorization Review component.
+
+### Addendum (2026-08-08): Epic 7 — Nightly Transaction Backup
+
+| Story | Component(s) |
+|---|---|
+| US-7.1 | Backup Manager, Drive Connector (extended) |
+| US-7.2 | Backup Manager |
+| US-7.3 | Backup Manager |
+| US-7.4 | Backup Manager (status recording), Backup Status, Frontend SPA (Review page panel) |
+
+**Result (Epic 7)**: Complete — no gaps, no new speculative components. All 4 stories map to either the extended Drive Connector or the new Backup Manager / Backup Status components.
