@@ -4,13 +4,16 @@ PBT is not applied to this unit (see database-code-generation-plan.md — no pur
 transformation functions exist here; this unit is declarative schema/constraints only).
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 from transactagent_db.models import (
+    BackupRun,
+    BackupRunFailureCategory,
+    BackupRunOutcome,
     BankStatement,
     Category,
     CategorySource,
@@ -203,6 +206,43 @@ class TestFailedFileRequiresReason:
         db_session.flush()  # should not raise
 
 
+class TestIngestionRunCancellation:
+    """User-initiated cancellation (2026-08-05): cancel_requested_at is written only
+    by the API, status=CANCELLED only by the worker -- see aidlc-docs/audit.md."""
+
+    def test_cancel_requested_at_defaults_to_null(self, db_session):
+        from transactagent_db.models import IngestionRun, IngestionRunStatus, User
+
+        user = User(username="account_owner", password_hash="hashed")
+        db_session.add(user)
+        db_session.flush()
+        run = IngestionRun(triggered_by_user_id=user.id, status=IngestionRunStatus.RUNNING)
+        db_session.add(run)
+        db_session.flush()
+
+        assert run.cancel_requested_at is None
+
+    def test_cancelled_run_with_requested_at_is_valid(self, db_session):
+        from datetime import datetime, timezone
+
+        from transactagent_db.models import IngestionRun, IngestionRunStatus, User
+
+        user = User(username="account_owner", password_hash="hashed")
+        db_session.add(user)
+        db_session.flush()
+        requested_at = datetime.now(timezone.utc)
+        run = IngestionRun(
+            triggered_by_user_id=user.id,
+            status=IngestionRunStatus.CANCELLED,
+            cancel_requested_at=requested_at,
+            completed_at=requested_at,
+        )
+        db_session.add(run)
+        db_session.flush()  # should not raise
+
+        assert run.status == IngestionRunStatus.CANCELLED
+
+
 class TestIngestionRunLog:
     """Live worker-log-tail feature: log lines belong to a run and get a
     monotonically-increasing id usable as a polling cursor."""
@@ -346,4 +386,119 @@ class TestRecategorizationProposal:
             status=RecategorizationProposalStatus.AUTO_APPLIED,
         )
         db_session.add(proposal)
+        db_session.flush()  # should not raise
+
+
+class TestBackupRun:
+    """Epic 7 (Nightly Transaction Backup).
+
+    BR-17 (one attempt per calendar day) and BR-18 (failure_category consistency)
+    are both standing constraints (a standard unique constraint and a CHECK
+    constraint respectively) created by Base.metadata.create_all() directly, unlike
+    BR-10/BR-14's raw-SQL partial indexes -- so both are fully testable at this
+    layer, no integration-level gap.
+    """
+
+    def _now(self):
+        return datetime.now(timezone.utc)
+
+    def test_successful_backup_run_is_valid(self, db_session):
+        run = BackupRun(
+            backup_date=date(2026, 8, 8),
+            started_at=self._now(),
+            completed_at=self._now(),
+            outcome=BackupRunOutcome.SUCCESS,
+            failure_category=None,
+            transaction_count=2174,
+            backup_filename="transactions-backup-20260808T020000Z.csv",
+        )
+        db_session.add(run)
+        db_session.flush()  # should not raise
+
+        assert run.outcome == BackupRunOutcome.SUCCESS
+        assert run.failure_category is None
+
+    def test_failed_backup_run_is_valid_with_failure_category(self, db_session):
+        run = BackupRun(
+            backup_date=date(2026, 8, 8),
+            started_at=self._now(),
+            completed_at=self._now(),
+            outcome=BackupRunOutcome.FAILED,
+            failure_category=BackupRunFailureCategory.DRIVE_CONNECTIVITY,
+        )
+        db_session.add(run)
+        db_session.flush()  # should not raise
+
+    def test_failed_backup_run_without_failure_category_is_rejected(self, db_session):
+        """BR-18: outcome='failed' requires a non-null failure_category."""
+        run = BackupRun(
+            backup_date=date(2026, 8, 8),
+            started_at=self._now(),
+            completed_at=self._now(),
+            outcome=BackupRunOutcome.FAILED,
+            failure_category=None,
+        )
+        db_session.add(run)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_successful_backup_run_with_failure_category_is_rejected(self, db_session):
+        """BR-18: outcome='success' requires a null failure_category."""
+        run = BackupRun(
+            backup_date=date(2026, 8, 8),
+            started_at=self._now(),
+            completed_at=self._now(),
+            outcome=BackupRunOutcome.SUCCESS,
+            failure_category=BackupRunFailureCategory.OTHER,
+        )
+        db_session.add(run)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_duplicate_backup_date_is_rejected(self, db_session):
+        """BR-17: at most one BackupRun row per calendar backup_date."""
+        db_session.add(
+            BackupRun(
+                backup_date=date(2026, 8, 8),
+                started_at=self._now(),
+                completed_at=self._now(),
+                outcome=BackupRunOutcome.SUCCESS,
+                transaction_count=100,
+                backup_filename="transactions-backup-20260808T020000Z.csv",
+            )
+        )
+        db_session.flush()
+
+        duplicate = BackupRun(
+            backup_date=date(2026, 8, 8),
+            started_at=self._now(),
+            completed_at=self._now(),
+            outcome=BackupRunOutcome.FAILED,
+            failure_category=BackupRunFailureCategory.OTHER,
+        )
+        db_session.add(duplicate)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_different_backup_dates_are_both_valid(self, db_session):
+        db_session.add(
+            BackupRun(
+                backup_date=date(2026, 8, 7),
+                started_at=self._now(),
+                completed_at=self._now(),
+                outcome=BackupRunOutcome.SUCCESS,
+                transaction_count=99,
+                backup_filename="transactions-backup-20260807T020000Z.csv",
+            )
+        )
+        db_session.add(
+            BackupRun(
+                backup_date=date(2026, 8, 8),
+                started_at=self._now(),
+                completed_at=self._now(),
+                outcome=BackupRunOutcome.SUCCESS,
+                transaction_count=100,
+                backup_filename="transactions-backup-20260808T020000Z.csv",
+            )
+        )
         db_session.flush()  # should not raise

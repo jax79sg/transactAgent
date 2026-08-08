@@ -66,6 +66,7 @@ class IngestionRunStatus(str, enum.Enum):
     COMPLETED = "completed"
     COMPLETED_WITH_FAILURES = "completed_with_failures"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class IngestionRunFileOutcome(str, enum.Enum):
@@ -94,6 +95,21 @@ class RecategorizationProposalStatus(str, enum.Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     AUTO_APPLIED = "auto_applied"
+
+
+class BackupRunOutcome(str, enum.Enum):
+    """Epic 7 (Nightly Transaction Backup)."""
+
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class BackupRunFailureCategory(str, enum.Enum):
+    """Epic 7 — which message the Backup Status Component shows (FR-10/FR-11):
+    a reconnect-Drive prompt for DRIVE_CONNECTIVITY, a generic indicator for OTHER."""
+
+    DRIVE_CONNECTIVITY = "drive_connectivity"
+    OTHER = "other"
 
 
 class User(Base):
@@ -240,6 +256,11 @@ class IngestionRun(Base):
     files_processed_count: Mapped[int] = mapped_column(default=0, nullable=False)
     files_skipped_count: Mapped[int] = mapped_column(default=0, nullable=False)
     files_failed_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    # Set only by the API (user clicked Cancel); read only by the worker, which is
+    # the sole writer of `status` -- this split avoids a write race between the two
+    # separate processes that both touch this row while a run is active. The worker
+    # checks it between files (never mid-file) and transitions to CANCELLED itself.
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     triggered_by: Mapped["User"] = relationship(back_populates="ingestion_runs")
     files: Mapped[list["IngestionRunFile"]] = relationship(back_populates="ingestion_run")
@@ -358,6 +379,43 @@ class RecategorizationProposal(Base):
     recategorization_job: Mapped["RecategorizationJob"] = relationship(back_populates="proposals")
     candidate_transaction: Mapped["Transaction"] = relationship(back_populates="recategorization_proposals")
     proposed_category: Mapped["Category"] = relationship(back_populates="proposed_in_recategorization_proposals")
+
+
+class BackupRun(Base):
+    """Epic 7 (Nightly Transaction Backup, added 2026-08-08) — one row per nightly
+    backup attempt, written once by the Ingestion Worker's Backup Manager at
+    completion, already in its terminal state. Unlike `IngestionRun`/
+    `RecategorizationJob`, there is no `queued`/`running` interim status: a backup
+    attempt is entirely synchronous within a single Ingestion Worker poll cycle
+    (Application Design `services.md` addendum), not a cross-service handoff. See
+    aidlc-docs/construction/database/functional-design/ for full design history.
+
+    BR-17 (one attempt per calendar day) is enforced by a standard unique constraint
+    on `backup_date` — unlike BR-10/BR-14, this doesn't need a partial index since
+    the rule applies unconditionally to every row, not just rows in a particular
+    status.
+    """
+
+    __tablename__ = "backup_runs"
+    __table_args__ = (
+        UniqueConstraint("backup_date", name="uq_backup_runs_backup_date"),  # BR-17
+        CheckConstraint(
+            "(outcome = 'success' AND failure_category IS NULL) OR "
+            "(outcome = 'failed' AND failure_category IS NOT NULL)",
+            name="ck_backup_runs_failure_category_consistency",
+        ),  # BR-18
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    backup_date: Mapped[date] = mapped_column(Date, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    outcome: Mapped[BackupRunOutcome] = mapped_column(_enum_type(BackupRunOutcome), nullable=False)
+    failure_category: Mapped[BackupRunFailureCategory | None] = mapped_column(
+        _enum_type(BackupRunFailureCategory), nullable=True
+    )
+    transaction_count: Mapped[int | None] = mapped_column(nullable=True)
+    backup_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class OAuthCredential(Base):
