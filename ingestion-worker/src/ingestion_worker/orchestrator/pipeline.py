@@ -9,7 +9,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from ingestion_worker.categorization import repository as categorization_repository
-from ingestion_worker.categorization.service import categorize, recategorize_unsure_from_precedent
+from ingestion_worker.categorization.service import UNSURE_NAME, categorize, classify_batch, recategorize_unsure_from_precedent
 from ingestion_worker.clients import drive_client
 from ingestion_worker.clients.drive_client import DriveNotConnectedError, DriveReauthRequiredError
 from ingestion_worker.clients.retry import TransientError
@@ -18,6 +18,7 @@ from ingestion_worker.duplicate_detection import service as duplicate_detection
 from ingestion_worker.extraction.service import ExtractionFailure, extract_statement
 from ingestion_worker.logging_capture import set_current_run
 from ingestion_worker.orchestrator import repository as orchestrator_repository
+from ingestion_worker.recurring_payments import service as recurring_payments_service
 from transactagent_db.models import IngestionRunFileOutcome, Transaction
 
 logger = logging.getLogger(__name__)
@@ -120,8 +121,15 @@ def _process_one_file(db: Session, run, file_ref) -> None:
         db, drive_file_id=file_ref.id, pdf_content_hash=content_hash, bank_name=result.bank_name
     )
 
+    # WR-27 (Matching Precision Refinement): every transaction gets classified by
+    # the LLM, always -- one upfront, concurrent batch call per file, before the
+    # per-transaction persistence loop, rather than a per-transaction last resort.
+    llm_category_by_description = classify_batch(db, [raw_txn.description for raw_txn in result.transactions])
+
     for raw_txn in result.transactions:
-        _persist_transaction(db, statement, result.currency, raw_txn)
+        _persist_transaction(
+            db, statement, result.currency, raw_txn, llm_category_by_description.get(raw_txn.description, UNSURE_NAME)
+        )
 
     logger.info("%s: done", file_ref.name)
     orchestrator_repository.record_run_file(
@@ -133,11 +141,16 @@ def _process_one_file(db: Session, run, file_ref) -> None:
     orchestrator_repository.update_run_progress(db, run, processed_delta=1)
 
 
-def _persist_transaction(db: Session, statement, currency: str, raw_txn) -> Transaction:
-    categorization = categorize(db, raw_txn.description, raw_txn.amount)
+def _persist_transaction(db: Session, statement, currency: str, raw_txn, llm_category: str) -> Transaction:
+    categorization = categorize(db, raw_txn.description, raw_txn.amount, llm_category)
     category = categorization_repository.find_category_by_name(db, categorization.category_name)
     # find_category_by_name always resolves here: categorize() only ever returns a
     # whitelist name or "UNSURE", both of which are guaranteed to exist as Category rows.
+    llm_suggested_category = (
+        categorization_repository.find_category_by_name(db, categorization.llm_suggested_category_name)
+        if categorization.llm_suggested_category_name
+        else None
+    )  # BR-26: null when the LLM abstained or its endpoint was unreachable
 
     conversion = resolve_converted_amount(
         db,
@@ -157,6 +170,7 @@ def _persist_transaction(db: Session, statement, currency: str, raw_txn) -> Tran
         bank_name=statement.bank_name,
         category_id=category.id,
         category_source=categorization.source,
+        llm_suggested_category_id=llm_suggested_category.id if llm_suggested_category else None,
         converted_amount_sgd=conversion.converted_amount_sgd,
         conversion_is_approximate=conversion.is_approximate,
         conversion_unavailable=conversion.is_unavailable,
@@ -164,6 +178,29 @@ def _persist_transaction(db: Session, statement, currency: str, raw_txn) -> Tran
     )
     db.add(transaction)
     db.flush()
+
+    # WR-28 (Matching Precision Refinement): a genuine disagreement needs the new
+    # transaction's real id, which only exists after the flush above -- record it
+    # here, not inside categorize() itself (domain-entities.md's DisagreementInfo).
+    if categorization.disagreement is not None:
+        similarity_category = categorization_repository.find_category_by_name(
+            db, categorization.disagreement.similarity_category_name
+        )
+        llm_disagreement_category = categorization_repository.find_category_by_name(
+            db, categorization.disagreement.llm_category_name
+        )
+        categorization_repository.record_disagreement(
+            db,
+            transaction_id=transaction.id,
+            similarity_category_id=similarity_category.id,
+            llm_category_id=llm_disagreement_category.id,
+            similarity_score=categorization.disagreement.similarity_score,
+        )
+
+    # WR-16 (Epic 8): matching runs the instant a transaction exists, not on a
+    # separate pass -- this is exactly that moment.
+    recurring_payments_service.match_new_transaction(db, transaction)
+
     return transaction
 
 

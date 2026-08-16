@@ -12,6 +12,8 @@ os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_SECRET", "test-client-secret")
+os.environ.setdefault("GOOGLE_DRIVE_FOLDER_ID", "test-drive-folder-id")
+os.environ.setdefault("GOOGLE_DRIVE_BACKUP_FOLDER_ID", "test-drive-backup-folder-id")
 
 import pytest
 from sqlalchemy import create_engine

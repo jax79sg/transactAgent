@@ -18,7 +18,12 @@ import httpx
 import pytest
 from openai import APIConnectionError, APITimeoutError
 
-from ingestion_worker.clients.openrouter_client import _REQUEST_TIMEOUT_SECONDS, _client, classify_description
+from ingestion_worker.clients.openrouter_client import (
+    _REQUEST_TIMEOUT_SECONDS,
+    _client,
+    classify_description,
+    classify_descriptions_batch,
+)
 from ingestion_worker.clients.retry import TransientError
 
 
@@ -70,3 +75,43 @@ class TestExceptionMapping:
         # after a single attempt.
         error = APITimeoutError(request=self._fake_request())
         assert not isinstance(error, (TimeoutError, ConnectionError))
+
+
+class TestClassifyDescriptionsBatch:
+    """WR-27 (Matching Precision Refinement, revised 2026-08-16): same
+    retry/exception-mapping behavior as classify_description, applied to the
+    multi-description batch prompt call added to reduce round-trips to the local
+    model server for a large statement."""
+
+    def test_prompt_includes_every_description_and_all_categories(self):
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content='["Groceries", "Dining"]'))
+        ]
+
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            result = classify_descriptions_batch(["NTUC FAIRPRICE", "STARBUCKS"], ["Groceries", "Dining"])
+
+        assert result == '["Groceries", "Dining"]'
+        prompt = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+        assert "NTUC FAIRPRICE" in prompt
+        assert "STARBUCKS" in prompt
+        assert "Groceries" in prompt
+        assert "Dining" in prompt
+
+    def test_api_timeout_error_becomes_transient_and_is_retried(self):
+        error = APITimeoutError(request=self._fake_request())
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.side_effect = error
+
+        with (
+            patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client),
+            patch("ingestion_worker.clients.retry.time.sleep"),
+            pytest.raises(TransientError),
+        ):
+            classify_descriptions_batch(["NTUC FAIRPRICE"], ["Groceries"])
+
+        assert fake_client.chat.completions.create.call_count == 3
+
+    def _fake_request(self):
+        return httpx.Request("POST", "http://host.docker.internal:8000/v1/chat/completions")

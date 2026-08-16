@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from ingestion_worker.categorization.similarity import SimilarityCandidate
 from transactagent_db.models import (
     Category,
+    CategorizationDisagreement,
+    CategorizationDisagreementStatus,
     CategorySource,
     RecategorizationProposal,
     RecategorizationProposalSourceBucket,
@@ -43,6 +45,39 @@ def list_similarity_candidates(db: Session) -> list[SimilarityCandidate]:
         )
         for row in db.execute(stmt)
     ]
+
+
+def get_similarity_candidates_by_ids(db: Session, transaction_ids: list[str]) -> dict[str, SimilarityCandidate]:
+    """Epic 9 (WR-21/23): fetches full candidate rows for a Vector Store Client
+    nearest-neighbor result (which only returns entity IDs + scores, not the
+    category_source/amount needed to apply the same amount-gate + manual-precedence
+    filtering the fuzzy-text path already applies). Keyed by transaction_id (str)
+    for easy lookup against the neighbor list; an ID with no matching row (a stale
+    vector-store entry for a deleted transaction) is simply absent from the result,
+    not an error."""
+    if not transaction_ids:
+        return {}
+    stmt = (
+        select(
+            Transaction.id,
+            Transaction.description,
+            Category.name,
+            Transaction.category_source,
+            func.coalesce(Transaction.out_flow, Transaction.in_flow).label("amount"),
+        )
+        .join(Category, Transaction.category_id == Category.id)
+        .where(Transaction.id.in_(transaction_ids))
+    )
+    return {
+        str(row.id): SimilarityCandidate(
+            transaction_id=str(row.id),
+            description=row.description,
+            category_name=row.name,
+            category_source=row.category_source.value,
+            amount=row.amount,
+        )
+        for row in db.execute(stmt)
+    }
 
 
 def list_active_category_names(db: Session) -> list[str]:
@@ -106,3 +141,28 @@ def record_proposal(
     db.add(proposal)
     db.flush()
     return proposal
+
+
+def record_disagreement(
+    db: Session,
+    *,
+    transaction_id: UUID,
+    similarity_category_id: UUID,
+    llm_category_id: UUID,
+    similarity_score: float,
+) -> CategorizationDisagreement:
+    """Matching Precision Refinement (WR-28): records a genuine categorization
+    disagreement -- called by the Orchestrator immediately after the transaction
+    itself is persisted (a disagreement needs a real transaction_id, which doesn't
+    exist yet at categorize()'s own call time, see domain-entities.md's
+    DisagreementInfo)."""
+    disagreement = CategorizationDisagreement(
+        transaction_id=transaction_id,
+        similarity_category_id=similarity_category_id,
+        llm_category_id=llm_category_id,
+        similarity_score=Decimal(str(round(similarity_score, 2))),
+        status=CategorizationDisagreementStatus.PENDING,
+    )
+    db.add(disagreement)
+    db.flush()
+    return disagreement

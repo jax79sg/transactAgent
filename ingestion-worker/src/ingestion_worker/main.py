@@ -9,9 +9,12 @@ from pathlib import Path
 from ingestion_worker.backup import service as backup_service
 from ingestion_worker.config import settings
 from ingestion_worker.db import session_scope
+from ingestion_worker.embedding import service as embedding_service
+from ingestion_worker.embedding import vector_store
 from ingestion_worker.heartbeat import touch_heartbeat
 from ingestion_worker.logging_capture import DbLogHandler
 from ingestion_worker.orchestrator import pipeline, repository
+from ingestion_worker.recurring_payments import service as recurring_payments_service
 from transactagent_db.migrate import run_migrations_with_lock
 
 logging.basicConfig(level=logging.INFO)
@@ -23,8 +26,9 @@ _DATABASE_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "database" / "alem
 def poll_once() -> None:
     """One poll cycle: claim and fully process at most one queued IngestionRun,
     then at most one queued RecategorizationJob, then (Epic 7) a nightly backup if
-    one is due. Never processes two of the three concurrently (WR-8, WR-11) --
-    each branch only runs when every branch before it found nothing to do."""
+    one is due, then (Epic 8) a recurring-payment detection scan if one is due.
+    Never processes two of the four concurrently (WR-8, WR-11, WR-19) -- each
+    branch only runs when every branch before it found nothing to do."""
     with session_scope() as db:
         run = repository.find_queued_run(db)
         if run is not None:
@@ -49,9 +53,30 @@ def poll_once() -> None:
             pipeline.process_recategorize_job(db, job)
         return  # one job per poll cycle -- don't also check for a backup this cycle
 
+    backup_ran = False
     with session_scope() as db:
         if backup_service.is_backup_due_now(db):
             backup_service.run_backup(db)
+            backup_ran = True
+
+    if backup_ran:
+        return  # one backup per poll cycle -- don't also check for a detection scan this cycle
+
+    detection_scan_ran = False
+    with session_scope() as db:
+        if recurring_payments_service.is_detection_scan_due_now(db):
+            recurring_payments_service.run_detection_scan(db)
+            detection_scan_ran = True
+
+    if detection_scan_ran:
+        return  # one detection scan per poll cycle -- don't also check the embedding backlog this cycle
+
+    # Epic 9 (services.md correction): fifth, lowest-priority branch -- backlog-
+    # triggered (any Transaction OR RecurringPayment row with embedding_status =
+    # 'pending'), not time-triggered, so there's no separate "is due" check: the
+    # batch call itself is a no-op (processedCount = 0) when nothing is pending.
+    with session_scope() as db:
+        embedding_service.process_next_embedding_batch(db)
 
 
 def recover_stale_state() -> None:
@@ -89,6 +114,7 @@ async def run_forever() -> None:
     logging.getLogger().addHandler(DbLogHandler())
 
     recover_stale_state()
+    vector_store.ensure_collections()  # Epic 9: best-effort, never blocks startup (NFR Design)
 
     logger.info("Ingestion worker started, polling every %ss", settings.poll_interval_seconds)
     while True:

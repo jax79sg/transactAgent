@@ -9,7 +9,11 @@ from decimal import Decimal
 from hypothesis import given
 from hypothesis import strategies as st
 
-from ingestion_worker.categorization.similarity import SimilarityCandidate, find_best_match
+from ingestion_worker.categorization.similarity import (
+    SimilarityCandidate,
+    find_best_match,
+    normalize_reference_noise,
+)
 
 _descriptions = st.text(min_size=1, max_size=100, alphabet=st.characters(blacklist_categories=("Cs",)))
 _sources = st.sampled_from(["manual", "similarity", "llm"])
@@ -235,5 +239,111 @@ class TestAmountRangeGating:
         result = find_best_match(
             "IDENTICAL TEXT", Decimal("81.70"), [candidate], threshold=85,
             amount_ratio_tolerance=4.0, amount_absolute_floor=Decimal("5.00"),
+        )
+        assert result is None
+
+
+class TestNormalizeReferenceNoise:
+    """WR-20: reference-code-shaped noise is stripped before fuzzy scoring, so a
+    repeat payment to the same payee isn't blocked from matching purely by a unique
+    per-transaction reference code. See aidlc-docs/audit.md 2026-08-11."""
+
+    def test_strips_long_digit_run(self):
+        result = normalize_reference_noise(
+            "FAST PAYMENT via PayNow-UEN to NEO EMPIRE PTE. OTHR-260102595543212111."
+        )
+        assert "260102595543212111" not in result
+        assert "NEO EMPIRE PTE" in result
+
+    def test_strips_short_mixed_alphanumeric_tokens(self):
+        result = normalize_reference_noise(
+            "FUND TRANSFER via PayNow-QR Code to WARBURG VENDING OTHR-QR3 dy01qkET 00747"
+        )
+        assert "QR3" not in result
+        assert "dy01qkET" not in result
+        assert "00747" not in result
+        assert "WARBURG VENDING" in result
+
+    def test_leaves_description_with_no_reference_code_unchanged_in_content(self):
+        result = normalize_reference_noise("FUND TRANSFER via PayNow-QR Code to CHANG WAI YEE OTHR - OTHR")
+        assert "CHANG WAI YEE" in result
+        assert "OTHR" in result
+
+    def test_short_digit_only_token_is_not_stripped(self):
+        """A single- or double-digit token (e.g. from a real merchant name like
+        "7-ELEVEN") is not a reference-code shape (needs 3+ consecutive digits, or a
+        letter+digit mix) and must survive untouched."""
+        result = normalize_reference_noise("PAYMENT TO 7-ELEVEN")
+        assert "7" in result
+        assert "ELEVEN" in result
+
+    def test_does_not_touch_decimal_amounts_embedded_in_description(self):
+        result = normalize_reference_noise("CCY CONVERSION FEE FOR: 26.86 SGD")
+        assert "26.86" in result
+
+    @given(description=_descriptions)
+    def test_never_lengthens_the_string(self, description):
+        assert len(normalize_reference_noise(description)) <= len(description)
+
+    @given(description=_descriptions)
+    def test_idempotent(self, description):
+        once = normalize_reference_noise(description)
+        twice = normalize_reference_noise(once)
+        assert once == twice
+
+
+class TestFindBestMatchReferenceCodeNoise:
+    """WR-20 regression coverage: the 3 diagnosis examples, re-run as same-payee
+    repeat-payment pairs (same payee, different reference/QR code, amount held in
+    range), must now clear `similarity_threshold` -- reproducing the reported fix
+    live against the project's actual rapidfuzz dependency, not assumed."""
+
+    def _assert_same_payee_pair_matches(self, description_a: str, description_b: str) -> None:
+        candidate = SimilarityCandidate(
+            transaction_id="c1",
+            description=description_a,
+            category_name="Dining",
+            category_source="manual",
+            amount=_FIXED_AMOUNT,
+        )
+        result = find_best_match(
+            description_b, _FIXED_AMOUNT, [candidate], threshold=85.0,
+            amount_ratio_tolerance=_RATIO_TOLERANCE, amount_absolute_floor=_ABSOLUTE_FLOOR,
+        )
+        assert result is not None
+        assert result.score >= 85.0
+
+    def test_neo_empire_repeat_payment_now_matches(self):
+        self._assert_same_payee_pair_matches(
+            "FAST PAYMENT via PayNow-UEN to NEO EMPIRE PTE. OTHR-260102595543212111.",
+            "FAST PAYMENT via PayNow-UEN to NEO EMPIRE PTE. OTHR-987654321012345678.",
+        )
+
+    def test_warburg_vending_repeat_payment_now_matches(self):
+        self._assert_same_payee_pair_matches(
+            "FUND TRANSFER via PayNow-QR Code to WARBURG VENDING OTHR-QR3 dy01qkET 00747",
+            "FUND TRANSFER via PayNow-QR Code to WARBURG VENDING OTHR-QR9 zz88abCD 11111",
+        )
+
+    def test_chang_wai_yee_repeat_payment_now_matches(self):
+        self._assert_same_payee_pair_matches(
+            "FUND TRANSFER via PayNow-QR Code to CHANG WAI YEE OTHR - OTHR",
+            "FUND TRANSFER via PayNow-QR Code to CHANG WAI YEE OTHR - OTHR",
+        )
+
+    def test_different_payees_still_do_not_match(self):
+        """Cross-payee sanity check: normalization must not cause unrelated payees
+        to fuzzy-match as the same (FR-3)."""
+        candidate = SimilarityCandidate(
+            transaction_id="c1",
+            description="FUND TRANSFER via PayNow-QR Code to CHANG WAI YEE OTHR - OTHR",
+            category_name="Dining",
+            category_source="manual",
+            amount=_FIXED_AMOUNT,
+        )
+        result = find_best_match(
+            "FAST PAYMENT via PayNow-UEN to NEO EMPIRE PTE. OTHR-260102595543212111.",
+            _FIXED_AMOUNT, [candidate], threshold=85.0,
+            amount_ratio_tolerance=_RATIO_TOLERANCE, amount_absolute_floor=_ABSOLUTE_FLOOR,
         )
         assert result is None
