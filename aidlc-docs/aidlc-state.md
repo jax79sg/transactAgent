@@ -360,3 +360,9 @@ Build order: Database → {Ingestion Worker Service, API Service} → Frontend S
 **UNIT: FRONTEND SPA — COMPLETE (for this feature)**
 
 **ALL 4 UNITS COMPLETE (for this feature) — proceeding to Build and Test**
+
+## CONSTRUCTION PHASE (Configurable Application Settings): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-16; `aidlc-docs/construction/build-and-test/configurable-app-settings-build-and-test-summary.md`; merged into `feature/recurring-payments-budget-alerts` in the main checkout [/Users/jax/projects/transactAgent] and redeployed via `docker compose build`/`up -d --build` against the real live stack [6142 real transactions]; migration 0013 auto-applied and verified; core override mechanism live-verified end-to-end [real PUT -> real `docker restart transactagent-worker` -> confirmed new value in effect via container logs]; security boundary, validation, 40-setting count, history, and idle-state restart guidance all live-verified via real HTTP requests; deployed frontend bundle confirmed containing the new markup; full browser click-through blocked by a browser-automation-tool token-persistence quirk [not a product issue, reported honestly]; cleanup done [test setting reverted, worker restarted again, history rows kept per BR-28's append-only design, no placeholder user-data ever inserted]; 660/660 unit tests passing across all 4 units [57 Database + 272 Ingestion Worker + 236 API Service + 95 Frontend], zero regressions)
+
+**Configurable Application Settings: COMPLETE** — merged into `feature/recurring-payments-budget-alerts` in the main checkout, not yet merged to `main`.
