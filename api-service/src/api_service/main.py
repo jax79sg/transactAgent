@@ -17,6 +17,7 @@ from api_service.errors import register_exception_handlers
 from api_service.health import router as health_router
 from api_service.ingestion.router import router as ingestion_router
 from api_service.recategorization.router import router as recategorization_router
+from api_service.recurring_payments.router import router as recurring_payments_router
 from api_service.transactions.router import router as transactions_router
 from transactagent_db.migrate import run_migrations_with_lock
 
@@ -64,6 +65,7 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     app.include_router(ai_assistant_router)
     app.include_router(recategorization_router)
     app.include_router(backup_router)
+    app.include_router(recurring_payments_router)
 
     return app
 

@@ -52,6 +52,9 @@ class TransactionDTO(CamelModel):
     conversion_is_approximate: bool
     conversion_unavailable: bool
     bank_statement_id: UUID
+    # Epic 9 (Local Embedding-Based Semantic Similarity, AR-21): read-only, sourced
+    # directly from Transaction.embedding_status -- this component never writes it.
+    embedding_status: str
 
 
 class GroupSummary(CamelModel):

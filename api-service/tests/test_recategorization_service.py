@@ -4,11 +4,18 @@ from decimal import Decimal
 
 import pytest
 
-from api_service.errors import NotFoundError, ProposalNotPendingError
+from api_service.errors import (
+    DisagreementNotPendingError,
+    InvalidResolutionCategoryError,
+    NotFoundError,
+    ProposalNotPendingError,
+)
 from api_service.recategorization import service
 from transactagent_db.models import (
     BankStatement,
     Category,
+    CategorizationDisagreement,
+    CategorizationDisagreementStatus,
     CategorySource,
     RecategorizationJob,
     RecategorizationProposal,
@@ -65,6 +72,19 @@ def _make_proposal(db, job, candidate, proposed_category, status=Recategorizatio
     return proposal
 
 
+def _make_disagreement(db, transaction, similarity_category, llm_category, status=CategorizationDisagreementStatus.PENDING):
+    disagreement = CategorizationDisagreement(
+        transaction_id=transaction.id,
+        similarity_category_id=similarity_category.id,
+        llm_category_id=llm_category.id,
+        similarity_score=Decimal("88.00"),
+        status=status,
+    )
+    db.add(disagreement)
+    db.flush()
+    return disagreement
+
+
 class TestListPendingProposals:
     def test_only_pending_proposals_are_returned(self, db_session):
         household = _make_category(db_session, "Household")
@@ -96,6 +116,22 @@ class TestGetPendingCount:
         _make_proposal(db_session, job, candidate_b, household, status=RecategorizationProposalStatus.AUTO_APPLIED)
 
         assert service.get_pending_count(db_session) == 1
+
+    def test_sums_pending_proposals_and_pending_disagreements(self, db_session):
+        """AR-26 (Matching Precision Refinement): one combined number, not two
+        separate badges."""
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure = _make_category(db_session, "UNSURE")
+        source = _make_transaction(db_session, "IKEA", household, CategorySource.MANUAL)
+        job = _make_job(db_session, source.id)
+        candidate = _make_transaction(db_session, "IKEA #2", unsure, CategorySource.UNSURE)
+        _make_proposal(db_session, job, candidate, household, status=RecategorizationProposalStatus.PENDING)
+
+        disagreement_txn = _make_transaction(db_session, "NTUC FAIRPRICE", unsure, CategorySource.UNSURE)
+        _make_disagreement(db_session, disagreement_txn, household, dining)
+
+        assert service.get_pending_count(db_session) == 2
 
 
 class TestApproveProposal:
@@ -196,3 +232,98 @@ class TestBulkReject:
 
         assert rejected_ids == [good_proposal.id]
         assert failed_ids == [missing_id]
+
+
+class TestListPendingDisagreements:
+    def test_only_pending_disagreements_are_returned(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure = _make_category(db_session, "UNSURE")
+        pending_txn = _make_transaction(db_session, "IKEA", unsure, CategorySource.UNSURE)
+        resolved_txn = _make_transaction(db_session, "NTUC FAIRPRICE", household, CategorySource.SIMILARITY)
+        _make_disagreement(db_session, pending_txn, household, dining)
+        _make_disagreement(db_session, resolved_txn, household, dining, status=CategorizationDisagreementStatus.RESOLVED)
+
+        items, total_count = service.list_pending_disagreements(db_session, page=1, page_size=20)
+
+        assert total_count == 1
+        assert [d.transaction_id for d in items] == [pending_txn.id]
+
+
+class TestResolveDisagreement:
+    def test_choosing_the_similarity_category_writes_through_with_similarity_source(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure = _make_category(db_session, "UNSURE")
+        txn = _make_transaction(db_session, "IKEA", unsure, CategorySource.UNSURE)
+        disagreement = _make_disagreement(db_session, txn, household, dining)
+
+        result = service.resolve_disagreement(db_session, disagreement.id, household.id)
+
+        assert result.status == CategorizationDisagreementStatus.RESOLVED
+        assert result.resolved_category_id == household.id
+        assert result.resolved_at is not None
+        db_session.refresh(txn)
+        assert txn.category_id == household.id
+        assert txn.category_source == CategorySource.SIMILARITY  # AR-25: not 'manual'
+
+    def test_choosing_the_llm_category_writes_through_with_llm_source(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure = _make_category(db_session, "UNSURE")
+        txn = _make_transaction(db_session, "IKEA", unsure, CategorySource.UNSURE)
+        disagreement = _make_disagreement(db_session, txn, household, dining)
+
+        result = service.resolve_disagreement(db_session, disagreement.id, dining.id)
+
+        assert result.resolved_category_id == dining.id
+        db_session.refresh(txn)
+        assert txn.category_id == dining.id
+        assert txn.category_source == CategorySource.LLM  # AR-25: not 'manual'
+
+    def test_third_category_is_rejected(self, db_session):
+        """AR-24: chosenCategoryId must be one of the two offered candidates."""
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        groceries = _make_category(db_session, "Groceries")
+        unsure = _make_category(db_session, "UNSURE")
+        txn = _make_transaction(db_session, "IKEA", unsure, CategorySource.UNSURE)
+        disagreement = _make_disagreement(db_session, txn, household, dining)
+
+        with pytest.raises(InvalidResolutionCategoryError):
+            service.resolve_disagreement(db_session, disagreement.id, groceries.id)
+
+        db_session.refresh(txn)
+        assert txn.category_id == unsure.id  # untouched
+
+    def test_unknown_disagreement_raises_not_found(self, db_session):
+        with pytest.raises(NotFoundError):
+            service.resolve_disagreement(db_session, uuid.uuid4(), uuid.uuid4())
+
+    def test_already_resolved_disagreement_is_rejected(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure = _make_category(db_session, "UNSURE")
+        txn = _make_transaction(db_session, "IKEA", unsure, CategorySource.UNSURE)
+        disagreement = _make_disagreement(db_session, txn, household, dining, status=CategorizationDisagreementStatus.REJECTED)
+
+        with pytest.raises(DisagreementNotPendingError):
+            service.resolve_disagreement(db_session, disagreement.id, household.id)
+
+
+class TestRejectDisagreement:
+    def test_leaves_transaction_untouched_and_marks_rejected(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure = _make_category(db_session, "UNSURE")
+        txn = _make_transaction(db_session, "IKEA", unsure, CategorySource.UNSURE)
+        disagreement = _make_disagreement(db_session, txn, household, dining)
+
+        result = service.reject_disagreement(db_session, disagreement.id)
+
+        db_session.refresh(txn)
+        assert txn.category_id == unsure.id  # untouched
+        assert txn.category_source == CategorySource.UNSURE  # untouched
+        assert result.status == CategorizationDisagreementStatus.REJECTED
+        assert result.resolved_at is not None
+        assert result.resolved_category_id is None  # no suppression record, no resolution recorded

@@ -169,3 +169,124 @@ class TestBulkRejectApi:
         body = response.json()
         assert body["rejectedIds"] == [str(proposal.id)]
         assert body["failedIds"] == [str(missing_id)]
+
+
+def _make_pending_disagreement(db, description="NTUC FAIRPRICE"):
+    from transactagent_db.models import CategorizationDisagreement, CategorizationDisagreementStatus, CategorySource
+
+    household = _make_category(db, f"Household-{uuid.uuid4().hex[:8]}")
+    dining = _make_category(db, f"Dining-{uuid.uuid4().hex[:8]}")
+    unsure = _make_category(db, f"UNSURE-{uuid.uuid4().hex[:8]}")
+    txn = _make_transaction(db, description, unsure, CategorySource.UNSURE)
+    disagreement = CategorizationDisagreement(
+        transaction_id=txn.id,
+        similarity_category_id=household.id,
+        llm_category_id=dining.id,
+        similarity_score=Decimal("88.00"),
+        status=CategorizationDisagreementStatus.PENDING,
+    )
+    db.add(disagreement)
+    db.flush()
+    return disagreement, txn, household, dining
+
+
+class TestListDisagreementsApi:
+    def test_requires_auth(self, client):
+        response = client.get("/recategorization/disagreements")
+        assert response.status_code == 401
+
+    def test_returns_pending_disagreements_with_both_candidates(self, client, auth_headers, db_session):
+        disagreement, txn, household, dining = _make_pending_disagreement(db_session)
+
+        response = client.get("/recategorization/disagreements", headers=auth_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["totalCount"] == 1
+        item = body["items"][0]
+        assert item["id"] == str(disagreement.id)
+        assert item["candidateTransaction"]["id"] == str(txn.id)
+        assert item["similarityCategory"]["id"] == str(household.id)
+        assert item["llmCategory"]["id"] == str(dining.id)
+        assert item["status"] == "pending"
+        assert item["resolvedCategory"] is None
+
+
+class TestPendingCountIncludesDisagreementsApi:
+    def test_reflects_pending_disagreements(self, client, auth_headers, db_session):
+        _make_pending_disagreement(db_session)
+
+        response = client.get("/recategorization/proposals/pending-count", headers=auth_headers)
+
+        assert response.json()["pendingCount"] == 1
+
+
+class TestResolveDisagreementApi:
+    def test_resolve_writes_chosen_category_and_returns_updated_disagreement(self, client, auth_headers, db_session):
+        disagreement, txn, household, dining = _make_pending_disagreement(db_session)
+
+        response = client.post(
+            f"/recategorization/disagreements/{disagreement.id}/resolve",
+            headers=auth_headers,
+            json={"chosenCategoryId": str(dining.id)},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "resolved"
+        assert body["resolvedCategory"]["id"] == str(dining.id)
+
+        db_session.refresh(txn)
+        assert txn.category_id == dining.id
+        assert txn.category_source.value == "llm"
+
+    def test_third_category_returns_400(self, client, auth_headers, db_session):
+        disagreement, _, _, _ = _make_pending_disagreement(db_session)
+        other_category = _make_category(db_session, f"Groceries-{uuid.uuid4().hex[:8]}")
+
+        response = client.post(
+            f"/recategorization/disagreements/{disagreement.id}/resolve",
+            headers=auth_headers,
+            json={"chosenCategoryId": str(other_category.id)},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"] == "invalid_resolution_category"
+
+    def test_unknown_disagreement_returns_404(self, client, auth_headers):
+        response = client.post(
+            f"/recategorization/disagreements/{uuid.uuid4()}/resolve",
+            headers=auth_headers,
+            json={"chosenCategoryId": str(uuid.uuid4())},
+        )
+        assert response.status_code == 404
+
+    def test_already_resolved_disagreement_returns_409(self, client, auth_headers, db_session):
+        disagreement, _, household, _ = _make_pending_disagreement(db_session)
+        first = client.post(
+            f"/recategorization/disagreements/{disagreement.id}/resolve",
+            headers=auth_headers,
+            json={"chosenCategoryId": str(household.id)},
+        )
+        assert first.status_code == 200
+
+        second = client.post(
+            f"/recategorization/disagreements/{disagreement.id}/resolve",
+            headers=auth_headers,
+            json={"chosenCategoryId": str(household.id)},
+        )
+        assert second.status_code == 409
+        assert second.json()["error"] == "disagreement_not_pending"
+
+
+class TestRejectDisagreementApi:
+    def test_reject_leaves_transaction_untouched(self, client, auth_headers, db_session):
+        disagreement, txn, _, _ = _make_pending_disagreement(db_session)
+        original_category_id = txn.category_id
+
+        response = client.post(f"/recategorization/disagreements/{disagreement.id}/reject", headers=auth_headers)
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "rejected"
+        db_session.refresh(txn)
+        assert txn.category_id == original_category_id

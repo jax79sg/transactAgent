@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash-lite"
     ai_assistant_max_transactions: int = 3000
 
+    # Epic 8 (Recurring Payments): AR-15's due-soon lead window -- how many days
+    # before an upcoming due date (or before the next cycle, once the current one
+    # is already paid) status flips from "paid"/nothing to "due_soon".
+    recurring_payment_due_soon_lead_days: int = 5
+
     @property
     def database_url(self) -> str:
         return (

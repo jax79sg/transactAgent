@@ -121,6 +121,50 @@ class ProposalNotPendingError(ApiError):
     error_code = "proposal_not_pending"
 
 
+class MatchNotPendingError(ApiError):
+    """AR-17 (Epic 8): a recurring-payment match can only be approved/rejected while
+    status='pending' (BR-23, Unit 1) -- same reasoning as ProposalNotPendingError."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "match_not_pending"
+
+
+class InvalidRecurringPaymentError(ApiError):
+    """Epic 8: surfaces BR-19 (annual requires due_month, monthly must not have
+    one) / BR-20 (due_day 1-31) / an unrecognized frequency value cleanly, rather
+    than a raw DB CHECK-constraint error -- same reasoning as InactiveCategoryError
+    surfacing BR-6 at this layer."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_recurring_payment"
+
+
+class DetectionSuggestionNotNewError(ApiError):
+    """AR-20 (Epic 8): a detection suggestion can only be dismissed or added while
+    status='new'."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "detection_suggestion_not_new"
+
+
+class DisagreementNotPendingError(ApiError):
+    """AR-23 (Matching Precision Refinement): a categorization disagreement can only
+    be resolved/rejected while status='pending' (Database BR-27) -- same reasoning as
+    ProposalNotPendingError/MatchNotPendingError."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "disagreement_not_pending"
+
+
+class InvalidResolutionCategoryError(ApiError):
+    """AR-24 (Matching Precision Refinement): a disagreement resolution's
+    chosenCategoryId must equal one of the two offered candidates (similarity_category_id
+    or llm_category_id) -- enforced here as an API contract, not just a UI convention."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_resolution_category"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:

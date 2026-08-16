@@ -7,9 +7,20 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from api_service.errors import NotFoundError, ProposalNotPendingError
+from api_service.errors import (
+    DisagreementNotPendingError,
+    InvalidResolutionCategoryError,
+    NotFoundError,
+    ProposalNotPendingError,
+)
 from api_service.recategorization import repository
-from transactagent_db.models import CategorySource, RecategorizationProposal, RecategorizationProposalStatus
+from transactagent_db.models import (
+    CategorizationDisagreement,
+    CategorizationDisagreementStatus,
+    CategorySource,
+    RecategorizationProposal,
+    RecategorizationProposalStatus,
+)
 
 
 def list_pending_proposals(db: Session, page: int, page_size: int) -> tuple[list[RecategorizationProposal], int]:
@@ -17,7 +28,10 @@ def list_pending_proposals(db: Session, page: int, page_size: int) -> tuple[list
 
 
 def get_pending_count(db: Session) -> int:
-    return repository.count_pending(db)
+    """AR-26 (Matching Precision Refinement): sums pending proposals and pending
+    disagreements -- the nav badge has always read generically as "items needing
+    review," not "proposals" specifically."""
+    return repository.count_pending(db) + repository.count_pending_disagreements(db)
 
 
 def _get_pending_proposal(db: Session, proposal_id: UUID) -> RecategorizationProposal:
@@ -85,3 +99,58 @@ def bulk_reject(db: Session, proposal_ids: list[UUID]) -> tuple[list[UUID], list
         except ProposalNotPendingError:
             failed_ids.append(proposal_id)
     return rejected_ids, failed_ids
+
+
+def list_pending_disagreements(
+    db: Session, page: int, page_size: int
+) -> tuple[list[CategorizationDisagreement], int]:
+    return repository.list_pending_disagreements(db, page=page, page_size=page_size)
+
+
+def _get_pending_disagreement(db: Session, disagreement_id: UUID) -> CategorizationDisagreement:
+    disagreement = repository.find_disagreement_by_id(db, disagreement_id)
+    if disagreement is None:
+        raise NotFoundError(f"Categorization disagreement {disagreement_id} not found")
+    if disagreement.status != CategorizationDisagreementStatus.PENDING:
+        raise DisagreementNotPendingError(
+            f"Categorization disagreement {disagreement_id} is not pending (status={disagreement.status.value})"
+        )
+    return disagreement
+
+
+def resolve_disagreement(
+    db: Session, disagreement_id: UUID, chosen_category_id: UUID
+) -> CategorizationDisagreement:
+    """AR-23/AR-24/AR-25 (Matching Precision Refinement): chosen_category_id must be
+    one of the two offered candidates; the transaction's category_source is set to
+    whichever origin the chosen candidate came from (similarity|llm), never manual."""
+    disagreement = _get_pending_disagreement(db, disagreement_id)
+    if chosen_category_id == disagreement.similarity_category_id:
+        chosen_category = disagreement.similarity_category
+        source = CategorySource.SIMILARITY
+    elif chosen_category_id == disagreement.llm_category_id:
+        chosen_category = disagreement.llm_category
+        source = CategorySource.LLM
+    else:
+        raise InvalidResolutionCategoryError(
+            f"chosenCategoryId {chosen_category_id} is not one of the two candidates offered "
+            f"for disagreement {disagreement_id}"
+        )
+    # Assign the relationship object, not just the FK column -- same reasoning as
+    # approve_proposal above (a stale in-session relationship would otherwise show
+    # in the response DTO built immediately after).
+    disagreement.transaction.category = chosen_category
+    disagreement.transaction.category_source = source
+    disagreement.resolved_category = chosen_category
+    disagreement.status = CategorizationDisagreementStatus.RESOLVED
+    disagreement.resolved_at = func.now()
+    db.flush()
+    return disagreement
+
+
+def reject_disagreement(db: Session, disagreement_id: UUID) -> CategorizationDisagreement:
+    disagreement = _get_pending_disagreement(db, disagreement_id)
+    disagreement.status = CategorizationDisagreementStatus.REJECTED
+    disagreement.resolved_at = func.now()
+    db.flush()
+    return disagreement

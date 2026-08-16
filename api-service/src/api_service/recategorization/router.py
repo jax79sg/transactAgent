@@ -10,9 +10,12 @@ from api_service.recategorization.schemas import (
     BulkApproveResponse,
     BulkProposalRequest,
     BulkRejectResponse,
+    DisagreementDTO,
+    DisagreementPage,
     PendingCountResponse,
     ProposalDTO,
     ProposalPage,
+    ResolveDisagreementRequest,
 )
 from api_service.transactions.schemas import CategoryRef, TransactionDTO
 
@@ -34,6 +37,7 @@ def _to_transaction_dto(txn) -> TransactionDTO:
         conversion_is_approximate=txn.conversion_is_approximate,
         conversion_unavailable=txn.conversion_unavailable,
         bank_statement_id=txn.bank_statement_id,
+        embedding_status=txn.embedding_status.value,
     )
 
 
@@ -47,6 +51,23 @@ def _to_proposal_dto(proposal) -> ProposalDTO:
         status=proposal.status.value,
         created_at=proposal.created_at,
         source_transaction_id=proposal.recategorization_job.source_transaction_id,
+    )
+
+
+def _to_disagreement_dto(disagreement) -> DisagreementDTO:
+    return DisagreementDTO(
+        id=disagreement.id,
+        candidate_transaction=_to_transaction_dto(disagreement.transaction),
+        similarity_category=CategoryRef(id=disagreement.similarity_category.id, name=disagreement.similarity_category.name),
+        llm_category=CategoryRef(id=disagreement.llm_category.id, name=disagreement.llm_category.name),
+        similarity_score=disagreement.similarity_score,
+        status=disagreement.status.value,
+        resolved_category=(
+            CategoryRef(id=disagreement.resolved_category.id, name=disagreement.resolved_category.name)
+            if disagreement.resolved_category is not None
+            else None
+        ),
+        created_at=disagreement.created_at,
     )
 
 
@@ -87,3 +108,27 @@ def bulk_approve_proposals(request: BulkProposalRequest, db: Session = Depends(g
 def bulk_reject_proposals(request: BulkProposalRequest, db: Session = Depends(get_db)) -> BulkRejectResponse:
     rejected_ids, failed_ids = service.bulk_reject(db, request.proposal_ids)
     return BulkRejectResponse(rejected_ids=rejected_ids, failed_ids=failed_ids)
+
+
+@router.get("/disagreements", response_model=DisagreementPage)
+def list_pending_disagreements(
+    page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100), db: Session = Depends(get_db)
+) -> DisagreementPage:
+    disagreements, total_count = service.list_pending_disagreements(db, page=page, page_size=page_size)
+    return DisagreementPage(
+        items=[_to_disagreement_dto(d) for d in disagreements], page=page, page_size=page_size, total_count=total_count
+    )
+
+
+@router.post("/disagreements/{disagreement_id}/resolve", response_model=DisagreementDTO)
+def resolve_disagreement(
+    disagreement_id: UUID, request: ResolveDisagreementRequest, db: Session = Depends(get_db)
+) -> DisagreementDTO:
+    disagreement = service.resolve_disagreement(db, disagreement_id, request.chosen_category_id)
+    return _to_disagreement_dto(disagreement)
+
+
+@router.post("/disagreements/{disagreement_id}/reject", response_model=DisagreementDTO)
+def reject_disagreement(disagreement_id: UUID, db: Session = Depends(get_db)) -> DisagreementDTO:
+    disagreement = service.reject_disagreement(db, disagreement_id)
+    return _to_disagreement_dto(disagreement)

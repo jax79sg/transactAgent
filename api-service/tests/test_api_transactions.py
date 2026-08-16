@@ -45,6 +45,16 @@ class TestTransactionsApi:
         assert body["items"][0]["description"] == "NTUC FAIRPRICE"
         assert body["items"][0]["outFlow"] == "25.50"
 
+    def test_list_transactions_exposes_embedding_status(self, client, auth_headers, db_session):
+        """AR-21 (Epic 9): read-only, sourced directly from Transaction.embedding_status
+        -- every new row defaults to 'pending' (Database BR-24) until the Ingestion
+        Worker's Embedding Manager processes it."""
+        _seed_transaction(db_session)
+
+        response = client.get("/transactions", headers=auth_headers)
+
+        assert response.json()["items"][0]["embeddingStatus"] == "pending"
+
     def test_invalid_currency_filter_returns_400(self, client, auth_headers):
         response = client.get("/transactions", params={"currency": "nope"}, headers=auth_headers)
         assert response.status_code == 400

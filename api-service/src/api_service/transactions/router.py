@@ -36,6 +36,7 @@ def _to_dto(txn) -> TransactionDTO:
         conversion_is_approximate=txn.conversion_is_approximate,
         conversion_unavailable=txn.conversion_unavailable,
         bank_statement_id=txn.bank_statement_id,
+        embedding_status=txn.embedding_status.value,
     )
 
 
