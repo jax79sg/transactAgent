@@ -16,7 +16,12 @@ from transactagent_db.models import (
     BackupRunOutcome,
     BankStatement,
     Category,
+    CategorizationDisagreement,
+    CategorizationDisagreementStatus,
     CategorySource,
+    DetectionScanRun,
+    DetectionSuggestion,
+    DetectionSuggestionStatus,
     FxRateCache,
     IngestionRunFile,
     IngestionRunFileOutcome,
@@ -24,6 +29,10 @@ from transactagent_db.models import (
     RecategorizationProposal,
     RecategorizationProposalSourceBucket,
     RecategorizationProposalStatus,
+    RecurringPayment,
+    RecurringPaymentFrequency,
+    RecurringPaymentMatch,
+    RecurringPaymentMatchStatus,
 )
 
 
@@ -502,3 +511,582 @@ class TestBackupRun:
             )
         )
         db_session.flush()  # should not raise
+
+
+class TestRecurringPayment:
+    """Epic 8 (Recurring Payments). BR-19 (annual requires due_month, monthly must
+    not have one) and BR-20 (due_day 1-31) are both standing CHECK constraints,
+    fully testable at this layer."""
+
+    def test_monthly_payment_without_due_month_is_valid(self, db_session):
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_month=None,
+            due_day=15,
+        )
+        db_session.add(payment)
+        db_session.flush()  # should not raise
+
+        assert payment.is_trusted is False
+
+    def test_annual_payment_with_due_month_is_valid(self, db_session):
+        payment = RecurringPayment(
+            name="Car Insurance",
+            expected_amount=Decimal("1200.00"),
+            frequency=RecurringPaymentFrequency.ANNUAL,
+            due_month=8,
+            due_day=21,
+        )
+        db_session.add(payment)
+        db_session.flush()  # should not raise
+
+    def test_annual_payment_without_due_month_is_rejected(self, db_session):
+        """BR-19."""
+        payment = RecurringPayment(
+            name="Car Insurance",
+            expected_amount=Decimal("1200.00"),
+            frequency=RecurringPaymentFrequency.ANNUAL,
+            due_month=None,
+            due_day=21,
+        )
+        db_session.add(payment)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_monthly_payment_with_due_month_is_rejected(self, db_session):
+        """BR-19."""
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_month=6,
+            due_day=15,
+        )
+        db_session.add(payment)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_due_day_zero_is_rejected(self, db_session):
+        """BR-20."""
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=0,
+        )
+        db_session.add(payment)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_due_day_32_is_rejected(self, db_session):
+        """BR-20."""
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=32,
+        )
+        db_session.add(payment)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_optional_category_link(self, db_session):
+        category = _make_category(db_session, name="Subscriptions")
+        payment = RecurringPayment(
+            name="Streaming Service",
+            expected_amount=Decimal("15.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=1,
+            category_id=category.id,
+        )
+        db_session.add(payment)
+        db_session.flush()
+        db_session.refresh(category)
+
+        assert payment in category.recurring_payments
+
+    def test_category_link_is_optional(self, db_session):
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=15,
+            category_id=None,
+        )
+        db_session.add(payment)
+        db_session.flush()  # should not raise
+
+
+class TestRecurringPaymentEmbeddingStatus:
+    """Epic 9 (Local Embedding-Based Semantic Similarity), BR-25 -- added
+    retroactively during Ingestion Worker Service Functional Design. Same one-way
+    pending -> completed transition as TestTransactionEmbeddingStatus (BR-24), but
+    this field can also be reset back to pending by the API Service on a name
+    change (not exercised at this layer -- that's a Unit 2 application-layer
+    concern; this only verifies the column/default itself)."""
+
+    def test_new_payment_defaults_to_pending(self, db_session):
+        from transactagent_db.models import EmbeddingStatus
+
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=15,
+        )
+        db_session.add(payment)
+        db_session.flush()
+        db_session.refresh(payment)
+
+        assert payment.embedding_status == EmbeddingStatus.PENDING
+
+    def test_can_transition_to_completed(self, db_session):
+        from transactagent_db.models import EmbeddingStatus
+
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=15,
+        )
+        db_session.add(payment)
+        db_session.flush()
+
+        payment.embedding_status = EmbeddingStatus.COMPLETED
+        db_session.flush()
+        db_session.refresh(payment)
+
+        assert payment.embedding_status == EmbeddingStatus.COMPLETED
+
+    def test_can_reset_to_pending_after_rename(self, db_session):
+        """Mirrors what the API Service's Recurring Payments Component does on a
+        name-changing update (BR-25) -- verified here only as "the column allows
+        completed -> pending," since the actual reset-on-rename logic lives in
+        Unit 2, not this layer."""
+        from transactagent_db.models import EmbeddingStatus
+
+        payment = RecurringPayment(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=15,
+            embedding_status=EmbeddingStatus.COMPLETED,
+        )
+        db_session.add(payment)
+        db_session.flush()
+
+        payment.name = "Gym Membership (Renamed)"
+        payment.embedding_status = EmbeddingStatus.PENDING
+        db_session.flush()
+        db_session.refresh(payment)
+
+        assert payment.embedding_status == EmbeddingStatus.PENDING
+
+
+class TestRecurringPaymentMatch:
+    """Epic 8. BR-21 (at most one live match per recurring_payment_id + cycle_period)
+    is a raw-SQL partial unique index applied via Alembic (migrations/versions/
+    0007_recurring_payments.py), not by anything Base.metadata.create_all() can
+    create -- this file's fixtures build the schema via create_all() directly (see
+    conftest.py), bypassing Alembic entirely. Same reasoning as BR-10/BR-14 having
+    no unit test here either -- both verified at the Alembic-migration/integration
+    level instead. Tests below cover what IS testable through the ORM at this layer.
+    """
+
+    def _make_payment(self, session, **overrides):
+        defaults = dict(
+            name="Gym Membership",
+            expected_amount=Decimal("80.00"),
+            frequency=RecurringPaymentFrequency.MONTHLY,
+            due_day=15,
+        )
+        defaults.update(overrides)
+        payment = RecurringPayment(**defaults)
+        session.add(payment)
+        session.flush()
+        return payment
+
+    def _make_transaction(self, session, description="GYM MEMBERSHIP FEE"):
+        import uuid as uuid_module
+
+        from transactagent_db.models import Transaction
+
+        category = _make_category(session, name=f"Placeholder {uuid_module.uuid4().hex[:8]}")
+        statement = _make_bank_statement(session, pdf_content_hash=uuid_module.uuid4().hex + uuid_module.uuid4().hex[:32])
+        return Transaction(
+            **_base_transaction_kwargs(
+                session,
+                description=description,
+                category=category,
+                bank_statement=statement,
+                out_flow=Decimal("80.00"),
+                in_flow=None,
+            )
+        )
+
+    def test_pending_match_is_valid(self, db_session):
+        payment = self._make_payment(db_session)
+        txn = self._make_transaction(db_session)
+        db_session.add(txn)
+        db_session.flush()
+
+        match = RecurringPaymentMatch(
+            recurring_payment_id=payment.id,
+            transaction_id=txn.id,
+            cycle_period="2026-08",
+            status=RecurringPaymentMatchStatus.PENDING,
+            amount_at_match=Decimal("80.00"),
+        )
+        db_session.add(match)
+        db_session.flush()
+        db_session.refresh(payment)
+        db_session.refresh(txn)
+
+        assert match.resolved_at is None
+        assert match in payment.matches
+        assert match in txn.recurring_payment_matches
+
+    def test_auto_applied_match_is_valid(self, db_session):
+        """FR-7: a trusted payment's close-amount match is created directly as
+        auto_applied, never passing through pending."""
+        payment = self._make_payment(db_session, is_trusted=True)
+        txn = self._make_transaction(db_session)
+        db_session.add(txn)
+        db_session.flush()
+
+        match = RecurringPaymentMatch(
+            recurring_payment_id=payment.id,
+            transaction_id=txn.id,
+            cycle_period="2026-08",
+            status=RecurringPaymentMatchStatus.AUTO_APPLIED,
+            amount_at_match=Decimal("80.00"),
+        )
+        db_session.add(match)
+        db_session.flush()  # should not raise
+
+    def test_duplicate_live_match_same_cycle_via_orm_shape_is_representable(self, db_session):
+        """Not a BR-21 enforcement test (that's Alembic-only, see class docstring) --
+        just confirms two matches for the same payment+cycle are representable
+        objects at the ORM layer, so the real constraint has something to reject
+        when tested at the migration level."""
+        payment = self._make_payment(db_session)
+        txn1 = self._make_transaction(db_session, description="GYM MEMBERSHIP FEE")
+        txn2 = self._make_transaction(db_session, description="GYM MEMBERSHIP FEE ADJ")
+        db_session.add_all([txn1, txn2])
+        db_session.flush()
+
+        db_session.add(
+            RecurringPaymentMatch(
+                recurring_payment_id=payment.id,
+                transaction_id=txn1.id,
+                cycle_period="2026-08",
+                status=RecurringPaymentMatchStatus.PENDING,
+                amount_at_match=Decimal("80.00"),
+            )
+        )
+        db_session.flush()
+        db_session.add(
+            RecurringPaymentMatch(
+                recurring_payment_id=payment.id,
+                transaction_id=txn2.id,
+                cycle_period="2026-08",
+                status=RecurringPaymentMatchStatus.PENDING,
+                amount_at_match=Decimal("80.00"),
+            )
+        )
+        db_session.flush()  # no DB-level rejection here -- BR-21 lives in Alembic, not create_all()
+
+    def test_different_cycle_periods_both_valid(self, db_session):
+        payment = self._make_payment(db_session)
+        txn1 = self._make_transaction(db_session, description="GYM MEMBERSHIP FEE JUL")
+        txn2 = self._make_transaction(db_session, description="GYM MEMBERSHIP FEE AUG")
+        db_session.add_all([txn1, txn2])
+        db_session.flush()
+
+        db_session.add(
+            RecurringPaymentMatch(
+                recurring_payment_id=payment.id,
+                transaction_id=txn1.id,
+                cycle_period="2026-07",
+                status=RecurringPaymentMatchStatus.APPROVED,
+                amount_at_match=Decimal("80.00"),
+            )
+        )
+        db_session.add(
+            RecurringPaymentMatch(
+                recurring_payment_id=payment.id,
+                transaction_id=txn2.id,
+                cycle_period="2026-08",
+                status=RecurringPaymentMatchStatus.PENDING,
+                amount_at_match=Decimal("80.00"),
+            )
+        )
+        db_session.flush()  # should not raise
+
+
+class TestDetectionSuggestion:
+    """Epic 8. BR-22 (description_pattern uniqueness) is a standard unique
+    constraint created by Base.metadata.create_all() directly, so fully testable
+    at this layer, unlike BR-21."""
+
+    def test_new_suggestion_is_valid(self, db_session):
+        suggestion = DetectionSuggestion(
+            description_pattern="STREAMING SERVICE",
+            suggested_amount=Decimal("15.00"),
+            occurrence_count=3,
+            status=DetectionSuggestionStatus.NEW,
+        )
+        db_session.add(suggestion)
+        db_session.flush()  # should not raise
+
+        assert suggestion.resolved_at is None
+
+    def test_duplicate_description_pattern_is_rejected(self, db_session):
+        """BR-22 -- the mechanism behind FR-13's sticky dismissal."""
+        db_session.add(
+            DetectionSuggestion(
+                description_pattern="STREAMING SERVICE",
+                suggested_amount=Decimal("15.00"),
+                occurrence_count=3,
+                status=DetectionSuggestionStatus.DISMISSED,
+            )
+        )
+        db_session.flush()
+
+        duplicate = DetectionSuggestion(
+            description_pattern="STREAMING SERVICE",
+            suggested_amount=Decimal("15.00"),
+            occurrence_count=4,
+            status=DetectionSuggestionStatus.NEW,
+        )
+        db_session.add(duplicate)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_different_patterns_both_valid(self, db_session):
+        db_session.add(
+            DetectionSuggestion(
+                description_pattern="STREAMING SERVICE",
+                suggested_amount=Decimal("15.00"),
+                occurrence_count=3,
+            )
+        )
+        db_session.add(
+            DetectionSuggestion(
+                description_pattern="GYM MEMBERSHIP",
+                suggested_amount=Decimal("80.00"),
+                occurrence_count=2,
+            )
+        )
+        db_session.flush()  # should not raise
+
+    def test_optional_suggested_category(self, db_session):
+        category = _make_category(db_session, name="Subscriptions")
+        suggestion = DetectionSuggestion(
+            description_pattern="STREAMING SERVICE",
+            suggested_amount=Decimal("15.00"),
+            occurrence_count=3,
+            suggested_category_id=category.id,
+        )
+        db_session.add(suggestion)
+        db_session.flush()
+        db_session.refresh(category)
+
+        assert suggestion in category.suggested_in_detection_suggestions
+
+
+class TestDetectionScanRun:
+    """Epic 8 -- added retroactively during Ingestion Worker Code Generation to
+    back isDetectionScanDueNow()'s due-check. Trivial single-column table."""
+
+    def test_scan_run_row_is_valid(self, db_session):
+        run = DetectionScanRun()
+        db_session.add(run)
+        db_session.flush()  # should not raise
+
+        assert run.ran_at is not None
+
+    def test_multiple_scan_runs_are_all_valid(self, db_session):
+        db_session.add(DetectionScanRun())
+        db_session.add(DetectionScanRun())
+        db_session.flush()  # should not raise -- no uniqueness constraint, every attempt is its own row
+
+
+class TestTransactionEmbeddingStatus:
+    """Epic 9 (Local Embedding-Based Semantic Similarity), BR-24: one-way,
+    two-state column. server_default='pending' is what unifies forward processing
+    and the one-time historical backfill (FR-11) into a single mechanism -- this is
+    exercised here as a DB-level default, not an application-level one, so it also
+    covers rows inserted without the ORM ever setting the field."""
+
+    def test_new_transaction_defaults_to_pending(self, db_session):
+        from transactagent_db.models import EmbeddingStatus, Transaction
+
+        txn = Transaction(**_base_transaction_kwargs(db_session, out_flow=Decimal("25.50"), in_flow=None))
+        db_session.add(txn)
+        db_session.flush()
+        db_session.refresh(txn)
+
+        assert txn.embedding_status == EmbeddingStatus.PENDING
+
+    def test_can_transition_to_completed(self, db_session):
+        from transactagent_db.models import EmbeddingStatus, Transaction
+
+        txn = Transaction(**_base_transaction_kwargs(db_session, out_flow=Decimal("25.50"), in_flow=None))
+        db_session.add(txn)
+        db_session.flush()
+
+        txn.embedding_status = EmbeddingStatus.COMPLETED
+        db_session.flush()
+        db_session.refresh(txn)
+
+        assert txn.embedding_status == EmbeddingStatus.COMPLETED
+
+
+class TestTransactionLlmSuggestedCategory:
+    """Matching Precision Refinement, BR-26: write-once, nullable -- null means the
+    always-on LLM classification step abstained (UNSURE) or its endpoint was
+    unreachable at ingestion time, never a sentinel row. Distinct from category_id
+    (the transaction's actual, currently-assigned category)."""
+
+    def test_defaults_to_null(self, db_session):
+        from transactagent_db.models import Transaction
+
+        txn = Transaction(**_base_transaction_kwargs(db_session, out_flow=Decimal("12.00"), in_flow=None))
+        db_session.add(txn)
+        db_session.flush()
+        db_session.refresh(txn)
+
+        assert txn.llm_suggested_category_id is None
+        assert txn.llm_suggested_category is None
+
+    def test_can_be_set_independently_of_category_id(self, db_session):
+        """The LLM's own classification (llm_suggested_category) and the transaction's
+        actual assigned category (category) are two distinct FKs to Category -- they
+        can legitimately point at different rows (that's precisely what a genuine
+        disagreement, FR-MPR-6, means)."""
+        from transactagent_db.models import Transaction
+
+        assigned_category = _make_category(db_session, name="Groceries")
+        llm_category = _make_category(db_session, name="Dining")
+
+        txn = Transaction(
+            **_base_transaction_kwargs(
+                db_session, out_flow=Decimal("12.00"), in_flow=None, category=assigned_category
+            )
+        )
+        db_session.add(txn)
+        db_session.flush()
+
+        txn.llm_suggested_category_id = llm_category.id
+        db_session.flush()
+        db_session.refresh(txn)
+        db_session.refresh(assigned_category)
+        db_session.refresh(llm_category)
+
+        assert txn.category_id == assigned_category.id
+        assert txn.llm_suggested_category_id == llm_category.id
+        assert txn.llm_suggested_category_id != txn.category_id
+        assert txn in assigned_category.transactions
+        assert txn in llm_category.llm_suggested_in_transactions
+
+
+class TestCategorizationDisagreement:
+    """Matching Precision Refinement. Deliberately a standalone entity, not an
+    extension of RecategorizationProposal -- see
+    aidlc-docs/inception/plans/matching-precision-refinement-application-design-plan.md
+    ("Key Design Resolution 1"). BR-27 (resolved_category_id must equal
+    similarity_category_id or llm_category_id) is application-layer enforced (Unit 2),
+    same precedent as BR-15/BR-16 on RecategorizationProposal -- not testable as a DB
+    constraint here, same reasoning as TestRecategorizationProposal's docstring.
+    """
+
+    def _make_unrelated_transaction(self, session, description="AMAZON SG"):
+        import uuid as uuid_module
+
+        from transactagent_db.models import Transaction
+
+        suffix = uuid_module.uuid4().hex
+        category = _make_category(session, name=f"Placeholder {suffix[:8]}")
+        statement = _make_bank_statement(session, pdf_content_hash=suffix.ljust(64, "0"))
+        txn = Transaction(
+            **_base_transaction_kwargs(
+                session,
+                description=description,
+                out_flow=Decimal("18.00"),
+                in_flow=None,
+                category=category,
+                bank_statement=statement,
+            )
+        )
+        session.add(txn)
+        session.flush()
+        return txn
+
+    def test_pending_disagreement_links_transaction_and_both_candidates(self, db_session):
+        txn = self._make_unrelated_transaction(db_session)
+        similarity_category = _make_category(db_session, name="Groceries")
+        llm_category = _make_category(db_session, name="Dining")
+
+        disagreement = CategorizationDisagreement(
+            transaction_id=txn.id,
+            similarity_category_id=similarity_category.id,
+            llm_category_id=llm_category.id,
+            similarity_score=Decimal("91.50"),
+            status=CategorizationDisagreementStatus.PENDING,
+        )
+        db_session.add(disagreement)
+        db_session.flush()
+        db_session.refresh(txn)
+        db_session.refresh(similarity_category)
+        db_session.refresh(llm_category)
+
+        assert disagreement.status == CategorizationDisagreementStatus.PENDING
+        assert disagreement.resolved_category_id is None
+        assert disagreement.resolved_at is None
+        assert disagreement in txn.categorization_disagreements
+        assert disagreement in similarity_category.similarity_in_categorization_disagreements
+        assert disagreement in llm_category.llm_in_categorization_disagreements
+
+    def test_resolved_disagreement_picks_one_of_the_two_candidates(self, db_session):
+        """FR-MPR-10/11: resolving means picking one of the two offered candidates --
+        here, the LLM's suggestion."""
+        txn = self._make_unrelated_transaction(db_session)
+        similarity_category = _make_category(db_session, name="Groceries")
+        llm_category = _make_category(db_session, name="Dining")
+
+        disagreement = CategorizationDisagreement(
+            transaction_id=txn.id,
+            similarity_category_id=similarity_category.id,
+            llm_category_id=llm_category.id,
+            similarity_score=Decimal("88.00"),
+            status=CategorizationDisagreementStatus.RESOLVED,
+            resolved_category_id=llm_category.id,
+        )
+        db_session.add(disagreement)
+        db_session.flush()
+        db_session.refresh(llm_category)
+
+        assert disagreement.resolved_category_id == llm_category.id
+        assert disagreement in llm_category.resolved_in_categorization_disagreements
+
+    def test_rejected_disagreement_is_valid(self, db_session):
+        """FR-RR-8-style no-memory policy: rejection leaves resolved_category_id null,
+        no suppression record kept."""
+        txn = self._make_unrelated_transaction(db_session)
+        similarity_category = _make_category(db_session, name="Groceries")
+        llm_category = _make_category(db_session, name="Dining")
+
+        disagreement = CategorizationDisagreement(
+            transaction_id=txn.id,
+            similarity_category_id=similarity_category.id,
+            llm_category_id=llm_category.id,
+            similarity_score=Decimal("82.00"),
+            status=CategorizationDisagreementStatus.REJECTED,
+        )
+        db_session.add(disagreement)
+        db_session.flush()  # should not raise
+
+        assert disagreement.resolved_category_id is None

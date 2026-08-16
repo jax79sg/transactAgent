@@ -112,6 +112,50 @@ class BackupRunFailureCategory(str, enum.Enum):
     OTHER = "other"
 
 
+class RecurringPaymentFrequency(str, enum.Enum):
+    """Epic 8 (Recurring Payments)."""
+
+    MONTHLY = "monthly"
+    ANNUAL = "annual"
+
+
+class RecurringPaymentMatchStatus(str, enum.Enum):
+    """Epic 8 — structurally the same shape as RecategorizationProposalStatus."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    AUTO_APPLIED = "auto_applied"
+
+
+class DetectionSuggestionStatus(str, enum.Enum):
+    """Epic 8 — status transitions on one persistent row per pattern (BR-22),
+    rather than a new row per re-scan; this is what makes FR-13's dismissal sticky."""
+
+    NEW = "new"
+    DISMISSED = "dismissed"
+    ADDED = "added"
+
+
+class EmbeddingStatus(str, enum.Enum):
+    """Epic 9 (Local Embedding-Based Semantic Similarity). One-way, two-state (BR-24)
+    -- no FAILED value; a transient failure just leaves a row PENDING for the next
+    poll cycle to retry (FR-10)."""
+
+    PENDING = "pending"
+    COMPLETED = "completed"
+
+
+class CategorizationDisagreementStatus(str, enum.Enum):
+    """Matching Precision Refinement. Unlike RecategorizationProposalStatus, there is no
+    AUTO_APPLIED value -- a genuine disagreement (FR-MPR-6's third bullet) is by
+    definition the case where the system deliberately does not pick a side."""
+
+    PENDING = "pending"
+    RESOLVED = "resolved"
+    REJECTED = "rejected"
+
+
 class User(Base):
     """Single-user login credential (FR-9.1/9.2, US-5.1)."""
 
@@ -140,9 +184,31 @@ class Category(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    transactions: Mapped[list["Transaction"]] = relationship(back_populates="category")
+    transactions: Mapped[list["Transaction"]] = relationship(
+        back_populates="category", foreign_keys="Transaction.category_id"
+    )
     proposed_in_recategorization_proposals: Mapped[list["RecategorizationProposal"]] = relationship(
         back_populates="proposed_category"
+    )
+    recurring_payments: Mapped[list["RecurringPayment"]] = relationship(back_populates="category")
+    suggested_in_detection_suggestions: Mapped[list["DetectionSuggestion"]] = relationship(
+        back_populates="suggested_category"
+    )
+    # Matching Precision Refinement: Transaction now carries a second FK to categories
+    # (llm_suggested_category_id, BR-26), and CategorizationDisagreement carries three
+    # (similarity/llm/resolved) -- each relationship below needs an explicit
+    # foreign_keys to disambiguate which FK it corresponds to.
+    llm_suggested_in_transactions: Mapped[list["Transaction"]] = relationship(
+        back_populates="llm_suggested_category", foreign_keys="Transaction.llm_suggested_category_id"
+    )
+    similarity_in_categorization_disagreements: Mapped[list["CategorizationDisagreement"]] = relationship(
+        back_populates="similarity_category", foreign_keys="CategorizationDisagreement.similarity_category_id"
+    )
+    llm_in_categorization_disagreements: Mapped[list["CategorizationDisagreement"]] = relationship(
+        back_populates="llm_category", foreign_keys="CategorizationDisagreement.llm_category_id"
+    )
+    resolved_in_categorization_disagreements: Mapped[list["CategorizationDisagreement"]] = relationship(
+        back_populates="resolved_category", foreign_keys="CategorizationDisagreement.resolved_category_id"
     )
 
 
@@ -206,13 +272,31 @@ class Transaction(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    embedding_status: Mapped[EmbeddingStatus] = mapped_column(
+        _enum_type(EmbeddingStatus), nullable=False, server_default=EmbeddingStatus.PENDING.value
+    )  # BR-24
+    # Matching Precision Refinement: write-once (BR-26), never updated after the
+    # transaction is first persisted -- a historical record of the always-on LLM
+    # classification step (FR-MPR-1), read back by the retroactive re-scan's
+    # score-boost logic (FR-MPR-7). Null means the LLM abstained (UNSURE) or its
+    # endpoint was unreachable at ingestion time -- never a sentinel row.
+    llm_suggested_category_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("categories.id"), nullable=True
+    )
 
     bank_statement: Mapped["BankStatement"] = relationship(back_populates="transactions")
-    category: Mapped["Category"] = relationship(back_populates="transactions")
+    category: Mapped["Category"] = relationship(back_populates="transactions", foreign_keys=[category_id])
+    llm_suggested_category: Mapped["Category | None"] = relationship(
+        back_populates="llm_suggested_in_transactions", foreign_keys=[llm_suggested_category_id]
+    )
     fx_rate_used: Mapped["FxRateCache | None"] = relationship(back_populates="transactions")
     recategorization_jobs: Mapped[list["RecategorizationJob"]] = relationship(back_populates="source_transaction")
     recategorization_proposals: Mapped[list["RecategorizationProposal"]] = relationship(
         back_populates="candidate_transaction"
+    )
+    recurring_payment_matches: Mapped[list["RecurringPaymentMatch"]] = relationship(back_populates="transaction")
+    categorization_disagreements: Mapped[list["CategorizationDisagreement"]] = relationship(
+        back_populates="transaction"
     )
 
 
@@ -381,6 +465,54 @@ class RecategorizationProposal(Base):
     proposed_category: Mapped["Category"] = relationship(back_populates="proposed_in_recategorization_proposals")
 
 
+class CategorizationDisagreement(Base):
+    """Matching Precision Refinement (added 2026-08-16) -- one row per genuine
+    categorization disagreement (FR-MPR-6's third bullet: similarity matching AND the
+    always-on LLM both confident, and they differ, FR-MPR-9). Deliberately a standalone
+    entity, not an extension of RecategorizationProposal -- that entity is tied to a
+    RecategorizationJob (a manual-correction event) which doesn't exist here, and
+    carries exactly one proposed category where this needs two. See
+    aidlc-docs/inception/plans/matching-precision-refinement-application-design-plan.md
+    ("Key Design Resolution 1") for the full reasoning.
+
+    BR-27 (resolved_category_id must equal similarity_category_id or llm_category_id)
+    is enforced at the application layer (Unit 2, Recategorization Review Component),
+    not as a standing SQL constraint -- same precedent as BR-15/BR-16 on
+    RecategorizationProposal.
+    """
+
+    __tablename__ = "categorization_disagreements"
+    __table_args__ = (
+        Index("ix_categorization_disagreements_transaction_id", "transaction_id"),
+        Index("ix_categorization_disagreements_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    transaction_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("transactions.id"), nullable=False)
+    similarity_category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("categories.id"), nullable=False)
+    llm_category_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("categories.id"), nullable=False)
+    similarity_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    status: Mapped[CategorizationDisagreementStatus] = mapped_column(
+        _enum_type(CategorizationDisagreementStatus),
+        nullable=False,
+        default=CategorizationDisagreementStatus.PENDING,
+    )
+    resolved_category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    transaction: Mapped["Transaction"] = relationship(back_populates="categorization_disagreements")
+    similarity_category: Mapped["Category"] = relationship(
+        back_populates="similarity_in_categorization_disagreements", foreign_keys=[similarity_category_id]
+    )
+    llm_category: Mapped["Category"] = relationship(
+        back_populates="llm_in_categorization_disagreements", foreign_keys=[llm_category_id]
+    )
+    resolved_category: Mapped["Category | None"] = relationship(
+        back_populates="resolved_in_categorization_disagreements", foreign_keys=[resolved_category_id]
+    )
+
+
 class BackupRun(Base):
     """Epic 7 (Nightly Transaction Backup, added 2026-08-08) — one row per nightly
     backup attempt, written once by the Ingestion Worker's Backup Manager at
@@ -416,6 +548,143 @@ class BackupRun(Base):
     )
     transaction_count: Mapped[int | None] = mapped_column(nullable=True)
     backup_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class RecurringPayment(Base):
+    """Epic 8 (Recurring Payments, added 2026-08-08) — the user-maintained register
+    of expected recurring payments (FR-1..3). `is_trusted` gates FR-7's tolerance-
+    based auto-apply and only ever transitions false -> true (never reverts) — set
+    when the first RecurringPaymentMatch for this payment is approved. See
+    aidlc-docs/construction/database/functional-design/ for full design history.
+
+    BR-19 (annual requires due_month, monthly must not have one) and BR-20 (due_day
+    1-31) are both standing CHECK constraints.
+    """
+
+    __tablename__ = "recurring_payments"
+    __table_args__ = (
+        CheckConstraint(
+            "(frequency = 'annual' AND due_month IS NOT NULL) OR "
+            "(frequency = 'monthly' AND due_month IS NULL)",
+            name="ck_recurring_payments_due_month_matches_frequency",
+        ),  # BR-19
+        CheckConstraint(
+            "due_day >= 1 AND due_day <= 31",
+            name="ck_recurring_payments_due_day_range",
+        ),  # BR-20
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    expected_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    frequency: Mapped[RecurringPaymentFrequency] = mapped_column(
+        _enum_type(RecurringPaymentFrequency), nullable=False
+    )
+    due_month: Mapped[int | None] = mapped_column(nullable=True)
+    due_day: Mapped[int] = mapped_column(nullable=False)
+    category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    is_trusted: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    # Epic 9 (Local Embedding-Based Semantic Similarity), added 2026-08-13 retroactively
+    # during Ingestion Worker Service Functional Design/Code Generation -- see BR-25.
+    # Unlike Transaction.embedding_status (BR-24), this field has two write paths: the
+    # API Service resets it to PENDING on create or on any name-changing update, since
+    # the Ingestion Worker's Embedding Manager is the only component that ever computes
+    # and stores embeddings (name change invalidates whatever's already stored).
+    embedding_status: Mapped[EmbeddingStatus] = mapped_column(
+        _enum_type(EmbeddingStatus), nullable=False, default=EmbeddingStatus.PENDING,
+        server_default=EmbeddingStatus.PENDING.value,
+    )
+
+    category: Mapped["Category | None"] = relationship(back_populates="recurring_payments")
+    matches: Mapped[list["RecurringPaymentMatch"]] = relationship(back_populates="recurring_payment")
+
+
+class RecurringPaymentMatch(Base):
+    """Epic 8 (added 2026-08-08) — one row per candidate match found by the
+    Ingestion Worker's Recurring Payment Manager (FR-5). Structurally the closest
+    sibling to RecategorizationProposal in this schema: `pending` resolves to
+    `approved`/`rejected` via user action, or is created directly as `auto_applied`
+    for a trusted payment within tolerance (FR-7). `cycle_period` (e.g. "2026-08"
+    for monthly, "2026" for annual) plays the role recategorization_job_id plays
+    there -- the grouping key BR-21's uniqueness rule uses.
+
+    BR-21 (at most one live match per recurring_payment_id + cycle_period) is
+    enforced by a raw-SQL partial unique index, applied via Alembic (same pattern
+    as BR-10/BR-14), not expressible through standard SQLAlchemy Table/Column
+    metadata. BR-23 (a match resolves out of pending exactly once) is enforced at
+    the application layer (Unit 2), matching BR-16's precedent.
+    """
+
+    __tablename__ = "recurring_payment_matches"
+    __table_args__ = (
+        Index("ix_recurring_payment_matches_recurring_payment_id", "recurring_payment_id"),
+        Index("ix_recurring_payment_matches_transaction_id", "transaction_id"),
+        Index("ix_recurring_payment_matches_status", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    recurring_payment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("recurring_payments.id"), nullable=False)
+    transaction_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("transactions.id"), nullable=False)
+    cycle_period: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[RecurringPaymentMatchStatus] = mapped_column(
+        _enum_type(RecurringPaymentMatchStatus), nullable=False, default=RecurringPaymentMatchStatus.PENDING
+    )
+    amount_at_match: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    recurring_payment: Mapped["RecurringPayment"] = relationship(back_populates="matches")
+    transaction: Mapped["Transaction"] = relationship(back_populates="recurring_payment_matches")
+
+
+class DetectionSuggestion(Base):
+    """Epic 8 (added 2026-08-08) — untracked recurring-charge suggestions from the
+    Recurring Payment Manager's periodic detection scan (FR-12). BR-22's unique
+    constraint on description_pattern is the entire mechanism behind FR-13's sticky
+    dismissal: one row exists per pattern for the database's lifetime, and its
+    status transitions rather than a new row being inserted on every re-scan.
+    """
+
+    __tablename__ = "detection_suggestions"
+    __table_args__ = (
+        UniqueConstraint("description_pattern", name="uq_detection_suggestions_description_pattern"),  # BR-22
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    description_pattern: Mapped[str] = mapped_column(String(255), nullable=False)
+    suggested_amount: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    suggested_category_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    occurrence_count: Mapped[int] = mapped_column(nullable=False)
+    status: Mapped[DetectionSuggestionStatus] = mapped_column(
+        _enum_type(DetectionSuggestionStatus), nullable=False, default=DetectionSuggestionStatus.NEW
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    suggested_category: Mapped["Category | None"] = relationship(back_populates="suggested_in_detection_suggestions")
+
+
+class DetectionScanRun(Base):
+    """Epic 8 (added 2026-08-08, retroactively during Ingestion Worker Code
+    Generation -- see aidlc-docs/audit.md) -- one row per completed detection scan
+    attempt (WR-19), the entity backing `isDetectionScanDueNow()`'s due-check
+    (`services.md`'s poll_once() addendum already assumed this shape existed;
+    Application/Functional Design left the backing entity unspecified). Write-once,
+    same reasoning as BackupRun: a scan is entirely synchronous within one poll
+    cycle, not a cross-service handoff, and has no failure-classification needs a
+    backup attempt has (FR-10/FR-11) -- if a scan errors, simply no row is written
+    and it remains due on the next poll cycle, which is harmless since scans are
+    read-only until they insert new DetectionSuggestion rows.
+    """
+
+    __tablename__ = "detection_scan_runs"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class OAuthCredential(Base):
