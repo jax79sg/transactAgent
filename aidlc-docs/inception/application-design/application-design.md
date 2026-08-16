@@ -134,3 +134,16 @@ No user stories this round (backend algorithm refinement — see `matching-preci
 | FR-MPR-12 | Categorization Engine, Recurring Payment Manager (scope boundary — no disagreement branch in the latter) |
 
 **Result (Matching Precision Refinement)**: Complete — no gaps, no new speculative components. All 12 functional requirements map to either an extended existing component or the new `CategorizationDisagreement` data shape (Shared Data Store, not a component).
+
+### Addendum (2026-08-16): Configurable Application Settings
+
+See `configurable-app-settings-application-design-plan.md` for the full reasoning (4 Key Design Resolutions + 1 Component Boundary Note). Traced to Epic 10's stories.
+
+| Story | Component(s) |
+|---|---|
+| US-10.1 | Configuration Component (extended: `listSettings`/`getSetting`/`updateSetting`), Frontend SPA (new "Application Settings" section) |
+| US-10.2 | Configuration Component (classification metadata on `listSettings`), Frontend SPA ("Advanced" sub-heading) |
+| US-10.3 | Configuration Component (`getRestartGuidance`, `isIngestionWorkerBusy` — Shared DB query, no new table), Frontend SPA (busy/idle indicator) |
+| US-10.4 | Configuration Component (`listSettingHistory`, writes `SettingChange`), Frontend SPA (history view) |
+
+**Result (Configurable Application Settings)**: Complete — no gaps, no new speculative components, no new Frontend component. All 4 stories map to the extended Configuration Component and the existing Frontend SPA convention. One genuinely new architectural element not attributable to any single component: the shared, file-backed override-settings channel between API Service and Ingestion Worker Service (Key Design Resolution 3) — a new kind of cross-service coordination, deliberately narrow in scope (config values only; busy/idle stays DB-based, Key Design Resolution 2) and forced by a real startup-ordering constraint, not a preference.

@@ -9,7 +9,7 @@
 | Transaction Management Component | Shared DB (transactions table); Ingestion Trigger & Status Component (to enqueue recategorize job) | In-process DB query; in-process method call (same service) |
 | Dashboard/Insights Component | Shared DB (transactions, fx-rate-cache tables) | In-process DB query |
 | Ingestion Trigger & Status Component | Shared DB (ingestion-runs/jobs table) | In-process DB query (writes `queued` rows; reads status rows) |
-| Configuration Component | Shared DB (categories table); validates against transactions table for in-use check | In-process DB query |
+| Configuration Component | Shared DB (categories table); validates against transactions table for in-use check; `setting_changes` table *(added 2026-08-16)*; read-only query of `ingestion_runs`/`recategorization_jobs` for busy/idle *(added 2026-08-16, no new table)*; shared override-settings volume, write side *(added 2026-08-16)* | In-process DB query; filesystem write (new volume, not a DB query) |
 | Recategorization Review Component *(added 2026-08-02, extended 2026-08-16)* | Shared DB (recategorization-proposals table; `categorization_disagreements` table *(added 2026-08-16)*; transactions table on approval/resolution) | In-process DB query — no dependency on Ingestion Worker Service |
 | Backup Status Component *(added 2026-08-08)* | Shared DB (`backup_runs` table) | In-process DB query — no dependency on Ingestion Worker Service |
 | Recurring Payments Component *(added 2026-08-08)* | Shared DB (recurring-payments register, match, and detection-suggestion tables; transactions table for match display context) | In-process DB query — no dependency on Ingestion Worker Service |
@@ -23,6 +23,7 @@
 | Currency Conversion Component | Shared DB (fx-rate-cache table); FX Rate API (external) | In-process DB query; REST (external) |
 | Vector Store Client Component *(added 2026-08-11)* | Vector DB (external, dedicated service — not the Shared DB) | REST/gRPC (external, product TBD at NFR Requirements) |
 | Embedding Manager Component *(added 2026-08-11)* | oMLX (external, user-managed local endpoint, config-supplied URL); Vector Store Client Component (same service); Shared DB (`transactions.embedding_status`) | REST (external); in-process method call; in-process DB query |
+| Configuration Loading *(both services, added 2026-08-16, Configurable Application Settings feature — cross-cutting, not a business-logic component)* | Shared override-settings volume, read side — both services' `Settings` classes read it via `env_file` at process start | Filesystem read at startup, not a DB query, not a call to the other service |
 
 ## Communication Patterns Summary
 
@@ -35,6 +36,7 @@
 - **Ingestion Worker Service ↔ Vector DB** *(added 2026-08-11)*: the new Vector Store Client Component only — a separate, dedicated datastore from the Shared DB. **API Service never connects to it** — holds the same "no direct access to a Worker-owned datastore" rule as `backup_runs`/proposals/recurring-payments tables (all of which the API Service reaches via its own Shared-DB connection, not by touching a Worker-internal store).
 - **Ingestion Worker Service ↔ oMLX** *(added 2026-08-11)*: the new Embedding Manager Component only, and only for the async/batched storage-time embedding computation (`processNextEmbeddingBatch`) — plus the Categorization Engine/Recurring Payment Manager's query-time transient embedding calls (both addended above), which also go through `EmbeddingManager.computeEmbedding()`, not a second, separate client. User-managed, host-native, config-pointed — not part of `docker-compose` (NFR-5).
 - **API Service ↔ Ingestion Worker Service** *(addendum, 2026-08-16)*: the extended Recategorization Review Component holds to the same "no direct call" rule for the new `categorization_disagreements` table too — it only reads/resolves rows the Worker's Categorization Engine already wrote, same as every other review-style component before it.
+- **API Service ↔ Ingestion Worker Service** *(addendum, 2026-08-16, Configurable Application Settings feature)*: a second, genuinely new coordination channel is introduced — a shared, non-secret override-settings file on a new Docker volume bind-mounted into both containers (Configuration Component writes; both services' `Settings` classes read via `env_file` at their own next startup). Still not a "direct call" in the sense this rule means — no RPC, no synchronous request/response, no availability coupling at write time — see `services.md`'s new "Cross-Service Coordination: Settings Override File" section for the full reasoning. Busy/idle status (FR-CAS-7) deliberately does **not** use this new channel — it's answered by a Shared DB query instead (Key Design Resolution 2), so the original DB-only coordination rule stays fully intact for that piece.
 
 ## Data Flow Diagram
 
@@ -71,6 +73,7 @@
           | - backup-runs             |
           | - recur-payments          |
           | - categ-disagreements     |
+          | - setting-changes         |
           +---------------------------+
                         ^
                         |
@@ -99,4 +102,31 @@
           +---------------------------+
 ```
 
-**Text validation**: All lines are ASCII-only (`+ - | v ^`), no unicode box-drawing characters; every box's border and content lines are a consistent width within that box (programmatically verified), consistent with `common/ascii-diagram-standards.md`. Re-verified after the 2026-08-08 Nightly Transaction Backup addenda (Backup Status, Backup Manager, backup-runs lines), again after the 2026-08-08 Recurring Payments addenda (Recur. Payments, Recur. Pmt Mgr, recur-payments lines), again after the 2026-08-11 Local Embedding-Based Semantic Similarity addenda (Embedding Mgr, Vector Store Client, oMLX, and the new Vector DB box — the Worker now branches to two downstream boxes instead of one, per `ascii-diagram-standards.md`'s Horizontal Flow pattern), and again after the 2026-08-16 Matching Precision Refinement addendum (`- categ-disagreements` line added to the Shared DB box; no new component box needed — `Transaction.llm_suggested_category_id` is a field addition, not a new box; every content line still 39 chars, matching every existing line in that box, verified programmatically above).
+**Text validation**: All lines are ASCII-only (`+ - | v ^`), no unicode box-drawing characters; every box's border and content lines are a consistent width within that box (programmatically verified), consistent with `common/ascii-diagram-standards.md`. Re-verified after the 2026-08-08 Nightly Transaction Backup addenda (Backup Status, Backup Manager, backup-runs lines), again after the 2026-08-08 Recurring Payments addenda (Recur. Payments, Recur. Pmt Mgr, recur-payments lines), again after the 2026-08-11 Local Embedding-Based Semantic Similarity addenda (Embedding Mgr, Vector Store Client, oMLX, and the new Vector DB box — the Worker now branches to two downstream boxes instead of one, per `ascii-diagram-standards.md`'s Horizontal Flow pattern), again after the 2026-08-16 Matching Precision Refinement addendum (`- categ-disagreements` line added to the Shared DB box; no new component box needed — `Transaction.llm_suggested_category_id` is a field addition, not a new box; every content line still 39 chars, matching every existing line in that box, verified programmatically above), and again after the 2026-08-16 Configurable Application Settings addendum (`- setting-changes` line added to the Shared DB box, still 39 chars; the genuinely new coordination channel is deliberately shown as its own small diagram below, not merged into this one, since two of its three participants — API Service and Ingestion Worker Svc — are already separated by the Shared DB box in this vertical layout, and forcing a diagonal/bypass arrow through an existing, already-verified diagram was judged higher-risk than a second, self-contained one).
+
+### Data Flow Diagram: Settings Override Channel *(new, 2026-08-16, Configurable Application Settings feature)*
+
+The genuinely new, non-DB coordination channel from `services.md`'s "Cross-Service Coordination: Settings Override File" section, shown separately from the main diagram above for the reason stated in that section's Text validation note:
+
+```
++-----------------------------+
+| API Service                 |
+| Configuration Component     |
++-----------------------------+
+              |
+              | write, updateSetting()
+              v
++-----------------------------+
+| Shared Config Volume (new)  |
+| - override-settings file    |
++-----------------------------+
+              ^
+              | read at own startup (env_file)
+              |
++-----------------------------+
+| Ingestion Worker Svc        |
+| Settings (config.py)        |
++-----------------------------+
+```
+
+**Text validation**: All lines ASCII-only; all 3 boxes are a consistent 31 characters wide (programmatically verified). Busy/idle status (FR-CAS-7) is intentionally absent from this diagram — it flows through the existing Shared DB (main diagram above), not this channel, per Key Design Resolution 2.

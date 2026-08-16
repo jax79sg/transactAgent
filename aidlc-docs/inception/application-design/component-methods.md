@@ -68,6 +68,13 @@ High-level method signatures per component. Types are conceptual (language-agnos
 - `addCategory(name) -> Category`
 - `renameCategory(categoryId, newName) -> Category` — cascades rename to existing transactions referencing it
 - `removeCategory(categoryId) -> Success | BlockedInUseError`
+- **Addendum (2026-08-16, Configurable Application Settings feature — see `configurable-app-settings-application-design-plan.md`)**:
+  - `listSettings() -> SettingDTO[]` — every in-scope setting's name, current effective value, owning service (`ingestion-worker`/`api-service`), classification (`standard`/`advanced`), and type/range metadata (FR-CAS-1/2/3). Only ever returns names on the static allow-list — never consults or enumerates anything outside it.
+  - `getSetting(name) -> SettingDTO | NotFoundError` — `NotFoundError` for any name not on the allow-list, including every excluded secret (NFR-CAS-2) — indistinguishable from a genuinely-unknown name, so no information about which names are "secret vs. just unknown" leaks through the error itself.
+  - `updateSetting(name, newValue) -> SettingChangeResult | ValidationError | NotFoundError` — validates `newValue` against the setting's real type/range (FR-CAS-8) before doing anything else; on success, writes to the shared override-settings file (never root `.env`, FR-CAS-4), records a `SettingChange` history row (FR-CAS-9), and returns the restart guidance (below) for the owning service. Nothing is written on validation failure.
+  - `getRestartGuidance(settingName) -> RestartGuidance` — owning service, the exact restart command, and (only when the owning service is `ingestion-worker`) a busy/idle read via `isIngestionWorkerBusy()` (Key Design Resolution 2). `api-service`-owned settings get no busy/idle field at all (US-10.3's third edge case) — not a `false`/`unknown` placeholder, the field is simply absent, since the concept doesn't apply there.
+  - `listSettingHistory() -> SettingChangeDTO[]` — every persisted `SettingChange` row, most recent first (FR-CAS-9, US-10.4).
+  - `isIngestionWorkerBusy() -> bool` — internal helper backing `getRestartGuidance`; a read-only Shared DB query for any `ingestion_runs`/`recategorization_jobs` row with `status = 'running'` (Key Design Resolution 2) — no call to the Ingestion Worker Service itself, no new table.
 
 ---
 

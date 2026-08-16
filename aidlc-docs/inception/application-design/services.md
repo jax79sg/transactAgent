@@ -14,6 +14,19 @@ Per Question 1 (separate services) and Question 2 (async background job), there 
 
 **Addendum (2026-08-08, Recurring Payments feature — Epic 8)**: The new **Recurring Payments Component** is a fourth, independent orchestration point. Register CRUD and match/suggestion *resolution* (approve/reject/dismiss/add-from-suggestion) are synchronous, direct DB writes from API Service — same precedent as Recategorization Review's approve/reject. Match/suggestion *creation* (deciding a transaction matches something, or that a pattern looks like an untracked subscription) stays exclusively on the Ingestion Worker Service side, via the mechanisms described in the Ingestion Worker Service section below — API Service never performs matching or detection itself.
 
+**Addendum (2026-08-16, Configurable Application Settings feature — see `configurable-app-settings-application-design-plan.md`)**: The extended **Configuration Component**'s `updateSetting()` is a fifth, independent orchestration point, with a strictly-ordered internal flow (no step runs if an earlier one fails):
+
+```
+updateSetting(name, newValue):
+  1. look up name on the static allow-list -> NotFoundError if absent (covers every excluded secret, by construction)
+  2. validate newValue against the setting's real type/range -> ValidationError if invalid; nothing written
+  3. write newValue to the shared override-settings file (never root .env)
+  4. record a SettingChange history row (previous value, new value, timestamp)
+  5. return getRestartGuidance(name) — owning service, exact command, busy/idle (Ingestion-Worker-owned settings only)
+```
+
+Steps 3-5 are synchronous, direct writes/reads within the same request (same precedent as Recategorization Review/Recurring Payments' approve/reject) — no job queue involved, since nothing here requires the Ingestion Worker Service to do anything *during* the request; it only ever reads the resulting file later, on its own restart.
+
 ## Service: Ingestion Worker Service
 
 **Responsibility**: All heavy/slow/external-integration work: Drive access, OCR, LLM-assisted extraction, categorization, FX conversion, and persisting the results. Runs asynchronously relative to any user-facing request (Question 2 = A).
@@ -105,6 +118,16 @@ Because the two services are separately deployable (Question 1 = B) but must coo
 4. On completion, Worker sets status to `completed` or `completed_with_failures`
 
 This keeps the two services decoupled: the API Service never blocks on or directly calls the Worker Service, and the Worker Service never needs to know anything about HTTP/the Frontend.
+
+## Cross-Service Coordination: Settings Override File *(added 2026-08-16, Configurable Application Settings feature)*
+
+A second, genuinely new coordination mechanism, alongside the Run/Job Queue above — not a replacement for it, and not used for anything the Run/Job Queue already handles. Forced by a real constraint (Key Design Resolution 3, `configurable-app-settings-application-design-plan.md`): both services' `Settings` objects are constructed once at process start, before any DB connection exists (their own fields include the DB connection parameters) — so a DB-backed override mechanism has a chicken-and-egg problem a file doesn't.
+
+1. API Service's Configuration Component validates and writes a changed setting's new value to a shared, non-secret override-settings file (on a new Docker volume bind-mounted into both containers — exact path is Infrastructure Design's job).
+2. Nothing happens automatically. The Account Owner runs the manual restart command `getRestartGuidance()` gave them (Resolved Decision 2 — no automation, no Docker socket, anywhere).
+3. On its next start, the restarted container's `Settings` class reads the override file via pydantic's `env_file` support, alongside its normal process-environment values.
+
+Not a "direct call" in the sense the Run/Job Queue section's rule means: no RPC, no synchronous request/response, no availability coupling between the two services at write time. One side writes a file; the other passively reads it, independently, whenever it next starts. Busy/idle status (FR-CAS-7) is deliberately **not** part of this channel — see Key Design Resolution 2: it's answered by a Shared DB query instead, keeping the original "coordinate only through the DB" rule fully intact for that piece.
 
 ## Data Flow Summary
 
