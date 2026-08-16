@@ -132,3 +132,78 @@ EMBEDDING_TOP_K=5
 EMBEDDING_BATCH_SIZE=50
 EMBEDDING_DIMENSIONS=768
 ```
+
+---
+
+## Addendum (2026-08-16, Configurable Application Settings feature)
+
+Tracked here per the approved execution plan (`configurable-app-settings-execution-plan.md`) — this feature's Infrastructure Design work is scoped to the Ingestion Worker Service unit, but covers `docker-compose.yml` holistically since it touches both `api-service` and `ingestion-worker`'s service blocks together (the new volume is shared by both).
+
+### New Shared Volume: `settings-override`
+
+A new, small, named Docker volume — not a bind mount (unlike `./data/postgres`/`./data/qdrant`) — bind-mounted at the same container path in both `api-service` and `ingestion-worker`:
+
+```yaml
+volumes:
+  settings-override:
+```
+
+```yaml
+  api-service:
+    # ...existing config unchanged...
+    volumes:
+      - settings-override:/config/overrides
+  ingestion-worker:
+    # ...existing config unchanged...
+    volumes:
+      - settings-override:/config/overrides
+```
+
+**Notes**:
+- **Named volume, not a bind mount**: unlike `./data/postgres`/`./data/qdrant` (deliberately bind-mounted so the user can inspect/back up real financial data directly), the override file holds only non-secret application tuning values with no standalone value to the user outside the running app — a named volume keeps it out of the project directory entirely, avoiding any risk of it being accidentally committed or confused with `.env` (both plaintext files, easy to mix up if co-located on the host filesystem).
+- **`/config/overrides` is a directory, not a single file path**: the Configuration Component (API Service) writes one file inside it (exact filename is a Code Generation detail, e.g. `settings.env`); mounting the parent directory rather than a single file avoids Docker's bind-mount-of-a-nonexistent-file edge cases on first-ever startup (a named volume mounted as a directory is always creatable; a named volume mounted as a single nonexistent file path is not, without extra setup).
+- **No `depends_on` implication**: this is passive shared state, not a service — neither container needs the other running to read or write it (consistent with `services.md`'s "not a direct call" framing).
+
+### Closing the Pre-Existing Env-Mapping Gap
+
+Per `configurable-app-settings-requirements.md`'s "Current Behavior" section, `ingestion-worker`'s `environment:` block was missing mappings for several settings that already existed in `config.py`/`.env.example`. FR-CAS-5 requires this closed for every one of the 35 settings this feature exposes (regardless of the override-file mechanism, WR-33, which layers on top and needs no compose change of its own — see that WR's own note that it doesn't depend on this gap being closed). The following are added to `ingestion-worker`'s `environment:` block (previously absent entirely):
+
+```yaml
+      SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-85.0}
+      SIMILARITY_AMOUNT_RATIO_TOLERANCE: ${SIMILARITY_AMOUNT_RATIO_TOLERANCE:-4.0}
+      SIMILARITY_AMOUNT_ABSOLUTE_FLOOR: ${SIMILARITY_AMOUNT_ABSOLUTE_FLOOR:-5.0}
+      RECATEGORIZATION_AUTO_APPLY_THRESHOLD: ${RECATEGORIZATION_AUTO_APPLY_THRESHOLD:-97.0}
+      EXTRACTION_CONFIDENCE_THRESHOLD: ${EXTRACTION_CONFIDENCE_THRESHOLD:-medium}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-5.0}
+      RETRY_MAX_ATTEMPTS: ${RETRY_MAX_ATTEMPTS:-3}
+      RETRY_BACKOFF_BASE_SECONDS: ${RETRY_BACKOFF_BASE_SECONDS:-2.0}
+      REPORTING_CURRENCY: ${REPORTING_CURRENCY:-SGD}
+      RECURRING_PAYMENT_MATCH_WINDOW_DAYS: ${RECURRING_PAYMENT_MATCH_WINDOW_DAYS:-5}
+      RECURRING_PAYMENT_TRUSTED_AMOUNT_RATIO_TOLERANCE: ${RECURRING_PAYMENT_TRUSTED_AMOUNT_RATIO_TOLERANCE:-1.15}
+      RECURRING_PAYMENT_TRUSTED_AMOUNT_ABSOLUTE_FLOOR: ${RECURRING_PAYMENT_TRUSTED_AMOUNT_ABSOLUTE_FLOOR:-5.0}
+      RECURRING_PAYMENT_DETECTION_SCAN_INTERVAL_HOURS: ${RECURRING_PAYMENT_DETECTION_SCAN_INTERVAL_HOURS:-24}
+      RECURRING_PAYMENT_DETECTION_MIN_OCCURRENCES: ${RECURRING_PAYMENT_DETECTION_MIN_OCCURRENCES:-2}
+      RECURRING_PAYMENT_DETECTION_CADENCE_MIN_DAYS: ${RECURRING_PAYMENT_DETECTION_CADENCE_MIN_DAYS:-25}
+      RECURRING_PAYMENT_DETECTION_CADENCE_MAX_DAYS: ${RECURRING_PAYMENT_DETECTION_CADENCE_MAX_DAYS:-35}
+      LLM_CLASSIFICATION_BATCH_SIZE: ${LLM_CLASSIFICATION_BATCH_SIZE:-10}
+      LLM_CLASSIFICATION_CONCURRENCY: ${LLM_CLASSIFICATION_CONCURRENCY:-5}
+      EMBEDDING_PRICE_BUCKET_BOUNDARIES: ${EMBEDDING_PRICE_BUCKET_BOUNDARIES:-1,5,10,20,50,100,200,500,1000,2000,5000}
+      EMBEDDING_LLM_AGREEMENT_BOOST: ${EMBEDDING_LLM_AGREEMENT_BOOST:-0.05}
+      BACKUP_SCHEDULE_HOUR: ${BACKUP_SCHEDULE_HOUR:-2}
+      BACKUP_RETENTION_COUNT: ${BACKUP_RETENTION_COUNT:-7}
+```
+
+And on `api-service`'s `environment:` block:
+
+```yaml
+      JWT_EXPIRY_MINUTES: ${JWT_EXPIRY_MINUTES:-1440}
+      DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-50}
+      MAX_PAGE_SIZE: ${MAX_PAGE_SIZE:-200}
+      CSV_EXPORT_MAX_ROWS: ${CSV_EXPORT_MAX_ROWS:-50000}
+      RECURRING_PAYMENT_DUE_SOON_LEAD_DAYS: ${RECURRING_PAYMENT_DUE_SOON_LEAD_DAYS:-5}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:7878/drive/callback}
+```
+
+(`GOOGLE_OAUTH_REDIRECT_URI` was already mapped on `api-service` before this feature — listed here only because it's one of the 35 in-scope settings, for completeness; no change to its existing line.) `QDRANT_HOST`/`QDRANT_PORT` are already mapped (Epic 9) and stay as-is — both are in-scope (Advanced) but already correctly flowing today. `EMBEDDING_API_KEY` stays excluded (secret) and unmapped-by-this-feature, consistent with NFR-CAS-2 — it is never added to any allow-list the Configuration Component consults.
+
+**Rationale for using the exact same `${VAR:-default}` compose pattern as every existing mapping, not something new**: WR-33's `settings_customise_sources()` mechanism gives the override file unconditional priority regardless of what process env supplies — so closing this gap the ordinary way (matching every other existing mapping in this file) is sufficient; no special-casing needed here to make the override mechanism work, keeping this change a plain, easily-reviewable diff.
