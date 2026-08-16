@@ -12,6 +12,8 @@ class SettingDTO(CamelModel):
     is_overridden: bool
     owning_services: list[str]
     classification: str
+    category: str
+    description: str
     type: str
     min: float | None = None
     max: float | None = None

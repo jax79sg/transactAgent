@@ -164,22 +164,20 @@ function CategoryManagement() {
   );
 }
 
-// Configurable Application Settings: not sent by the API (presentation-only content)
-// -- the specific, per-setting consequence of getting an Advanced value wrong,
-// matching the exact wording already documented in AR-28/the requirements doc's
-// Advanced table, per US-10.2's "specific, not generic" requirement.
-const ADVANCED_RISK_NOTES: Record<string, string> = {
-  embedding_base_url: "A wrong value here disables embedding matching with no error shown.",
-  embedding_model: "Must match the actual model serving embedding_base_url, or matching breaks silently.",
-  embedding_dimensions: "Must match the embedding model's real output size, or the vector store breaks.",
-  openrouter_base_url: "Must point at a real OpenAI-compatible endpoint, or categorization falls back to UNSURE.",
-  openrouter_model: "Must be a model your endpoint actually serves.",
-  gemini_model: "Shared by both services -- a wrong value affects statement extraction and Ask AI together.",
-  frontend_origin: "A wrong value can lock this app's own UI out of the API via CORS.",
-  google_oauth_redirect_uri: "Must exactly match the URI registered in Google's OAuth console, or Drive connect breaks.",
-  qdrant_host: "Internal docker-network address -- rarely needs changing in a single-compose deployment.",
-  qdrant_port: "Internal docker-network port -- rarely needs changing in a single-compose deployment.",
-};
+// Configurable Application Settings: display order for the category groups the API
+// returns per-setting (SettingDTO.category) -- matches .env.example's own section
+// ordering (Matching -> Embedding -> Recurring Payments -> Backup -> Ingestion ->
+// API & Access -> Ask AI) so the grouping here reads the same way .env.example does,
+// per user feedback that .env's own organization should be properly referenced.
+const CATEGORY_ORDER = [
+  "Matching & Categorization",
+  "Embedding & Semantic Matching",
+  "Recurring Payments",
+  "Backup",
+  "Ingestion",
+  "API & Access",
+  "Ask AI",
+];
 
 // Deliberately looser than IngestionPage's 3s active-run poll, but tighter than
 // NavBar's 30s ambient badge poll -- the user just saved a setting and is actively
@@ -304,15 +302,18 @@ function SettingRow({ setting }: { setting: SettingDTO }) {
     },
   });
 
-  const riskNote = setting.classification === "advanced" ? ADVANCED_RISK_NOTES[setting.name] : undefined;
-
   return (
     <li className="border-b border-slate-100 py-2" data-testid={`setting-row-${setting.name}`}>
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <span className="font-mono text-sm">{setting.name}</span>
           {setting.isOverridden && <span className="ml-2 text-xs text-slate-400">(customized)</span>}
-          {riskNote && <p className="mt-1 text-xs text-amber-700">{riskNote}</p>}
+          {/* Sourced from the API's own SettingDTO.description (catalog.py), which
+              mirrors .env.example's per-setting explanatory comments -- not
+              hardcoded here, so it can never drift from the real reasoning. */}
+          <p className={`mt-1 text-xs ${setting.classification === "advanced" ? "text-amber-700" : "text-slate-500"}`}>
+            {setting.description}
+          </p>
         </div>
         {!editing && (
           <>
@@ -400,30 +401,42 @@ function SettingHistoryList() {
 function ApplicationSettingsSection() {
   const { data: settings } = useQuery({ queryKey: ["settings", "list"], queryFn: listSettings });
 
-  const standard = settings?.filter((s) => s.classification === "standard") ?? [];
-  const advanced = settings?.filter((s) => s.classification === "advanced") ?? [];
+  // Grouped by SettingDTO.category (server-side, matching .env.example's own
+  // section organization), in CATEGORY_ORDER -- any category not in that list
+  // (shouldn't happen, but doesn't crash if catalog.py adds one later) is appended
+  // at the end rather than silently dropped.
+  const byCategory = new Map<string, SettingDTO[]>();
+  for (const setting of settings ?? []) {
+    const list = byCategory.get(setting.category) ?? [];
+    list.push(setting);
+    byCategory.set(setting.category, list);
+  }
+  const orderedCategories = [
+    ...CATEGORY_ORDER.filter((c) => byCategory.has(c)),
+    ...[...byCategory.keys()].filter((c) => !CATEGORY_ORDER.includes(c)),
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="rounded border border-slate-200 p-4">
-        <h2 className="mb-2 font-medium">Application Settings</h2>
-        <ul>
-          {standard.map((setting) => (
-            <SettingRow key={setting.name} setting={setting} />
-          ))}
-        </ul>
-      </div>
-      <div className="rounded border border-amber-300 bg-amber-50 p-4">
-        <h2 className="mb-1 font-medium">Advanced</h2>
-        <p className="mb-2 text-sm text-amber-800">
-          These settings are safe to expose but easy to break something with. Read each note before changing one.
-        </p>
-        <ul>
-          {advanced.map((setting) => (
-            <SettingRow key={setting.name} setting={setting} />
-          ))}
-        </ul>
-      </div>
+      <h2 className="font-medium">Application Settings</h2>
+      {orderedCategories.map((category) => {
+        const items = byCategory.get(category) ?? [];
+        const hasAdvanced = items.some((s) => s.classification === "advanced");
+        return (
+          <div
+            key={category}
+            className={`rounded border p-4 ${hasAdvanced ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}
+            data-testid={`setting-category-${category}`}
+          >
+            <h3 className="mb-2 text-sm font-semibold">{category}</h3>
+            <ul>
+              {items.map((setting) => (
+                <SettingRow key={setting.name} setting={setting} />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
       <SettingHistoryList />
     </div>
   );

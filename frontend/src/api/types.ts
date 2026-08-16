@@ -357,6 +357,8 @@ export interface SettingDTO {
   isOverridden: boolean;
   owningServices: SettingOwningServiceValue[];
   classification: SettingClassification;
+  category: string;
+  description: string;
   type: SettingType;
   min?: number;
   max?: number;

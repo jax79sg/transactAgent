@@ -19,6 +19,8 @@ const SIMILARITY_THRESHOLD_SETTING: SettingDTO = {
   isOverridden: false,
   owningServices: ["ingestion-worker"],
   classification: "standard",
+  category: "Matching & Categorization",
+  description: "Fuzzy-text match score (0-100) a candidate transaction must reach to be treated as the same payee during categorization.",
   type: "float",
   min: 0,
   max: 100,
@@ -30,6 +32,8 @@ const EMBEDDING_BASE_URL_SETTING: SettingDTO = {
   isOverridden: false,
   owningServices: ["ingestion-worker"],
   classification: "advanced",
+  category: "Embedding & Semantic Matching",
+  description: "A wrong value here disables embedding matching with no error shown.",
   type: "string",
 };
 
@@ -85,7 +89,7 @@ describe("SettingsPage Application Settings section", () => {
     vi.restoreAllMocks();
   });
 
-  it("groups settings into Standard and Advanced sections", async () => {
+  it("groups settings by category, matching .env.example's own organization", async () => {
     vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
     renderSettingsPage();
 
@@ -93,8 +97,10 @@ describe("SettingsPage Application Settings section", () => {
       expect(screen.getByTestId("setting-row-similarity_threshold")).toBeInTheDocument();
     });
     expect(screen.getByTestId("setting-row-embedding_base_url")).toBeInTheDocument();
-    expect(screen.getByText("Advanced")).toBeInTheDocument();
-    // The Advanced setting's specific risk note is shown, not a generic warning.
+    expect(screen.getByTestId("setting-category-Matching & Categorization")).toBeInTheDocument();
+    expect(screen.getByTestId("setting-category-Embedding & Semantic Matching")).toBeInTheDocument();
+    // The Advanced setting's real, specific description (from the API, not a
+    // hardcoded frontend copy) is shown, not a generic warning.
     expect(screen.getByText(/disables embedding matching with no error shown/)).toBeInTheDocument();
   });
 

@@ -99,7 +99,7 @@ The existing pending-count endpoint (US-6.6's nav badge) now returns the sum of 
 Unlike proposals, disagreements have no bulk resolve/reject endpoint — resolving one always means a specific, individual choice between two different categories, which has no sensible bulk default (Application Design Decision 2). Bulk reject would be defensible on its own, but is deliberately not added either, to keep the action set symmetric and avoid a resolve/reject asymmetry that would need its own explanation in the UI. **Traces to**: FR-MPR-10.
 
 ## AR-28: The Settings Allow-List Is the Sole Source of Truth for What's Writable (added 2026-08-16 — Configurable Application Settings)
-`listSettings`/`getSetting`/`updateSetting` all consult one static, code-owned allow-list (not the database, not user input) of exactly 35 entries — this table is the actual enforcement mechanism behind NFR-CAS-2 (Application Design's "Component Boundary Note"): a name not on this list simply has no code path to a value, secret or otherwise. Type/range constraints below are enforced by `updateSetting` (FR-CAS-8) before any write.
+`listSettings`/`getSetting`/`updateSetting` all consult one static, code-owned allow-list (not the database, not user input) of exactly 41 entries (corrected from 35, then 40 — see `configurable-app-settings-requirements.md`'s two "Post-Approval Change" sections) — this table is the actual enforcement mechanism behind NFR-CAS-2 (Application Design's "Component Boundary Note"): a name not on this list simply has no code path to a value, secret or otherwise. Type/range constraints below are enforced by `updateSetting` (FR-CAS-8) before any write. Each entry also carries a `category` (groups settings the same way `.env.example`'s own section comments do, e.g. "Matching & Categorization", "Embedding & Semantic Matching") and a `description` (the exact reasoning already documented in `.env.example`/`config.py`'s explanatory comments, not a generic label) — both added after Build and Test user feedback that the original version exposed neither. Omitted from the table below for brevity; see `app_settings/catalog.py` for the authoritative text of both per setting.
 
 | Setting | Owning Service | Class | Type | Constraint |
 |---|---|---|---|---|
@@ -143,8 +143,14 @@ Unlike proposals, disagreements have no bulk resolve/reject endpoint — resolvi
 | `recurring_payment_due_soon_lead_days` | api-service | standard | int | ≥ 0 |
 | `frontend_origin` | api-service | advanced | string | comma-separated, each entry a well-formed `http(s)://` origin |
 | `google_oauth_redirect_uri` | api-service | advanced | string | well-formed `http(s)://` URL |
+| `ai_assistant_max_transactions` | api-service | standard | int | ≥ 1 |
+
+**Correction (2026-08-16, found after Build and Test user feedback)**: `ai_assistant_max_transactions` was present in the original Requirements "Expose" list (FR-CAS-1's source table) but was missing from both this table and `catalog.py` — a real omission, not a duplicate of the earlier 35→40 count correction. Added above; true count is 41.
 
 **Traces to**: FR-CAS-1, FR-CAS-2, FR-CAS-8, NFR-CAS-2, NFR-CAS-4.
+
+## AR-34: A Never-Overridden Setting's Displayed Value Reads the Live Settings Object, Not a Hardcoded Default (added 2026-08-16 — Configurable Application Settings, found after Build and Test user feedback)
+The original version of `_effective_value_str` (`service.py`) fell back to `catalog.py`'s hardcoded `default` field for any setting with no override-file entry — live-verified as wrong: a real deployment's `.env`-configured `OPENROUTER_MODEL` (e.g. a specific local model name) was reported as the catalog's stock default instead. Fixed by reading the already-constructed `config.settings` object first: `api-service`'s own `Settings` class gained a "display-only mirror" of every Ingestion-Worker-owned field (same names, same defaults), fed the identical `docker-compose.yml` environment entries Ingestion Worker itself receives (Infrastructure Design addendum) — so both services' `Settings` objects resolve to the same value by construction, via the same already-tested `settings_customise_sources()` precedence (WR-33/AR-32), without `api-service` ever calling `ingestion-worker` directly. `catalog.py`'s `default` field is now only a last-resort fallback if the live attribute is somehow missing (should never happen). **Traces to**: FR-CAS-3.
 
 ## AR-29: Two Cross-Field Constraints Are Checked Against the Setting's Sibling, Not Just Its Own Type (added 2026-08-16 — Configurable Application Settings)
 Two of AR-28's entries can't be validated by looking at the new value alone:

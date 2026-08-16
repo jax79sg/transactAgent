@@ -6,6 +6,7 @@ through AR-33 (business-logic-model.md / business-rules.md).
 from dotenv import dotenv_values, set_key
 from sqlalchemy.orm import Session
 
+from api_service import config
 from api_service.app_settings import repository
 from api_service.app_settings.catalog import SETTINGS_BY_NAME, SettingSpec
 from api_service.app_settings.validation import check_cross_field, parse_and_validate
@@ -28,11 +29,24 @@ def _override_values() -> dict[str, str | None]:
 
 
 def _effective_value_str(spec: SettingSpec, overrides: dict[str, str | None]) -> tuple[str, bool]:
-    """Returns (value_as_string, is_overridden)."""
+    """Returns (value_as_string, is_overridden).
+
+    Fallback (not overridden) reads the LIVE `config.settings` object, not
+    `spec.default` -- fixed after Build and Test user feedback found the original
+    version reporting a stale hardcoded default (e.g. `openrouter_model` shown as
+    "openrouter/free" when the real deployment's `.env` had it set to
+    "gemma-4-26b-a4b-it-4bit"). `config.settings` already reflects whatever
+    docker-compose/.env actually supplied at container startup for every one of the
+    41 settings (api-service's own fields directly; every Ingestion-Worker-owned
+    field via config.py's "Display-only mirror" block, fed the identical env vars
+    Ingestion Worker itself gets) -- `spec.default` is used only if the attribute is
+    somehow missing (should never happen; both are populated from the same source).
+    """
     raw = overrides.get(_ENV_KEY(spec.name))
     if raw is not None:
         return raw, True
-    return str(spec.default), False
+    live_value = getattr(config.settings, spec.name, spec.default)
+    return str(live_value), False
 
 
 def _to_dto_dict(spec: SettingSpec, overrides: dict[str, str | None]) -> dict:
@@ -43,6 +57,8 @@ def _to_dto_dict(spec: SettingSpec, overrides: dict[str, str | None]) -> dict:
         "is_overridden": is_overridden,
         "owning_services": [s.value for s in spec.owning_services],
         "classification": spec.classification,
+        "category": spec.category,
+        "description": spec.description,
         "type": spec.type,
         "min": spec.min,
         "max": spec.max,

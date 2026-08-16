@@ -3,24 +3,47 @@ class TestListSettingsApi:
         response = client.get("/settings")
         assert response.status_code == 401
 
-    def test_returns_all_40_settings(self, client, auth_headers, settings_override_path):
+    def test_returns_all_41_settings(self, client, auth_headers, settings_override_path):
         response = client.get("/settings", headers=auth_headers)
         assert response.status_code == 200
         body = response.json()
-        assert len(body) == 40
+        assert len(body) == 41
         names = {s["name"] for s in body}
         assert "similarity_threshold" in names
         assert "embedding_similarity_threshold" in names
+        assert "ai_assistant_max_transactions" in names
         # Never reachable, under any name -- NFR-CAS-2.
         assert "db_password" not in names
         assert "jwt_secret" not in names
         assert "gemini_api_key" not in names
+
+    def test_every_row_has_a_category_and_description(self, client, auth_headers, settings_override_path):
+        response = client.get("/settings", headers=auth_headers)
+        for row in response.json():
+            assert row["category"], row["name"]
+            assert row["description"], row["name"]
 
     def test_never_overridden_setting_reports_default_value(self, client, auth_headers, settings_override_path):
         response = client.get("/settings", headers=auth_headers)
         row = next(s for s in response.json() if s["name"] == "similarity_threshold")
         assert row["value"] == "85.0"
         assert row["isOverridden"] is False
+
+    def test_never_overridden_worker_owned_setting_reflects_real_deployed_env_not_hardcoded_default(
+        self, client, auth_headers, settings_override_path, monkeypatch
+    ):
+        """Regression coverage for the real bug found in live Build and Test: a
+        deployment's real .env-configured value (e.g. OPENROUTER_MODEL set to a
+        specific local model) was reported as the catalog's hardcoded default
+        instead. `config.settings` -- fed the identical docker-compose env var as
+        Ingestion Worker itself -- must be what's actually read."""
+        import api_service.config as config_module
+
+        monkeypatch.setattr(config_module.settings, "openrouter_model", "gemma-4-26b-a4b-it-4bit")
+
+        response = client.get("/settings/openrouter_model", headers=auth_headers)
+        assert response.json()["value"] == "gemma-4-26b-a4b-it-4bit"
+        assert response.json()["isOverridden"] is False
 
 
 class TestGetSettingApi:
