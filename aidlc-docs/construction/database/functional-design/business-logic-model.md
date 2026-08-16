@@ -176,6 +176,10 @@ pending --[Embedding Manager successfully computes + persists the embedding]--> 
 - Feeds the same `processNextEmbeddingBatch()` poll-cycle handler as `Transaction` rows (Unit 3) — a single mechanism drains both entity types' `pending` backlog, per the Application Design's "one unified mechanism" principle and the Functional Design's Question 1 resolution (Option A).
 - Unlike every other lifecycle field on `Transaction` (e.g. `category_source`), this one is purely a processing-status indicator — it carries no semantic claim about the transaction's category, confidence, or whether a similar past transaction exists (FR-7, US-9.1).
 
+## Non-Lifecycle Note: SettingChange (added 2026-08-16 — Configurable Application Settings)
+
+Unlike every entity above, `SettingChange` has no state machine or lifecycle diagram — it carries no `status` field and no row ever transitions between states. Each row is written once, at `updateSetting()` time, and never touched again (BR-28). The only "lifecycle" that exists is at the *collection* level: the table grows by insertion only, one row per successful setting change, read back in `listSettingHistory()` (FR-CAS-9) most-recent-first. This is a deliberate design choice (Application Design's Key Design Resolution 4), not an oversight — an audit-log-shaped entity with a status field to transition would have no meaning here.
+
 ## Cross-Entity Rule: Statement Processing Idempotency
 
 Given the same PDF bytes (same `pdf_content_hash`), processing MUST be idempotent at the `BankStatement`/`Transaction` level: a second ingestion run encountering that hash creates an `IngestionRunFile` with `outcome = 'skipped_duplicate'` and inserts **zero** new `Transaction` rows (BR-3, FR-3.2). This is the schema-level guarantee that makes FR-1.4/US-1.4 safe to re-trigger repeatedly.

@@ -33,6 +33,8 @@ from transactagent_db.models import (
     RecurringPaymentFrequency,
     RecurringPaymentMatch,
     RecurringPaymentMatchStatus,
+    SettingChange,
+    SettingOwningService,
 )
 
 
@@ -1090,3 +1092,84 @@ class TestCategorizationDisagreement:
         db_session.flush()  # should not raise
 
         assert disagreement.resolved_category_id is None
+
+
+class TestSettingChange:
+    """Configurable Application Settings (added 2026-08-16), BR-28/BR-29:
+    standalone, append-only audit log -- no FK to any other entity, no DB-level
+    allow-list (owned by the application layer, Unit 2's Configuration Component)."""
+
+    def test_first_ever_change_has_null_previous_value(self, db_session):
+        """A setting's first-ever recorded change has no prior SettingChange row to
+        read a previous_value from -- null is the correct representation, not an
+        empty string or the built-in default re-serialized."""
+        change = SettingChange(
+            setting_name="similarity_threshold",
+            owning_service=SettingOwningService.INGESTION_WORKER,
+            previous_value=None,
+            new_value="90.0",
+        )
+        db_session.add(change)
+        db_session.flush()  # should not raise
+
+        assert change.previous_value is None
+        assert change.new_value == "90.0"
+        assert change.changed_at is not None
+
+    def test_subsequent_change_records_previous_value(self, db_session):
+        change = SettingChange(
+            setting_name="poll_interval_seconds",
+            owning_service=SettingOwningService.INGESTION_WORKER,
+            previous_value="5.0",
+            new_value="10.0",
+        )
+        db_session.add(change)
+        db_session.flush()  # should not raise
+
+        assert change.previous_value == "5.0"
+        assert change.new_value == "10.0"
+
+    def test_api_service_owned_setting_is_valid(self, db_session):
+        change = SettingChange(
+            setting_name="jwt_expiry_minutes",
+            owning_service=SettingOwningService.API_SERVICE,
+            previous_value="1440",
+            new_value="720",
+        )
+        db_session.add(change)
+        db_session.flush()  # should not raise
+
+        assert change.owning_service == SettingOwningService.API_SERVICE
+
+    def test_missing_new_value_is_rejected(self, db_session):
+        change = SettingChange(
+            setting_name="similarity_threshold",
+            owning_service=SettingOwningService.INGESTION_WORKER,
+            previous_value="85.0",
+            new_value=None,
+        )
+        db_session.add(change)
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_repeated_changes_to_same_setting_all_coexist(self, db_session):
+        """BR-28/BR-29: no DB-level uniqueness or allow-list constraint -- every
+        change is its own row, and the same setting_name may appear any number of
+        times (that's the entire point of an append-only history)."""
+        db_session.add(
+            SettingChange(
+                setting_name="similarity_threshold",
+                owning_service=SettingOwningService.INGESTION_WORKER,
+                previous_value="85.0",
+                new_value="90.0",
+            )
+        )
+        db_session.add(
+            SettingChange(
+                setting_name="similarity_threshold",
+                owning_service=SettingOwningService.INGESTION_WORKER,
+                previous_value="90.0",
+                new_value="88.0",
+            )
+        )
+        db_session.flush()  # should not raise -- two rows, same setting_name, both valid

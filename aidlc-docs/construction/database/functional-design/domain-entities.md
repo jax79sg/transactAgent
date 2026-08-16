@@ -128,6 +128,16 @@ Technology-agnostic domain model. Exact column types/engine choice (PostgreSQL, 
 
 **Purpose**: Records a genuine categorization disagreement (FR-MPR-6's third bullet: both similarity matching and the always-on LLM produce a category, and they differ, FR-MPR-9) — a case today's schema has no room for, since `RecategorizationProposal` assumes exactly one proposed category and a triggering `RecategorizationJob`, neither of which exists here (there is no manual correction that triggered this; it arises directly during ingestion-time `categorize()`). Deliberately a standalone entity rather than an extension of `RecategorizationProposal` — see the Application Design plan doc's "Key Design Resolution 1" for the full reasoning. Written by the Ingestion Worker's Categorization Engine; read and resolved by the API Service's Recategorization Review Component (extended, not duplicated) via pick-one-or-reject, surfaced on the existing Review page alongside (but visually distinct from) the existing `ProposalTable` rows.
 
+## Entity: SettingChange (added 2026-08-16 — Configurable Application Settings)
+- `id` (PK)
+- `setting_name` (string) — e.g. `similarity_threshold`; not a DB-level enum/FK, see BR-29
+- `owning_service` (enum: `ingestion-worker` | `api-service`)
+- `previous_value` (string, nullable) — null only for a setting's first-ever recorded change (i.e. changed from its built-in default, which was never itself a `SettingChange` row)
+- `new_value` (string)
+- `changed_at` (timestamp)
+
+**Purpose**: An append-only audit log of every successful `updateSetting()` call (FR-CAS-9, US-10.4), read by the Configuration Component's `listSettingHistory()`. Values are stored as strings regardless of the setting's real type (float/int/str/enum) — a single, uniform column shape for 40 heterogeneous settings (corrected from an original miscount of 35 -- see requirements.md's Post-Approval Change section), matching the pattern this project already uses for `RecategorizationProposal.match_score`-style typed-but-simple columns rather than a polymorphic value-type scheme. Type/range validation happens at the application layer (Configuration Component, against the allow-list's metadata) *before* a row is ever written — `SettingChange` itself carries no validation logic, only a record of what happened. No relationship to any other entity — self-contained, unlike every other new entity added by a prior feature (see Entity Relationship Diagram below).
+
 ## Entity: BackupRun (added 2026-08-08 — Nightly Transaction Backup, Epic 7)
 - `id` (PK)
 - `backup_date` (date, unique) — the calendar day this attempt belongs to
@@ -228,3 +238,4 @@ Category (1) ----< DetectionSuggestion (via suggested_category_id, optional)
 - One `Transaction` may be the *candidate* of many `RecategorizationProposal` rows over time (proposed against on separate correction events — no suppression memory, per FR-RR-8/US-6.5); it is never both source and candidate of the same proposal (self-match exclusion, US-6.1)
 - One `RecurringPayment` has many `RecurringPaymentMatch` rows over time (one per cycle it was ever matched against), but at most one *live* (non-rejected) match per `cycle_period` (BR-21)
 - One `Transaction` is matched to at most one `RecurringPaymentMatch` in practice (a transaction is one real-world payment), though the schema doesn't need to forbid more than one — that would only happen if the same transaction genuinely satisfied two different recurring payments' matching criteria, an edge case left to application-layer matching logic (Ingestion Worker) rather than a DB constraint
+- `SettingChange` (added 2026-08-16) is deliberately absent from the diagram above, same as `BackupRun` — a standalone, FK-less audit log with no relationship to any other entity

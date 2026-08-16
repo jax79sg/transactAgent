@@ -156,6 +156,15 @@ class CategorizationDisagreementStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
+class SettingOwningService(str, enum.Enum):
+    """Configurable Application Settings (added 2026-08-16). Which of the two
+    backend services a given setting belongs to -- matches config.py's actual split
+    (ingestion-worker vs. api-service), not an arbitrary category."""
+
+    INGESTION_WORKER = "ingestion-worker"
+    API_SERVICE = "api-service"
+
+
 class User(Base):
     """Single-user login credential (FR-9.1/9.2, US-5.1)."""
 
@@ -707,3 +716,29 @@ class OAuthCredential(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class SettingChange(Base):
+    """Configurable Application Settings (added 2026-08-16) -- append-only audit log
+    (BR-28), one row per successful Configuration Component.updateSetting() call
+    (FR-CAS-9, US-10.4). Deliberately standalone, no FK to any other entity -- same
+    shape as BackupRun/DetectionScanRun. Values are stored as strings regardless of
+    the setting's real type (float/int/str/enum); type/range validation happens at
+    the application layer (Unit 2, Configuration Component) before a row is ever
+    written -- this table only records what happened, per BR-29. See
+    aidlc-docs/inception/plans/configurable-app-settings-application-design-plan.md
+    ("Key Design Resolution 4") for the full reasoning.
+    """
+
+    __tablename__ = "setting_changes"
+    __table_args__ = (
+        Index("ix_setting_changes_setting_name", "setting_name"),
+        Index("ix_setting_changes_changed_at", "changed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    setting_name: Mapped[str] = mapped_column(String(100), nullable=False)  # BR-29: no DB-level allow-list
+    owning_service: Mapped[SettingOwningService] = mapped_column(_enum_type(SettingOwningService), nullable=False)
+    previous_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str] = mapped_column(Text, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
