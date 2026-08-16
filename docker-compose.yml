@@ -70,10 +70,22 @@ services:
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
-      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-1qeJblYSk-E6BH6dhenbc8Vd0xxRkZor0}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID}
+      GOOGLE_DRIVE_BACKUP_FOLDER_ID: ${GOOGLE_DRIVE_BACKUP_FOLDER_ID}
       HEARTBEAT_FILE: /tmp/worker-heartbeat
+      QDRANT_HOST: vector-db
+      QDRANT_PORT: "6333"
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-embeddinggemma-300m}
+      EMBEDDING_SIMILARITY_THRESHOLD: ${EMBEDDING_SIMILARITY_THRESHOLD:-0.75}
+      EMBEDDING_TOP_K: ${EMBEDDING_TOP_K:-5}
+      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-50}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
     depends_on:
       database:
+        condition: service_healthy
+      vector-db:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "find /tmp/worker-heartbeat -mmin -0.5 | grep -q ."]
@@ -81,6 +93,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    restart: unless-stopped
+    networks:
+      - transactagent-net
+
+  vector-db:
+    image: qdrant/qdrant:latest
+    container_name: transactagent-vector-db
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    healthcheck:
+      # qdrant/qdrant's image has neither wget nor curl (verified 2026-08-13 by actually running the
+      # image and checking) -- bash IS present, so a raw /dev/tcp connect is the simplest reliable check.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
     networks:
       - transactagent-net
