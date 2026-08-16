@@ -18,6 +18,7 @@ function makeTxn(overrides: Partial<TransactionDTO> = {}): TransactionDTO {
     conversionIsApproximate: false,
     conversionUnavailable: false,
     bankStatementId: "bs1",
+    embeddingStatus: "pending",
     ...overrides,
   };
 }

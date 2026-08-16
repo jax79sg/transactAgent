@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as backupApi from "../src/api/backup";
 import * as recategorizationApi from "../src/api/recategorization";
-import type { BackupStatusResponse, ProposalDTO, ProposalPage } from "../src/api/types";
+import type {
+  BackupStatusResponse,
+  DisagreementDTO,
+  DisagreementPage,
+  ProposalDTO,
+  ProposalPage,
+} from "../src/api/types";
 import { ReviewPage } from "../src/pages/ReviewPage";
 
 vi.mock("../src/api/recategorization");
@@ -37,6 +43,7 @@ function makeProposal(overrides: Partial<ProposalDTO> = {}): ProposalDTO {
       conversionIsApproximate: false,
       conversionUnavailable: false,
       bankStatementId: "stmt-1",
+      embeddingStatus: "pending",
     },
     proposedCategory: { id: "cat-household", name: "Household" },
     matchScore: "93.02",
@@ -49,6 +56,39 @@ function makeProposal(overrides: Partial<ProposalDTO> = {}): ProposalDTO {
 }
 
 function pageOf(items: ProposalDTO[]): ProposalPage {
+  return { items, page: 1, pageSize: 20, totalCount: items.length };
+}
+
+function makeDisagreement(overrides: Partial<DisagreementDTO> = {}): DisagreementDTO {
+  return {
+    id: "disagreement-1",
+    candidateTransaction: {
+      id: "txn-2",
+      transactionDate: "2026-01-15",
+      description: "NTUC FAIRPRICE #124",
+      outFlow: "10.00",
+      inFlow: null,
+      currency: "SGD",
+      bankName: "DBS",
+      category: { id: "cat-unsure", name: "UNSURE" },
+      categorySource: "unsure",
+      convertedAmountSgd: "10.00",
+      conversionIsApproximate: false,
+      conversionUnavailable: false,
+      bankStatementId: "stmt-2",
+      embeddingStatus: "pending",
+    },
+    similarityCategory: { id: "cat-groceries", name: "Groceries" },
+    llmCategory: { id: "cat-dining", name: "Dining" },
+    similarityScore: "88.00",
+    status: "pending",
+    resolvedCategory: null,
+    createdAt: "2026-01-16T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function disagreementPageOf(items: DisagreementDTO[]): DisagreementPage {
   return { items, page: 1, pageSize: 20, totalCount: items.length };
 }
 
@@ -68,6 +108,11 @@ describe("ReviewPage", () => {
     // Sane default so tests that don't care about backup status aren't affected;
     // tests that do care override with their own mockResolvedValue.
     vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(NO_BACKUPS_YET);
+    // Same reasoning: DisagreementTable now always queries on render (Matching
+    // Precision Refinement) -- default to empty so it renders nothing and
+    // pre-existing proposal-focused tests are unaffected; tests exercising it
+    // override with their own mockResolvedValue.
+    vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(disagreementPageOf([]));
   });
 
   afterEach(() => {
@@ -257,6 +302,110 @@ describe("ReviewPage", () => {
       });
       // Two independent sections, not nested inside one another.
       expect(screen.getByTestId("backup-status-panel")).not.toContainElement(
+        screen.getByTestId("review-row-proposal-1"),
+      );
+    });
+  });
+
+  describe("DisagreementTable", () => {
+    it("renders nothing when there are no pending disagreements", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId("review-empty-state")).toBeInTheDocument());
+      expect(screen.queryByTestId("disagreement-section")).not.toBeInTheDocument();
+    });
+
+    it("renders a disagreement row with both candidate categories and the score", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId("disagreement-row-disagreement-1")).toBeInTheDocument());
+      const row = screen.getByTestId("disagreement-row-disagreement-1");
+      expect(row).toHaveTextContent("NTUC FAIRPRICE #124");
+      expect(row).toHaveTextContent("Groceries");
+      expect(row).toHaveTextContent("Dining");
+      expect(row).toHaveTextContent("88.00");
+    });
+
+    it("resolves a disagreement by choosing the similarity category", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      const resolveSpy = vi.spyOn(recategorizationApi, "resolveDisagreement").mockResolvedValue(makeDisagreement());
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId("disagreement-use-similarity-disagreement-1")).toBeInTheDocument());
+      await user.click(screen.getByTestId("disagreement-use-similarity-disagreement-1"));
+
+      await waitFor(() => {
+        expect(resolveSpy).toHaveBeenCalledWith("disagreement-1", "cat-groceries");
+      });
+    });
+
+    it("resolves a disagreement by choosing the LLM category", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      const resolveSpy = vi.spyOn(recategorizationApi, "resolveDisagreement").mockResolvedValue(makeDisagreement());
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId("disagreement-use-llm-disagreement-1")).toBeInTheDocument());
+      await user.click(screen.getByTestId("disagreement-use-llm-disagreement-1"));
+
+      await waitFor(() => {
+        expect(resolveSpy).toHaveBeenCalledWith("disagreement-1", "cat-dining");
+      });
+    });
+
+    it("rejects a disagreement", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      const rejectSpy = vi.spyOn(recategorizationApi, "rejectDisagreement").mockResolvedValue(makeDisagreement());
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId("disagreement-reject-disagreement-1")).toBeInTheDocument());
+      await user.click(screen.getByTestId("disagreement-reject-disagreement-1"));
+
+      await waitFor(() => {
+        expect(rejectSpy).toHaveBeenCalledWith("disagreement-1", expect.anything());
+      });
+    });
+
+    it("has no select-all or bulk action controls", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([]));
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId("disagreement-section")).toBeInTheDocument());
+      // Application Design Decision 2: no bulk actions for disagreements.
+      expect(screen.getByTestId("disagreement-section")).not.toHaveTextContent("Select all");
+    });
+
+    it("is visually separate from the proposal table", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([makeProposal()]));
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      renderReviewPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("disagreement-section")).toBeInTheDocument();
+        expect(screen.getByTestId("review-row-proposal-1")).toBeInTheDocument();
+      });
+      expect(screen.getByTestId("disagreement-section")).not.toContainElement(
         screen.getByTestId("review-row-proposal-1"),
       );
     });

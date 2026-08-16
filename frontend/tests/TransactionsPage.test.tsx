@@ -13,7 +13,7 @@ import { TransactionsPage } from "../src/pages/TransactionsPage";
 vi.mock("../src/api/transactions");
 vi.mock("../src/api/categories");
 
-function pageOf(page: number, totalCount = 100): TransactionPage {
+function pageOf(page: number, totalCount = 100, embeddingStatus: "pending" | "completed" = "pending"): TransactionPage {
   return {
     items: [
       {
@@ -30,6 +30,7 @@ function pageOf(page: number, totalCount = 100): TransactionPage {
         conversionIsApproximate: false,
         conversionUnavailable: false,
         bankStatementId: "stmt-1",
+        embeddingStatus,
       },
     ],
     page,
@@ -257,5 +258,31 @@ describe("TransactionsPage category list freshness (regression: newly-added cate
     screen.getByTestId("bank-filter-select").focus();
 
     await waitFor(() => expect(screen.getByRole("option", { name: "UOB" })).toBeInTheDocument());
+  });
+});
+
+describe("TransactionsPage embedding status badge", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders a pending-style badge when embeddingStatus is pending", async () => {
+    vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listBanks").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue(pageOf(1, 100, "pending"));
+    renderTransactionsPage();
+
+    await waitFor(() => expect(screen.getByTestId("embedding-status-badge")).toBeInTheDocument());
+    expect(screen.getByTestId("embedding-status-badge")).toHaveAttribute("title", "Embedding: pending");
+  });
+
+  it("renders a completed-style badge when embeddingStatus is completed", async () => {
+    vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listBanks").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue(pageOf(1, 100, "completed"));
+    renderTransactionsPage();
+
+    await waitFor(() => expect(screen.getByTestId("embedding-status-badge")).toBeInTheDocument());
+    expect(screen.getByTestId("embedding-status-badge")).toHaveAttribute("title", "Embedding: computed");
   });
 });

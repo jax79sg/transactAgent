@@ -1,5 +1,13 @@
 import { apiRequest } from "./client";
-import type { BulkApproveResponse, BulkRejectResponse, PendingCountResponse, ProposalDTO, ProposalPage } from "./types";
+import type {
+  BulkApproveResponse,
+  BulkRejectResponse,
+  DisagreementDTO,
+  DisagreementPage,
+  PendingCountResponse,
+  ProposalDTO,
+  ProposalPage,
+} from "./types";
 
 export function listPendingProposals(page: number, pageSize = 20): Promise<ProposalPage> {
   return apiRequest<ProposalPage>("/recategorization/proposals", { query: { page, pageSize } });
@@ -29,4 +37,19 @@ export function bulkRejectProposals(proposalIds: string[]): Promise<BulkRejectRe
     method: "POST",
     body: { proposalIds },
   });
+}
+
+export function listPendingDisagreements(page: number, pageSize = 20): Promise<DisagreementPage> {
+  return apiRequest<DisagreementPage>("/recategorization/disagreements", { query: { page, pageSize } });
+}
+
+export function resolveDisagreement(disagreementId: string, chosenCategoryId: string): Promise<DisagreementDTO> {
+  return apiRequest<DisagreementDTO>(`/recategorization/disagreements/${disagreementId}/resolve`, {
+    method: "POST",
+    body: { chosenCategoryId },
+  });
+}
+
+export function rejectDisagreement(disagreementId: string): Promise<DisagreementDTO> {
+  return apiRequest<DisagreementDTO>(`/recategorization/disagreements/${disagreementId}/reject`, { method: "POST" });
 }

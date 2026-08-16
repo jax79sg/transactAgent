@@ -31,6 +31,10 @@ export interface TransactionDTO {
   conversionIsApproximate: boolean;
   conversionUnavailable: boolean;
   bankStatementId: string;
+  /** Epic 9 (Local Embedding-Based Semantic Similarity): processing-status only --
+   * does NOT indicate a precedent/match was found, just that the embedding step
+   * has run for this transaction (FR-7). */
+  embeddingStatus: "pending" | "completed";
 }
 
 export interface GroupSummary {
@@ -232,6 +236,30 @@ export interface BulkRejectResponse {
   failedIds: string[];
 }
 
+/** Matching Precision Refinement: a genuine categorization disagreement (both
+ * similarity matching and the always-on LLM confident, but differing) -- a
+ * distinct entity from ProposalDTO above, with two candidate categories instead
+ * of one. */
+export type DisagreementStatus = "pending" | "resolved" | "rejected";
+
+export interface DisagreementDTO {
+  id: string;
+  candidateTransaction: TransactionDTO;
+  similarityCategory: CategoryRef;
+  llmCategory: CategoryRef;
+  similarityScore: string;
+  status: DisagreementStatus;
+  resolvedCategory: CategoryRef | null;
+  createdAt: string;
+}
+
+export interface DisagreementPage {
+  items: DisagreementDTO[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
 export type BackupOutcome = "success" | "failed" | null;
 export type BackupFailureCategory = "drive_connectivity" | "other" | null;
 
@@ -241,4 +269,80 @@ export interface BackupStatusResponse {
   failureCategory: BackupFailureCategory;
   transactionCount: number | null;
   backupFilename: string | null;
+}
+
+export type RecurringPaymentFrequency = "monthly" | "annual";
+export type RecurringPaymentStatus = "due_soon" | "overdue" | "pending_review" | "paid";
+
+export interface RecurringPaymentDTO {
+  id: string;
+  name: string;
+  expectedAmount: string;
+  frequency: RecurringPaymentFrequency;
+  dueMonth: number | null;
+  dueDay: number;
+  category: CategoryRef | null;
+  isTrusted: boolean;
+  status: RecurringPaymentStatus;
+  monthlySetAside: string | null;
+}
+
+export interface RecurringPaymentCreateRequest {
+  name: string;
+  expectedAmount: string;
+  frequency: RecurringPaymentFrequency;
+  dueMonth?: number | null;
+  dueDay: number;
+  categoryId?: string | null;
+}
+
+export type RecurringPaymentUpdateRequest = RecurringPaymentCreateRequest;
+
+export interface BulkImportRow {
+  name: string;
+  amount: string;
+  frequency: RecurringPaymentFrequency;
+  dueMonth?: string | null;
+  dueDay: string;
+}
+
+export interface BulkImportRowFailure {
+  row: number;
+  reason: string;
+}
+
+export interface BulkImportResponse {
+  created: RecurringPaymentDTO[];
+  failed: BulkImportRowFailure[];
+}
+
+export interface RecurringPaymentRef {
+  id: string;
+  name: string;
+}
+
+export interface RecurringPaymentMatchDTO {
+  id: string;
+  recurringPayment: RecurringPaymentRef;
+  transaction: TransactionDTO;
+  cyclePeriod: string;
+  status: "pending" | "approved" | "rejected" | "auto_applied";
+  amountAtMatch: string;
+  createdAt: string;
+}
+
+export interface DetectionSuggestionDTO {
+  id: string;
+  descriptionPattern: string;
+  suggestedAmount: string;
+  suggestedCategory: CategoryRef | null;
+  occurrenceCount: number;
+  status: "new" | "dismissed" | "added";
+}
+
+export interface RecurringPaymentsStatusSummaryDTO {
+  dueSoonCount: number;
+  overdueCount: number;
+  pendingMatchCount: number;
+  newSuggestionCount: number;
 }

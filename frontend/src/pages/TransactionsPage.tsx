@@ -145,11 +145,33 @@ function CategorySelect({
   );
 }
 
+/** Epic 9 (Local Embedding-Based Semantic Similarity, US-9.1, FR-7): a quiet,
+ * purely informational processing-status indicator -- "has this transaction's
+ * embedding been computed and stored," NOT a claim about match quality or that a
+ * precedent was found. Deliberately not styled to compete for attention with
+ * anything actionable elsewhere on the page (contrast NavBar's count badges). */
+function EmbeddingStatusBadge({ status }: { status: TransactionDTO["embeddingStatus"] }) {
+  const completed = status === "completed";
+  return (
+    <span
+      data-testid="embedding-status-badge"
+      title={completed ? "Embedding: computed" : "Embedding: pending"}
+      aria-label={completed ? "Embedding computed" : "Embedding pending"}
+      className={`ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${
+        completed ? "bg-emerald-400" : "bg-slate-300"
+      }`}
+    />
+  );
+}
+
 function TransactionRow({ txn, onCorrected }: { txn: TransactionDTO; onCorrected: () => void }) {
   return (
     <tr data-testid={`transaction-row-${txn.id}`} className="border-b border-slate-100">
       <td className="py-2">{txn.transactionDate}</td>
-      <td>{txn.description}</td>
+      <td>
+        {txn.description}
+        <EmbeddingStatusBadge status={txn.embeddingStatus} />
+      </td>
       <td>{txn.outFlow ?? ""}</td>
       <td>{txn.inFlow ?? ""}</td>
       <td>{txn.bankName}</td>

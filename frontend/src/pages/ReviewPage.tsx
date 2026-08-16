@@ -7,8 +7,11 @@ import {
   approveProposal,
   bulkApproveProposals,
   bulkRejectProposals,
+  listPendingDisagreements,
   listPendingProposals,
+  rejectDisagreement,
   rejectProposal,
+  resolveDisagreement,
 } from "../api/recategorization";
 
 const PAGE_SIZE = 20;
@@ -56,6 +59,126 @@ function BackupStatusPanel() {
     <div data-testid="backup-status-panel" className="mb-6 rounded border border-slate-200 p-4">
       <h2 className="mb-2 font-medium">Backup Status</h2>
       {content}
+    </div>
+  );
+}
+
+// Matching Precision Refinement: a second, separate table -- a genuinely
+// different row shape (two candidate categories, no bulk actions, Application
+// Design Decision 2) from ProposalTable above, same "visually separate section"
+// convention BackupStatusPanel established.
+function DisagreementTable() {
+  const queryClient = useQueryClient();
+  const [singleActionError, setSingleActionError] = useState<string | null>(null);
+
+  const { data, isPending } = useQuery({
+    queryKey: ["recategorization", "disagreements"],
+    queryFn: () => listPendingDisagreements(1, PAGE_SIZE),
+  });
+
+  const items = data?.items ?? [];
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["recategorization", "disagreements"] });
+    queryClient.invalidateQueries({ queryKey: ["recategorization", "pendingCount"] });
+  };
+
+  const resolveMutation = useMutation({
+    mutationFn: ({ disagreementId, chosenCategoryId }: { disagreementId: string; chosenCategoryId: string }) =>
+      resolveDisagreement(disagreementId, chosenCategoryId),
+    onSuccess: () => {
+      setSingleActionError(null);
+      invalidate();
+    },
+    onError: () => setSingleActionError("Couldn't resolve that disagreement -- it may have already been resolved."),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: rejectDisagreement,
+    onSuccess: () => {
+      setSingleActionError(null);
+      invalidate();
+    },
+    onError: () => setSingleActionError("Couldn't reject that disagreement -- it may have already been resolved."),
+  });
+
+  // Same convention as BackupStatusPanel/empty-state handling elsewhere on this
+  // page: a section with nothing to show simply doesn't render, rather than
+  // showing its own "nothing here" message alongside ProposalTable's.
+  if (isPending || items.length === 0) return null;
+
+  return (
+    <div className="mb-6" data-testid="disagreement-section">
+      <h2 className="mb-2 font-medium">Category Disagreements</h2>
+      <p className="mb-2 text-sm text-slate-500">
+        Similarity matching and the LLM classifier suggested different categories for these transactions -- pick
+        one.
+      </p>
+
+      {singleActionError && (
+        <p data-testid="disagreement-single-action-error" className="mb-3 text-sm text-amber-600">
+          {singleActionError}
+        </p>
+      )}
+
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-slate-500">
+            <th>Date</th>
+            <th>Description</th>
+            <th>Amount</th>
+            <th>Similarity score</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((disagreement) => (
+            <tr
+              key={disagreement.id}
+              data-testid={`disagreement-row-${disagreement.id}`}
+              className="border-b border-slate-100"
+            >
+              <td>{disagreement.candidateTransaction.transactionDate}</td>
+              <td>{disagreement.candidateTransaction.description}</td>
+              <td>{disagreement.candidateTransaction.outFlow ?? disagreement.candidateTransaction.inFlow ?? ""}</td>
+              <td>{disagreement.similarityScore}</td>
+              <td>
+                <button
+                  data-testid={`disagreement-use-similarity-${disagreement.id}`}
+                  onClick={() =>
+                    resolveMutation.mutate({
+                      disagreementId: disagreement.id,
+                      chosenCategoryId: disagreement.similarityCategory.id,
+                    })
+                  }
+                  className="mr-2 text-slate-900 underline"
+                >
+                  Use {disagreement.similarityCategory.name}
+                </button>
+                <button
+                  data-testid={`disagreement-use-llm-${disagreement.id}`}
+                  onClick={() =>
+                    resolveMutation.mutate({
+                      disagreementId: disagreement.id,
+                      chosenCategoryId: disagreement.llmCategory.id,
+                    })
+                  }
+                  className="mr-2 text-slate-900 underline"
+                >
+                  Use {disagreement.llmCategory.name}
+                </button>
+                <button
+                  data-testid={`disagreement-reject-${disagreement.id}`}
+                  onClick={() => rejectMutation.mutate(disagreement.id)}
+                  className="text-slate-500 underline"
+                >
+                  Reject
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -155,6 +278,8 @@ export function ReviewPage() {
       <h1 className="mb-4 text-xl font-semibold">Review</h1>
 
       <BackupStatusPanel />
+
+      <DisagreementTable />
 
       {singleActionError && (
         <p data-testid="review-single-action-error" className="mb-3 text-sm text-amber-600">
