@@ -46,8 +46,12 @@ Technology-agnostic domain model. Exact column types/engine choice (PostgreSQL, 
 - `fx_rate_used_id` (FK -> FxRateCache, nullable)
 - `created_at`
 - `updated_at`
+- `embedding_status` (enum: `pending` | `completed`, default `pending`) — *added 2026-08-11, Local Embedding-Based Semantic Similarity, Epic 9*
+- `llm_suggested_category_id` (FK -> Category, nullable) — *added 2026-08-16, Matching Precision Refinement*
 
 **Purpose**: The core transaction record (FR-4.1). Both original and converted amounts retained (FR-10.2).
+**Addendum (2026-08-11, Local Embedding-Based Semantic Similarity feature — Epic 9)**: `embedding_status` tracks whether this transaction's own embedding has been computed and persisted to the Vector DB (FR-6/FR-7) — the field the API Service's badge reflects (US-9.1). Defaulting new rows to `pending` is also how the one-time historical backfill (FR-11) works: no separate backfill flag or table is needed — every pre-existing transaction just starts out `pending` too (via the migration's default), and the Ingestion Worker's Embedding Manager Component drains the `pending` backlog the same way regardless of whether a row is old or new (BR-24). No embedding vector itself is stored here — only this status; the vector lives in the separate Vector DB, keyed by this row's `id`.
+**Addendum (2026-08-16, Matching Precision Refinement feature — see `matching-precision-refinement-application-design-plan.md`)**: `llm_suggested_category_id` records what the always-on LLM classification step (FR-MPR-1) decided for this transaction at ingestion time — `null` when the LLM abstained (returned `UNSURE`) or its endpoint was unreachable, never a sentinel row. Written once, by the Ingestion Worker's Categorization Engine, at the same time the transaction itself is first persisted (BR-26) — never updated afterward, even if the transaction's actual `category_id` later changes via manual correction or proposal approval. Its sole purpose is letting the retroactive re-scan (`recategorizeUnsureFromPrecedent`) read back a candidate transaction's own original LLM opinion as a score-boost signal (FR-MPR-7), without re-calling the LLM for transactions ingested in an earlier run. Distinct from `category_id` (the transaction's actual, currently-assigned category) — this field is read-only historical signal, never itself shown to the user or treated as an assignment.
 
 ## Entity: FxRateCache
 - `id` (PK)
@@ -111,6 +115,19 @@ Technology-agnostic domain model. Exact column types/engine choice (PostgreSQL, 
 
 **Purpose**: Records every candidate match found by the broadened recategorization search (FR-RR-1/2), whether it was auto-applied (FR-RR-3) or is awaiting human review (FR-RR-4/US-6.4). `status = auto_applied` rows are a record of what happened automatically, not an action item — the Recategorization Review Component's pending list (US-6.4) and count (US-6.6) only ever query `status = 'pending'`.
 
+## Entity: CategorizationDisagreement (added 2026-08-16 — Matching Precision Refinement)
+- `id` (PK)
+- `transaction_id` (FK -> Transaction) — the transaction left `UNSURE` pending this decision
+- `similarity_category_id` (FK -> Category) — the category found by embedding/fuzzy similarity matching
+- `llm_category_id` (FK -> Category) — the category found by the always-on LLM classification
+- `similarity_score` (decimal) — the similarity match's score, same scale/meaning as `RecategorizationProposal.match_score`
+- `status` (enum: `pending` | `resolved` | `rejected`)
+- `resolved_category_id` (FK -> Category, nullable) — set only when `status = resolved`; equals either `similarity_category_id` or `llm_category_id`, never a third value (BR-27)
+- `created_at`
+- `resolved_at` (nullable) — set when status leaves `pending`
+
+**Purpose**: Records a genuine categorization disagreement (FR-MPR-6's third bullet: both similarity matching and the always-on LLM produce a category, and they differ, FR-MPR-9) — a case today's schema has no room for, since `RecategorizationProposal` assumes exactly one proposed category and a triggering `RecategorizationJob`, neither of which exists here (there is no manual correction that triggered this; it arises directly during ingestion-time `categorize()`). Deliberately a standalone entity rather than an extension of `RecategorizationProposal` — see the Application Design plan doc's "Key Design Resolution 1" for the full reasoning. Written by the Ingestion Worker's Categorization Engine; read and resolved by the API Service's Recategorization Review Component (extended, not duplicated) via pick-one-or-reject, surfaced on the existing Review page alongside (but visually distinct from) the existing `ProposalTable` rows.
+
 ## Entity: BackupRun (added 2026-08-08 — Nightly Transaction Backup, Epic 7)
 - `id` (PK)
 - `backup_date` (date, unique) — the calendar day this attempt belongs to
@@ -122,6 +139,52 @@ Technology-agnostic domain model. Exact column types/engine choice (PostgreSQL, 
 - `backup_filename` (nullable string) — the uploaded file's name in the `backup` Drive subfolder; set only on success
 
 **Purpose**: One row per nightly backup attempt (FR-1..FR-11, Epic 7), written once at completion by the Ingestion Worker's Backup Manager, read read-only by the API Service's Backup Status Component. Unlike `IngestionRun`/`RecategorizationJob`, this entity has no `queued`/`running` interim status — see `business-logic-model.md` for why. Standalone entity: it does not reference individual `Transaction` rows (it's a per-attempt summary, not a per-item audit trail like `IngestionRunFile`).
+
+## Entity: RecurringPayment (added 2026-08-08 — Recurring Payments, Epic 8)
+- `id` (PK)
+- `name` (string)
+- `expected_amount` (decimal(18,2)) — a loose guide, not an exact-match requirement (FR-5)
+- `frequency` (enum: `monthly` | `annual`)
+- `due_month` (int 1–12, nullable) — set only when `frequency = 'annual'` (BR-19)
+- `due_day` (int 1–31)
+- `category_id` (FK -> Category, nullable) — optional link (FR-1/US-8.1)
+- `is_trusted` (boolean, default false) — one-way false→true, set on first approved match (FR-7)
+- `created_at`, `updated_at`
+- `embedding_status` (enum: `pending` | `completed`, default `pending`) — *added 2026-08-12, retroactively during Ingestion Worker Service Functional Design, Local Embedding-Based Semantic Similarity, Epic 9 — see `ingestion-worker-embedding-similarity-functional-design-plan.md` and audit.md*
+
+**Purpose**: The user-maintained register of expected recurring payments (FR-1..3). `is_trusted` is what gates FR-7's tolerance-based auto-apply — see `business-logic-model.md`.
+
+**Addendum (2026-08-12, Local Embedding-Based Semantic Similarity feature — Epic 9, added retroactively)**: `embedding_status` mirrors `Transaction.embedding_status` (BR-24) — it's what the Ingestion Worker's Embedding Manager Component drains to populate the vector store's `recurring_payment_names` collection, which `matchNewTransaction`/`runDetectionScan` query. Unlike `Transaction` (immutable description once persisted), `RecurringPayment.name` can be edited via the API Service's register CRUD (FR-1) — see BR-25 for why writes to this field are split across both services, not just the Worker.
+
+## Entity: RecurringPaymentMatch (added 2026-08-08 — Epic 8)
+- `id` (PK)
+- `recurring_payment_id` (FK -> RecurringPayment)
+- `transaction_id` (FK -> Transaction)
+- `cycle_period` (string, e.g. `"2026-08"` for a monthly payment or `"2026"` for an annual one) — identifies which due cycle this match covers
+- `status` (enum: `pending` | `approved` | `rejected` | `auto_applied`)
+- `amount_at_match` (decimal(18,2)) — snapshot of the matched transaction's amount at match time
+- `created_at`
+- `resolved_at` (nullable) — set when status leaves `pending`
+
+**Purpose**: One row per candidate match found by the Recurring Payment Manager (FR-5), structurally the closest sibling to `RecategorizationProposal` in this schema — a `pending` review record that resolves to `approved`/`rejected` via user action, or is created directly as `auto_applied` for a trusted payment within tolerance (FR-7). `cycle_period` plays the role `recategorization_job_id` plays there: the thing BR-21's uniqueness rule groups by.
+
+## Entity: DetectionSuggestion (added 2026-08-08 — Epic 8)
+- `id` (PK)
+- `description_pattern` (string, unique — BR-22) — a normalized/representative description identifying this recurring charge pattern
+- `suggested_amount` (decimal(18,2))
+- `suggested_category_id` (FK -> Category, nullable)
+- `occurrence_count` (int) — how many historical transactions matched this pattern when detected
+- `status` (enum: `new` | `dismissed` | `added`)
+- `created_at`
+- `resolved_at` (nullable)
+
+**Purpose**: Untracked recurring-charge suggestions from the Recurring Payment Manager's periodic detection scan (FR-12). The unique constraint on `description_pattern` is the entire mechanism behind FR-13's "a dismissed suggestion never reappears" — a re-scan finds the existing row and skips creating a duplicate, rather than the Worker needing to remember dismissals separately.
+
+## Entity: DetectionScanRun (added 2026-08-08, retroactively during Ingestion Worker Code Generation — see audit.md)
+- `id` (PK)
+- `ran_at`
+
+**Purpose**: One row per completed detection scan attempt (WR-19) — the entity backing `isDetectionScanDueNow()`'s due-check, mirroring `BackupRun`'s write-once shape (a scan is synchronous within one poll cycle, not a cross-service handoff). No failure-classification fields — unlike a backup attempt, a failed scan simply leaves no row, remaining due on the next poll cycle, which is harmless since scans are read-only until they insert `DetectionSuggestion` rows. Added after Application/Functional Design's `isDetectionScanDueNow()` pseudocode assumed this shape existed without the backing entity having been specified.
 
 ## Entity: OAuthCredential (added 2026-08-01, retroactively — see audit.md)
 - `id` (PK)
@@ -147,6 +210,11 @@ Transaction (1) ----< RecategorizationJob (via source_transaction_id)
 RecategorizationJob (1) ----< RecategorizationProposal (via recategorization_job_id)
 Transaction (1) ----< RecategorizationProposal (via candidate_transaction_id)
 Category (1) ----< RecategorizationProposal (via proposed_category_id)
+
+Category (1) ----< RecurringPayment (via category_id, optional)
+RecurringPayment (1) ----< RecurringPaymentMatch (via recurring_payment_id)
+Transaction (1) ----< RecurringPaymentMatch (via transaction_id)
+Category (1) ----< DetectionSuggestion (via suggested_category_id, optional)
 ```
 
 **Cardinality notes**:
@@ -158,3 +226,5 @@ Category (1) ----< RecategorizationProposal (via proposed_category_id)
 - One `Transaction` may be the source of many `RecategorizationJob` rows over time (re-corrected more than once)
 - One `RecategorizationJob` has zero or more `RecategorizationProposal` rows — zero if the broadened search (FR-RR-1) finds no candidates at all
 - One `Transaction` may be the *candidate* of many `RecategorizationProposal` rows over time (proposed against on separate correction events — no suppression memory, per FR-RR-8/US-6.5); it is never both source and candidate of the same proposal (self-match exclusion, US-6.1)
+- One `RecurringPayment` has many `RecurringPaymentMatch` rows over time (one per cycle it was ever matched against), but at most one *live* (non-rejected) match per `cycle_period` (BR-21)
+- One `Transaction` is matched to at most one `RecurringPaymentMatch` in practice (a transaction is one real-world payment), though the schema doesn't need to forbid more than one — that would only happen if the same transaction genuinely satisfied two different recurring payments' matching criteria, an edge case left to application-layer matching logic (Ingestion Worker) rather than a DB constraint

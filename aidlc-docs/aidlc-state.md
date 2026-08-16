@@ -156,3 +156,165 @@ Tracked separately from the original build and from Epic 6 (base project status 
 ## CONSTRUCTION PHASE (this feature): COMPLETE
 
 ## FEATURE STATUS: COMPLETE — Nightly Transaction Backup (Epic 7)
+
+---
+
+## Post-Completion Change: Recurring Payments, Budget Alerts & Subscription Detection (Epic 8)
+
+Tracked separately (base project status unchanged: COMPLETE). Feature-scoped filenames used. Working on git branch `feature/recurring-payments-budget-alerts` (created off `main` per user request, for easy rollback). No real payee names/amounts in any doc — user's real reference list stayed in chat only (public repo).
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-08; `aidlc-docs/inception/requirements/recurring-payments-requirements.md`; 14 FRs, 4 NFRs; 1 round of 9 questions + 1 targeted follow-up, all resolved — user granted standing blanket approval for stage-completion gates on this feature too)
+- [x] User Stories — Complete & Approved (2026-08-08; `aidlc-docs/inception/user-stories/recurring-payments-stories.md`; Epic 8, 7 stories US-8.1..8.7; personas.md unchanged, single existing persona reused)
+- [x] Workflow Planning — Complete & Approved (2026-08-08; `aidlc-docs/inception/plans/recurring-payments-execution-plan.md`; Application Design EXECUTE, Units Generation SKIP, per-unit NFR Requirements/Design + Infrastructure Design SKIP, Code Generation + Build and Test ALWAYS; sequence Database → {Ingestion Worker Service, API Service} → Frontend SPA)
+- [x] Application Design — Complete & Approved (2026-08-08; updated `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`, `application-design.md` in place with dated addenda; new Recurring Payment Manager Component (Ingestion Worker) + Recurring Payments Component (API Service); Categorization Engine's similarity matcher reused, not duplicated; ASCII diagram width-verified after edit)
+
+## INCEPTION PHASE (Epic 8): COMPLETE
+- [ ] Construction (per affected unit: database, ingestion-worker, api-service, frontend) — pending
+  - [x] Database — Functional Design: Complete & Approved (2026-08-08; `domain-entities.md` +RecurringPayment/RecurringPaymentMatch/DetectionSuggestion, `business-rules.md` BR-19..23, `business-logic-model.md` +match lifecycle +is_trusted lifecycle)
+  - [x] Database — Code Generation: Complete & Approved (2026-08-08; `models.py` +3 entities/3 enums, migration `0007_recurring_payments.py`, `test_models.py` +15 tests, 40/40 unit tests passing, migration live-verified against real Postgres incl. upgrade/downgrade/idempotent-reupgrade)
+
+**UNIT: DATABASE — COMPLETE (for Epic 8)**
+  - [x] Ingestion Worker Service — Functional Design: Complete & Approved (2026-08-08; WR-16..19 added to `business-rules.md`, new Recurring Payment Manager Component section + Categorization Engine addendum in `business-logic-model.md`, `domain-entities.md` addendum; due/overdue status computation explicitly deferred to API Service)
+  - [x] Ingestion Worker Service — Code Generation: Complete & Approved (2026-08-08; new `recurring_payments/` package [`cycle.py`, `repository.py`, `service.py`], `similarity.py` +public `amounts_in_range`, `pipeline.py`/`main.py` wiring, 168/168 unit tests passing; retroactive Database addition [`DetectionScanRun`]; real case-sensitivity matching bug found+fixed)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for Epic 8)**
+  - [x] API Service — Functional Design: Complete & Approved (2026-08-08; AR-15..20 added, 7 new DTOs, Recurring Payments Component logic in `business-logic-model.md`; status computation flagged as a necessary second implementation of the Worker's cycle-math, since the two services share no code)
+  - [x] API Service — Code Generation: Complete & Approved (2026-08-08; new `recurring_payments/` module [`cycle.py`, `repository.py`, `service.py`, `schemas.py`, `router.py`], 12 new endpoints, 3 new errors, 168/168 api-service unit tests passing, OpenAPI schema smoke-tested; status model refined from 3 to 4 states + status algorithm corrected during implementation)
+
+**UNIT: API SERVICE — COMPLETE (for Epic 8)**
+  - [x] Frontend SPA — Functional Design: Complete & Approved (2026-08-08; Recurring Payments Dashboard-tab addendum in `frontend-components.md`, badge/invalidation reasoning in `business-logic-model.md`)
+  - [x] Frontend SPA — Code Generation: Complete & Approved (2026-08-08; new `api/recurringPayments.ts`, `types.ts` +12 DTOs, `NavBar.tsx` +RecurringPaymentsBadge, `DashboardPage.tsx` +4th "Recurring Payments" tab, 11 new tests [3 NavBar + 8 DashboardPage], 81/81 frontend tests passing, clean `tsc`+`vite build`; 2 test-only bugs found+fixed [TanStack Query v5 mutationFn 2nd-arg assertion mismatch; mock-restore-before-beforeEach test-isolation bug], no application code affected)
+
+**UNIT: FRONTEND SPA — COMPLETE (for Epic 8)**
+
+**ALL 4 UNITS COMPLETE (for this feature) — proceeding to Build and Test**
+
+## CONSTRUCTION PHASE (Epic 8): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-08; `aidlc-docs/construction/build-and-test/recurring-payments-build-and-test-summary.md`; full stack rebuilt and redeployed against the live running project [`docker compose build/up`], migrations 0007/0008 auto-applied to the real database via the app's own advisory-lock startup path — verified via `alembic_version`; 460 unit tests passing across all 4 units [40 Database + 168 Ingestion Worker + 171 API Service + 81 Frontend], zero regressions; live E2E verification against the real running stack using invented placeholder recurring payments only [never the user's real list], incl. a real, unprompted detection scan against the full real transaction history correctly identifying genuine recurring patterns; one real bug found+fixed [bulk-import's AR-19 per-row isolation was bypassed by FastAPI's own request-body validation on a malformed amount/due-day — fixed by typing `BulkImportRow`'s numeric-ish fields as raw strings, parsed and validated per-row in the service layer instead], fix re-verified live through the actual browser UI, all placeholder test data cleaned up afterward)
+
+**Recurring Payments, Budget Alerts & Subscription Detection (Epic 8): COMPLETE** — on branch `feature/recurring-payments-budget-alerts`, not yet merged to `main`.
+
+---
+
+## Post-Completion Change: Similarity-Matching Normalization for Reference-Code Noise
+
+Tracked separately (base project status unchanged: COMPLETE). Feature-scoped filenames used. Continuing on
+git branch `feature/recurring-payments-budget-alerts`. Unrelated in scope to Epic 8 but touches the same
+`similarity.py` module (only `find_best_match`/`token_sort_ratio` scoring — Epic 8 only reuses
+`amounts_in_range`, unaffected).
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-11; `aidlc-docs/inception/requirements/similarity-matching-requirements.md`; 7 FRs, 3 NFRs; 1 round of 6 questions, all answered; one apparent tension between answers [Q1 general/bank-agnostic vs Q5 conservative] reconciled and documented as Assumption #1, flagged for user correction at review if wrong)
+- [x] User Stories — Skipped (2026-08-11; pure internal accuracy fix, no new user-facing feature/workflow)
+- [x] Workflow Planning — Complete & Approved (2026-08-11; `aidlc-docs/inception/plans/similarity-matching-execution-plan.md`; Application Design SKIP, Units Generation SKIP, per-unit [Ingestion Worker Service only] Functional Design EXECUTE, NFR Requirements/Design + Infrastructure Design SKIP, Code Generation + Build and Test ALWAYS; single-unit change, Database/API Service/Frontend SPA untouched)
+
+## INCEPTION PHASE (this change): COMPLETE
+- [ ] Construction (Ingestion Worker Service unit only) — pending
+  - [x] Ingestion Worker Service — Functional Design: Complete & Approved (2026-08-11; WR-20 added to `business-rules.md`, addendum to `business-logic-model.md`'s Categorization Engine section; normalization pattern designed and live-validated against `rapidfuzz` — all 3 diagnosis examples now score 100.0 as same-payee pairs [up from the reported 81.7], AXS false-positive regression and CCY-conversion small-value regression both confirmed unaffected; `domain-entities.md` unchanged, no new/modified entity)
+
+  - [x] Ingestion Worker Service — Code Generation: Complete & Approved (2026-08-11; `similarity.py` +`normalize_reference_noise`, `find_best_match` normalizes both sides; `test_similarity.py` +11 tests [7 direct normalization tests incl. 2 Hypothesis property tests, 4 `find_best_match` regression tests]; 179/179 unit tests passing [up from 168], zero regressions incl. AXS false-positive and CCY-conversion small-value tests; live diagnosis-example scores confirmed: NEO EMPIRE/WARBURG VENDING pairs now 100.0 [up from reported 81.7], cross-payee sanity check stays at 46.96)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for this feature) — proceeding to Build and Test**
+
+**ALL UNITS COMPLETE (for this feature — only the Ingestion Worker Service unit was affected)**
+
+## CONSTRUCTION PHASE (this feature): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-11; `aidlc-docs/construction/build-and-test/similarity-matching-build-and-test-summary.md`; `ingestion-worker` Docker image rebuilt + redeployed, container healthy; 179/179 unit tests passing; live in-container verification via `docker compose exec` reproducing the original NEO EMPIRE scenario — match found, score 100.0, up from the originally reported 81.7; no historical re-scan triggered, forward-only per FR-6; no integration/e2e/performance/contract tests needed — no API/DB/UI surface touched)
+
+## FEATURE STATUS: COMPLETE — Similarity-Matching Normalization for Reference-Code Noise
+
+---
+
+## Post-Completion Change: Local Embedding-Based Semantic Similarity
+
+Tracked separately (base project status unchanged: COMPLETE; Similarity-Matching Normalization above also
+COMPLETE). Continuing on git branch `feature/recurring-payments-budget-alerts`. Layered on top of, and
+possibly replacing/complementing, the just-shipped WR-20 fix — relationship to be resolved via clarifying
+questions, not assumed.
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-11; `aidlc-docs/inception/requirements/embedding-similarity-requirements.md`; 11 FRs, 5 NFRs; 10-question round + 2 rounds of clarification — runtime identified as real product "oMLX" via WebSearch verification [not a scam domain], then a deployment-topology ambiguity it exposed [macOS-native, cannot containerize] resolved as a user-managed external endpoint, config-pointed; embedding-first with fuzzy-text/WR-20 fallback, applied across Categorization Engine + Recurring Payment Manager + Detection Scan; badge = processing-status only, not match-found; async/eventually-consistent; one-time historical backfill [explicit departure from this project's forward-only precedent]; AXS amount-gate protection explicitly carried over as a hard NFR, not weakened)
+
+- [x] User Stories — Complete & Approved (2026-08-11; `aidlc-docs/inception/user-stories/embedding-similarity-stories.md`; Epic 9, 5 stories US-9.1..9.5; personas.md unchanged, single existing persona reused; assessment: Execute=Yes, new user-facing badge + complex cross-cutting business logic)
+
+- [x] Workflow Planning — Complete & Approved (2026-08-11; `aidlc-docs/inception/plans/embedding-similarity-execution-plan.md`; Application Design EXECUTE, Units Generation SKIP; per-unit Functional Design EXECUTE for all 4 units; NFR Requirements/Design + Infrastructure Design EXECUTE for Ingestion Worker Service only, SKIP elsewhere; Code Generation + Build and Test ALWAYS; sequence Database → {Ingestion Worker Service, API Service} → Frontend SPA; Risk: Medium-High)
+
+- [x] Application Design — Complete & Approved (2026-08-11; updated `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`, `application-design.md` in place with dated addenda; 2 new Ingestion Worker Service components [Vector Store Client, Embedding Manager]; extended Categorization Engine + Recurring Payment Manager [embedding-first, fuzzy-text fallback]; Transaction Management Component + Frontend SPA extended for the badge; new `transactions.embedding_status` field + separate Vector DB datastore [Worker-only access]; fifth `poll_once()` branch; key design resolution documented: query-time transient embedding vs. storage-time async/batched embedding are two distinct operations, resolving the apparent FR-3/FR-6 tension; ASCII diagram width-verified after edit)
+
+## INCEPTION PHASE (this change): COMPLETE
+
+### 🟢 CONSTRUCTION PHASE (this change, per-unit loop)
+Build order: Database → {Ingestion Worker Service, API Service} → Frontend SPA
+- [ ] Construction — pending
+  - [x] Database — Functional Design: Complete & Approved (2026-08-11; `domain-entities.md` +`Transaction.embedding_status`, `business-rules.md` BR-24, `business-logic-model.md` +lifecycle; no new entity, single field, no open questions)
+  - [x] Database — Code Generation: Complete, awaiting review (2026-08-11; `models.py` +`EmbeddingStatus` enum +`Transaction.embedding_status`, migration `0009_transaction_embedding_status.py`, `test_models.py` +`TestTransactionEmbeddingStatus` 2 tests, 44/44 unit tests passing; migration live-verified against real Postgres incl. upgrade/downgrade/idempotent-reupgrade, all 6142 existing transactions backfilled to `pending` via server_default alone; 1 real bug found+fixed [`create_type` kwarg misplacement] via live execution, not unit tests)
+
+**UNIT: DATABASE — COMPLETE (for this feature)**
+  - [x] Ingestion Worker Service — Code Generation: Complete & Approved (2026-08-13; blanket approval; new `embedding/` package [client.py, vector_store.py, similarity.py, repository.py, service.py]; integrated into categorization/service.py, recurring_payments/service.py, main.py; retroactive Database addition `RecurringPayment.embedding_status` [BR-25, migration 0010]; 3 real design gaps found+fixed during implementation and corrected in business-rules.md/business-logic-model.md/Application Design docs [runDetectionScan doesn't call find_best_match at all — redesigned as an additive embedding group-merge pass; fuzzy/embedding score-scale mismatch — rescaled to 0-100; matchNewTransaction's per-payment fallback needed whole-operation semantics]; qdrant-client API verified live against a real temporary Qdrant container [query_points not deprecated search, UUID string point IDs]; `docker compose build ingestion-worker` verified clean; 233/233 unit tests passing [up from 179]; full live rebuild/redeploy/migration verification deferred to this feature's Build and Test stage)
+  - [x] Ingestion Worker Service — Infrastructure Design: Complete & Approved (2026-08-13; blanket approval; new `vector-db` docker-compose service [qdrant/qdrant, no host port, bind-mounted volume]; found+fixed a real issue by actually pulling the image: it has neither wget nor curl, switched healthcheck to a bash /dev/tcp check; ingestion-worker gains QDRANT_*/EMBEDDING_* env vars + non-blocking depends_on; docker-compose.yml and .env.example updated directly)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for this feature) — proceeding to API Service**
+  - [x] API Service — Functional Design: Complete & Approved (2026-08-13; blanket approval; AR-21 `embeddingStatus` read-only exposure on `TransactionDTO`; AR-22 `RecurringPayment.embedding_status` reset-to-pending on create/name-changing-update — closes the write-path gap flagged during Ingestion Worker Code Generation, Database `BR-25`)
+  - [x] API Service — Code Generation: Complete & Approved (2026-08-13; blanket approval; `TransactionDTO` +`embedding_status` [3 construction sites updated together — transactions/router.py, recategorization/router.py, recurring_payments/service.py]; `update_recurring_payment` resets `embedding_status` to `pending` only on a `name`-changing update; `RecurringPaymentDTO` deliberately does not expose `embedding_status` [no UI purpose]; 4 new tests; 175/175 passing [up from 171]; OpenAPI schema smoke-tested [37 paths]; `docker compose build api-service` verified clean)
+
+**UNIT: API SERVICE — COMPLETE (for this feature) — proceeding to Frontend SPA**
+  - [x] Frontend SPA — Functional Design: Complete & Approved (2026-08-13; blanket approval; small quiet per-row badge inline in TransactionRow's Description cell reflecting `embeddingStatus`, no new column/component/polling — deliberately not competing for attention with the actionable nav badges)
+  - [x] Frontend SPA — Code Generation: Complete & Approved (2026-08-13; blanket approval; `types.ts` +`embeddingStatus`; new `EmbeddingStatusBadge` inline in `TransactionRow`; found+fixed the field being required across 5 test-file mock-transaction construction sites before running anything [grepped `conversionUnavailable:` as a reliable anchor]; 2 new tests; 83/83 passing [up from 81]; clean `tsc -b` + `vite build`; `docker compose build frontend` verified clean)
+
+**UNIT: FRONTEND SPA — COMPLETE (for this feature)**
+
+**ALL 4 UNITS COMPLETE (for this feature) — proceeding to Build and Test**
+  - [x] Ingestion Worker Service — NFR Design: Complete & Approved (2026-08-13; blanket approval; new no-retry/immediate-soft-fail resilience pattern [diverges from retry-with-backoff on purpose, FR-10], non-blocking Vector Store startup, 2 new logical components [EmbeddingClient, VectorStoreClient])
+  - [x] Ingestion Worker Service — NFR Requirements: Complete & Approved (2026-08-13; blanket approval; Vector DB = Qdrant, embedding endpoint config kept separate from the existing categorization-LLM oMLX config, no-retry/soft-fail policy, tunables EMBEDDING_SIMILARITY_THRESHOLD/TOP_K/BATCH_SIZE/DIMENSIONS)
+  - [x] Ingestion Worker Service — Functional Design: Complete & Approved (2026-08-13; blanket approval granted to continue through all remaining stages of this feature). Question 1 answered A [retroactive Database addition, unified poll mechanism]. Retroactively added `RecurringPayment.embedding_status` + Database `BR-25` + lifecycle section [Database unit, `domain-entities.md`/`business-rules.md`/`business-logic-model.md`]; corrected 3 Application Design docs [`components.md`, `component-methods.md`, `services.md`] where the original Epic 9 addenda were incomplete/imprecise (RecurringPayment backlog not covered by the poll-cycle due-check; `runDetectionScan`'s collection-targeting conflated with `matchNewTransaction`'s). Added WR-21..26 to `business-rules.md`; added Vector Store Client + Embedding Manager component sections plus addenda to Categorization Engine/Recurring Payment Manager sections in `business-logic-model.md`; added `Vector`/`EmbeddingUnavailable` transient DTOs to `domain-entities.md`)
+
+## CONSTRUCTION PHASE (Local Embedding-Based Semantic Similarity, Epic 9): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-13; `aidlc-docs/construction/build-and-test/embedding-similarity-build-and-test-summary.md`; full stack rebuilt+redeployed via `docker compose up -d --build` against the real live stack [6142 real transactions, 14 real recurring payments]; migration 0010 live-verified [alembic_version=0010, both tables backfilled to pending]; new `vector-db` service healthy, both Qdrant collections confirmed created with size=768/Cosine via the live worker; graceful degradation with `EMBEDDING_BASE_URL` unset confirmed live over multiple poll cycles, zero errors; `GET /transactions` confirmed live returning `embeddingStatus`; AR-22 confirmed live in both directions [rename resets to pending; non-rename update leaves it untouched] using an invented placeholder payment, deleted afterward with zero leftover test data; frontend bundle confirmed shipping the badge's markup/testid; 538/538 unit tests passing across all 4 units [47+233+175+83]; real-embedding-endpoint happy path and browser-visual checks explicitly deferred — noted, not silently skipped)
+
+**Local Embedding-Based Semantic Similarity (Epic 9): COMPLETE** — on branch `feature/recurring-payments-budget-alerts`, not yet merged to `main`.
+
+---
+
+## Post-Completion Change: Matching Precision Refinement
+
+Tracked separately (base project status unchanged: COMPLETE; Epic 9 above also COMPLETE). Continuing on git
+branch `feature/recurring-payments-budget-alerts`. A direct follow-up refinement to Epic 9 — changes when the
+LLM classifier runs, what text gets embedded, matching thresholds/scoring, and adds a new disagreement-review
+surface reusing the Epic 6 Review page pattern.
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-16; `aidlc-docs/inception/requirements/matching-precision-refinement-requirements.md`; 12 FRs, 5 NFRs; 1 round of 8 questions + 1 round of 2 clarifications, all resolved — LLM now classifies every transaction always [same local server, `OPENROUTER_MODEL` changed, concurrent calls]; price-bucket added to embedded text [configurable buckets, existing rows re-embedded]; `embedding_similarity_threshold` raised [exact value deferred to Code Generation]; LLM category used as a soft score-boost signal during matching [applies to both categorization and recurring-payment matching]; a genuine category disagreement [both signals confident, differ] becomes a new two-candidate reviewable item on the existing `/review` page, not a bare `UNSURE` transaction; exact schema for carrying two candidate categories deferred to Application Design)
+- [x] User Stories — Skipped (2026-08-16; approved by user — backend algorithm/matching refinement, no new user-facing workflow beyond the Review-page extension already captured directly in requirements FR-MPR-10/11)
+- [x] Workflow Planning — Complete & Approved (2026-08-16; `aidlc-docs/inception/plans/matching-precision-refinement-execution-plan.md`; Application Design EXECUTE, Units Generation SKIP, per-unit NFR Requirements/NFR Design/Infrastructure Design SKIP, Functional Design + Code Generation EXECUTE per unit, Build and Test ALWAYS; sequence Database → {Ingestion Worker Service, API Service} → Frontend SPA; Risk: Medium; user granted blanket approval for remaining stage-completion gates on this feature)
+- [x] Application Design — Complete & Approved (2026-08-16; `aidlc-docs/inception/plans/matching-precision-refinement-application-design-plan.md`; updated `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`, `application-design.md` in place with dated addenda; new `CategorizationDisagreement` entity [deliberately not an extension of `RecategorizationProposal`] + new `Transaction.llm_suggested_category_id` field; Categorization Engine gains `classifyBatch` [concurrent, called upfront per-file by the Ingestion Orchestrator] and `categorize()`'s signature/decision logic changes; Recategorization Review Component (API Service) extended with disagreement list/resolve/reject, no bulk actions; ASCII diagram width-verified programmatically after edit)
+
+## INCEPTION PHASE (this change): further stages pending
+
+### 🟢 CONSTRUCTION PHASE (this change, per-unit loop)
+Build order: Database → {Ingestion Worker Service, API Service} → Frontend SPA
+- [ ] Construction — pending
+  - [x] Database — Functional Design: Complete & Approved (2026-08-16; `domain-entities.md` +`CategorizationDisagreement` entity +`Transaction.llm_suggested_category_id` field, `business-rules.md` BR-26..27, `business-logic-model.md` +`CategorizationDisagreement.status` lifecycle +`Transaction.category_source` addendum)
+  - [x] Database — Code Generation: Complete & Approved (2026-08-16; `models.py` +`CategorizationDisagreement`/`CategorizationDisagreementStatus` +`Transaction.llm_suggested_category_id`, migration `0011_categorization_disagreements.py`, `test_models.py` +`TestTransactionLlmSuggestedCategory`/`TestCategorizationDisagreement` [5 tests], 52/52 unit tests passing [up from 47]; migration live-verified against the real running Postgres [copied into `transactagent-api` container, `alembic upgrade head`/`downgrade -1`/re-`upgrade head`, all clean; schema confirmed via `psql`; all 6142 real existing transactions confirmed `llm_suggested_category_id IS NULL` as expected; API container's `/health` unaffected throughout]
+
+**UNIT: DATABASE — COMPLETE (for this feature)**
+  - [x] Database — retroactive addition: migration `0012_reembed_after_price_bucket_text_change.py` (2026-08-16, during Ingestion Worker Functional Design, WR-32) — one-time data migration resetting all `completed` `embedding_status` rows back to `pending` so the existing poll mechanism re-embeds them with the new price-bucket text; no-op downgrade by design (see migration docstring)
+  - [x] Ingestion Worker Service — Functional Design: Complete & Approved (2026-08-16; `business-rules.md` WR-27..32, `business-logic-model.md` +`classifyBatch`/`categorize()` decision-logic addenda to Categorization Engine + boost addendum to Recurring Payment Manager, `domain-entities.md` +`DisagreementInfo` +`CategorizationResult` fields)
+  - [x] Ingestion Worker Service — Code Generation: Complete & Approved (2026-08-16; `config.py` +5 settings [`embedding_similarity_threshold` 0.75→0.82, `llm_classification_concurrency`, `embedding_price_bucket_boundaries`, `embedding_llm_agreement_boost`]; new `embedding/text.py` [`price_bucket_label`/`build_embedding_text`]; `categorization/service.py` +`classify_batch` [concurrent, deduped, `ThreadPoolExecutor`], `categorize()` signature/decision-logic rewrite [WR-28], `find_similar_transaction_via_embedding` +boost param, `recategorize_unsure_from_precedent`'s `_find_match` +boost; `categorization/repository.py` +`record_disagreement`; `orchestrator/pipeline.py` +upfront per-file `classify_batch` call, `_persist_transaction` +`llm_suggested_category_id` write +disagreement recording after flush; `embedding/service.py` + `recurring_payments/service.py` both switched to price-bucketed embedding text, `recurring_payments/service.py`'s embedding candidate search restructured to return raw scores [not a pre-filtered set] so the boost can be applied per-candidate; `.env.example` +4 new/changed vars; 19 new tests [`TestClassifyBatch` 4, `TestCategorize` disagreement/abstain branches +2, embedding-boost tests +2, `test_embedding_text.py` 9 new, recurring-payments boost tests +2], 252/252 unit tests passing [up from 233]; `docker compose build ingestion-worker` verified clean; full live rebuild/redeploy + migration application deferred to this feature's Build and Test stage)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for this feature)**
+  - [x] API Service — Functional Design: Complete & Approved (2026-08-16; `business-rules.md` AR-23..27, `business-logic-model.md` Recategorization Review Component addendum, `domain-entities.md` +`DisagreementDTO`/`DisagreementPage`/`ResolveDisagreementRequest`)
+  - [x] API Service — Code Generation: Complete & Approved (2026-08-16; `errors.py` +`DisagreementNotPendingError`/`InvalidResolutionCategoryError`; `recategorization/repository.py` +3 disagreement query functions; `recategorization/service.py` +`list_pending_disagreements`/`resolve_disagreement`/`reject_disagreement`, `get_pending_count` now sums proposals+disagreements; `recategorization/schemas.py` +3 DTOs; `recategorization/router.py` +3 endpoints [`GET /recategorization/disagreements`, `POST .../resolve`, `POST .../reject`]; 16 new tests [8 service-layer, 8 endpoint-level], 191/191 unit tests passing [up from 175]; OpenAPI schema smoke-tested [40 paths, up from 37]; `docker compose build api-service` verified clean)
+
+**UNIT: API SERVICE — COMPLETE (for this feature)**
+  - [x] Frontend SPA — Functional Design: Complete & Approved (2026-08-16; `frontend-components.md` +`DisagreementTable`/`DisagreementRow` addendum — a second, visually-separate table on the Review page, same convention `BackupStatusPanel` established; no bulk actions, per Application Design Decision 2)
+  - [x] Frontend SPA — Code Generation: Complete & Approved (2026-08-16; `types.ts` +`DisagreementDTO`/`DisagreementPage`/`DisagreementStatus`; `api/recategorization.ts` +`listPendingDisagreements`/`resolveDisagreement`/`rejectDisagreement`; new `DisagreementTable` component inline in `ReviewPage.tsx` [own query/mutations/invalidation, renders nothing when empty, two "Use X" buttons + Reject, no checkbox/select-all]; `ReviewPage.test.tsx` +1 `beforeEach` default mock [so pre-existing proposal-focused tests are unaffected by the new always-on query] +7 new tests; 90/90 frontend tests passing [up from 83]; clean `tsc -b`+`vite build` [ran inside a `node:20-alpine` container after finding no local Node install]; `docker compose build frontend` verified clean)
+
+**UNIT: FRONTEND SPA — COMPLETE (for this feature)**
+
+**ALL 4 UNITS COMPLETE (for this feature) — proceeding to Build and Test**
+
+## CONSTRUCTION PHASE (Matching Precision Refinement): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-16; `aidlc-docs/construction/build-and-test/matching-precision-refinement-build-and-test-summary.md`; full stack rebuilt + redeployed via `docker compose build`/`up -d --build` against the real live stack [6142 real transactions, 14 real recurring payments, 122 real pending proposals]; migrations 0011/0012 auto-applied and live-verified [schema shape via `psql \d`, data-reset backlog watched draining live from 0/6142 to 6142/6142 `completed`]; **mid-Build-and-Test design change**: live-testing against the user's real oMLX server (`gemma-4-26b-a4b-it-4bit`) surfaced a real concern with the original one-HTTP-call-per-description design — reworked `classify_batch` into a two-phase batched-prompt-then-individual-fallback design [batch size 10, concurrency 5, both configurable], per 3 new clarifying decisions; `matching-precision-refinement-requirements.md` [new Post-Approval Change section, FR-MPR-3 revised], Ingestion Worker `business-rules.md` [WR-27 revised], and the Application Design plan [Key Design Resolution 2 revised] all updated in place; new `openrouter_client.classify_descriptions_batch`/`llm_classifier.classify_batch_prompt`/`config.py` +`llm_classification_batch_size`; 16 new/reworked tests [new `test_llm_classifier.py` 11 tests, `test_openrouter_client.py` +2, `TestClassifyBatch` reworked +3 net], 268/268 ingestion-worker tests passing [up from 252]; live-verified against the real running oMLX server at 3 separate checkpoints [6-item single batch 1.04s, 12-item chunked `classify_batch` 2.52s using the real live category whitelist, final 3-item check against the rebuilt+redeployed image], all correctly classified; survived an unrelated mid-session Docker/oMLX host restart with zero data loss [bind-mounted volumes confirmed intact, re-embed backlog resumed and completed cleanly]; API Service live-verified with a real minted JWT [`GET /recategorization/disagreements`, pending-count, full resolve flow using an invented placeholder transaction+disagreement, `category_source='llm'` write-through confirmed, all placeholder rows deleted afterward with zero leftovers]; Frontend `docker compose build` clean, live-deployed bundle confirmed containing the new `DisagreementTable` markup via direct container inspection; all 5 containers healthy throughout, zero restarts, zero errors; **grand total 601/601 unit tests passing across all 4 units** [52 Database + 268 Ingestion Worker + 191 API Service + 90 Frontend], zero regressions)
+
+**Matching Precision Refinement: COMPLETE** — on branch `feature/recurring-payments-budget-alerts`, not yet merged to `main`.

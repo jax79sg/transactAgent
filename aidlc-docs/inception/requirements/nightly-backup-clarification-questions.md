@@ -40,7 +40,7 @@ C) Other (please describe after [Answer]: tag below)
 
 
 ## Clarification 2: Separate Backup Folder — Structure and Access (from Q9)
-You provided a separate Google Drive folder for backups: `https://drive.google.com/drive/folders/1vb91lAVBH8lwniPbTz8xIdH6fkdu-f9t` (folder ID `1vb91lAVBH8lwniPbTz8xIdH6fkdu-f9t`), replacing the original "backup subfolder of the same source folder" idea, to avoid a single point of failure if the source folder is ever lost.
+You provided a separate Google Drive folder for backups (folder ID redacted here -- set via `GOOGLE_DRIVE_BACKUP_FOLDER_ID`, see `.env.example`), replacing the original "backup subfolder of the same source folder" idea, to avoid a single point of failure if the source folder is ever lost.
 
 ### Clarification Question 2a — Subfolder or Root
 Within that separate folder, should backup CSVs be:

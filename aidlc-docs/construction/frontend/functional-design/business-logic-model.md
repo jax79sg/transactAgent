@@ -42,7 +42,17 @@ Client-side logic beyond simple "call an endpoint and render the response."
 - `BackupStatusPanel` polls `GET /backups/status` every 5 minutes, mounted only on `ReviewPage` (unlike `PendingReviewBadge`, this isn't shown in the nav, so it only needs to be fresh while that page is open). Looser than `PendingReviewBadge`'s 30s deliberately: a backup outcome changes at most once a night (WR-11/BR-17 — at most one `BackupRun` row per day), so sub-minute freshness has no value here, unlike the pending-proposal count which can change every few seconds as ingestion runs land.
 - No cache-invalidation trigger exists for this query (unlike the pending-count badge, which invalidates on approve/reject) — nothing on the Frontend ever writes a `BackupRun` row, so there's no local action that could make the cached status stale ahead of the next poll.
 
+## Recurring Payments Badge and Tab (added 2026-08-08 — Epic 8)
+
+- The Dashboard nav badge polls `GET /recurring-payments/status` on the same 5-minute cadence as `BackupStatusPanel` (a status that changes at most daily doesn't need sub-minute freshness) and shows only when `overdueCount + pendingMatchCount + newSuggestionCount > 0` — the same "hide entirely at zero, no zero-count clutter" precedent `PendingReviewBadge` already established. `dueSoonCount` deliberately isn't part of the badge trigger: nothing has gone wrong yet for a due-soon item, so it shouldn't compete for the user's attention the way an overdue bill or a pending decision does.
+- Approving/rejecting a match or dismissing/adding a detection suggestion on the Dashboard tab immediately invalidates both the recurring-payments list query and the status-summary query (React Query cache invalidation) — same "don't wait for the next poll tick for the user's own actions" reasoning as `PendingReviewBadge`.
+
 ## Review Selection State (added 2026-08-02 — Epic 6)
 
 - `ReviewPage` holds a `Set<proposalId>` of the current page's selected rows, reset whenever the page number or the underlying proposal list changes (e.g. after a bulk action removes resolved rows) — never carried across pages, consistent with `BulkActionBar`'s "acts on the current page" scope (frontend-components.md).
 - "Select all" toggles every row on the current page in one action; unchecking any individual row after "select all" simply removes it from the `Set`, it does not need a separate "partial selection" mode.
+
+## Transaction Embedding Badge (added 2026-08-13 — Local Embedding-Based Semantic Similarity, Epic 9)
+
+- Purely derived from `TransactionDTO.embeddingStatus`, already present in every `GET /transactions` response — no separate query, no polling (contrast the Pending Review/Backup Status/Recurring Payments badges above, all of which poll on an interval specifically because they surface something actionable that changes independently of the page the user is looking at). A transaction's badge simply reflects whatever the list query last returned, and updates the next time that query runs (a filter change, a manual refetch, or a page navigation) — acceptable staleness per FR-6's async/eventually-consistent framing, the same reasoning already applied worker-side.
+- No cache-invalidation hook is added anywhere for this — unlike `PendingReviewBadge`'s "invalidate after the user's own action" pattern, there is no user action in this unit that changes `embeddingStatus` (it's written exclusively by the Ingestion Worker Service).

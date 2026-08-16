@@ -10,7 +10,7 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 ## Transaction Management
 
 - `TransactionFilter` (query params): `{ dateFrom?, dateTo?, bank?, category?, flowDirection?: 'in'|'out', currency?, textSearch?, categorySource?: 'similarity'|'llm'|'manual'|'unsure', page?: int, pageSize?: int, groupBy?: 'category'|'bank'|'month'|'categorySource', sortBy?, sortDir? }`
-- `TransactionDTO`: `{ id, transactionDate, description, outFlow?, inFlow?, currency, bankName, category: { id, name }, categorySource, convertedAmountSgd?, conversionIsApproximate, conversionUnavailable, bankStatementId }`
+- `TransactionDTO`: `{ id, transactionDate, description, outFlow?, inFlow?, currency, bankName, category: { id, name }, categorySource, convertedAmountSgd?, conversionIsApproximate, conversionUnavailable, bankStatementId, embeddingStatus: 'pending'|'completed' }` — `embeddingStatus` added 2026-08-13 (Local Embedding-Based Semantic Similarity feature, Epic 9, AR-21), read-only
 - `TransactionPage`: `{ items: TransactionDTO[], page, pageSize, totalCount, groups?: GroupSummary[] }`
 - `GroupSummary`: `{ groupKey, groupLabel, subtotalOutFlowSgd, subtotalInFlowSgd, transactionCount }`
 - `CategoryCorrectionRequest`: `{ categoryId: uuid }`
@@ -46,10 +46,25 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `BulkProposalRequest`: `{ proposalIds: uuid[] }`
 - `BulkApproveResponse`: `{ approvedIds: uuid[], failedIds: uuid[] }`
 - `BulkRejectResponse`: `{ rejectedIds: uuid[], failedIds: uuid[] }`
+- **Addendum (2026-08-16, Matching Precision Refinement)**:
+  - `DisagreementDTO`: `{ id, candidateTransaction: TransactionDTO, similarityCategory: { id, name }, llmCategory: { id, name }, similarityScore, status: 'pending'|'resolved'|'rejected', resolvedCategory: { id, name } | null, createdAt }`
+  - `DisagreementPage`: `{ items: DisagreementDTO[], page, pageSize, totalCount }`
+  - `ResolveDisagreementRequest`: `{ chosenCategoryId: uuid }`
+  - `PendingCountResponse` (unchanged shape) now sums proposal + disagreement pending counts (AR-26) — no new response DTO needed.
 
 ## Backup Status (added 2026-08-08 — Epic 7)
 
 - `BackupStatusResponse`: `{ lastRunAt: datetime | null, outcome: 'success'|'failed'|null, failureCategory: 'driveConnectivity'|'other'|null, transactionCount: int | null, backupFilename: string | null }` — `outcome = null` means no backup has ever run yet (AR-14), distinct from a recorded `failed` outcome.
+
+## Recurring Payments (added 2026-08-08 — Epic 8)
+
+- `RecurringPaymentDTO`: `{ id, name, expectedAmount, frequency: 'monthly'|'annual', dueMonth?, dueDay, category?: { id, name }, isTrusted, status: 'dueSoon'|'overdue'|'pendingReview'|'paid', monthlySetAside? }` — `monthlySetAside` present only for `frequency = 'annual'` (AR-16); `status` computed at read time (AR-15, refined to 4 states during Code Generation — a pending match is neither `paid` nor `overdue`)
+- `RecurringPaymentCreateRequest` / `RecurringPaymentUpdateRequest`: `{ name, expectedAmount, frequency, dueMonth?, dueDay, categoryId? }`
+- `BulkImportRequest`: `{ rows: { name, amount, frequency, dueMonth?, dueDay }[] }`
+- `BulkImportResponse`: `{ created: RecurringPaymentDTO[], failed: { row: int, reason: string }[] }` — AR-19
+- `RecurringPaymentMatchDTO`: `{ id, recurringPayment: { id, name }, transaction: TransactionDTO, cyclePeriod, status: 'pending'|'approved'|'rejected'|'auto_applied', amountAtMatch, createdAt }`
+- `DetectionSuggestionDTO`: `{ id, descriptionPattern, suggestedAmount, suggestedCategory?: { id, name }, occurrenceCount, status: 'new'|'dismissed'|'added' }`
+- `RecurringPaymentsStatusSummaryDTO`: `{ dueSoonCount, overdueCount, pendingMatchCount, newSuggestionCount }` — backs the Dashboard section and the nav badge (US-8.3/US-8.7)
 
 ## Error Shape (all endpoints)
 

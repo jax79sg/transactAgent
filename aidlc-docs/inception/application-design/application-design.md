@@ -14,9 +14,11 @@ This document consolidates `components.md`, `component-methods.md`, `services.md
 ## Services
 
 1. **Frontend SPA** — the only UI surface; talks to API Service only
-2. **API Service** — Auth, Transaction Management, Dashboard/Insights, Ingestion Trigger & Status, Configuration, **Recategorization Review** *(added 2026-08-02)*, **Backup Status** *(added 2026-08-08)*
-3. **Ingestion Worker Service** — Ingestion Orchestrator, Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine, Currency Conversion, **Backup Manager** *(added 2026-08-08)*
+2. **API Service** — Auth, Transaction Management, Dashboard/Insights, Ingestion Trigger & Status, Configuration, **Recategorization Review** *(added 2026-08-02, extended 2026-08-16 for disagreement review)*, **Backup Status** *(added 2026-08-08)*, **Recurring Payments** *(added 2026-08-08, Epic 8)*
+3. **Ingestion Worker Service** — Ingestion Orchestrator, Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine *(extended 2026-08-16 — always-on batch LLM classification, disagreement detection, price-bucket + boosted embedding matching)*, Currency Conversion, **Backup Manager** *(added 2026-08-08)*, **Recurring Payment Manager** *(added 2026-08-08, Epic 8; extended 2026-08-16)*, **Vector Store Client** *(added 2026-08-11, Epic 9)*, **Embedding Manager** *(added 2026-08-11, Epic 9)*
 4. **Shared Database** — the only integration point between API Service and Worker Service (data contract, not code contract)
+5. **Vector DB** *(added 2026-08-11, Epic 9)* — a second, separate datastore, accessed only by the Ingestion Worker Service (never the API Service); not a new integration point between the two services
+6. **oMLX** *(added 2026-08-11, Epic 9)* — a new external dependency, but a user-managed, host-native one, unlike every other external API this project calls; explicitly outside `docker-compose`
 
 ## Key Design Consequence Flagged During Design
 
@@ -25,6 +27,12 @@ Manual category correction (US-3.4) is handled entirely in the API Service, but 
 **Addendum (2026-08-02, Recategorization Review Panel — Epic 6)**: That same async job (FR-5.4) is now broadened to search already-categorized transactions too, and split by confidence: very-high-confidence `UNSURE` matches still auto-apply as before; everything else — lower-confidence `UNSURE` matches, and *every* match against an already-categorized transaction regardless of score — now creates a pending proposal instead of writing to `transactions`. Reviewing those proposals (approve/reject, individually or in bulk) is a **new, separate, synchronous** path in a new API Service component (Recategorization Review), analogous to `correctCategory()` itself rather than routed through the async job queue — a human clicking "approve" is a request/response action, not background work. See `recategorization-review-application-design-plan.md` for the full reasoning behind each of these calls.
 
 **Addendum (2026-08-08, Nightly Transaction Backup — Epic 7)**: A new, third kind of background work — time-triggered rather than queue-triggered — is added to the Worker Service's `poll_once()` loop as a lowest-priority branch (checked only when no run/job was found that cycle), owned by the new **Backup Manager** component. It reuses the existing Drive Connector for all Google Drive I/O (extended with write/delete methods against a separate, dedicated backup Drive folder — distinct from the ingestion source folder, per the user's explicit single-point-of-failure concern) and writes status to a new `backup_runs` table. The API Service's new **Backup Status** component reads that table read-only, exposing it to the Frontend's new Review-page panel — holding the same "no direct service-to-service call" rule as Recategorization Review. See `nightly-backup-application-design-plan.md` for the full reasoning.
+
+**Addendum (2026-08-08, Recurring Payments — Epic 8)**: Two new hooks, owned by the new **Recurring Payment Manager** component, with different triggers reflecting genuinely different natures of work. Matching a new transaction against the recurring-payments register is *transaction-triggered* — it's folded directly into the existing per-transaction persistence step in the Ingestion Orchestrator's pipeline (the moment a transaction is saved is exactly when matching should happen, no separate pass needed), reusing the Categorization Engine's similarity matcher rather than a new one (NFR-1). Detecting untracked recurring charges is *time-triggered* — a fourth `poll_once()` branch, extending the same pattern Backup Manager established. The API Service's new **Recurring Payments** component owns the register (CRUD, bulk import) and resolution of what the Worker proposes (approve/reject a match, dismiss/add-from a detection suggestion) — creation of matches and suggestions stays exclusively with the Worker, holding the same "no direct service-to-service call" rule as every prior review-style component. See `recurring-payments-application-design-plan.md` for the full reasoning.
+
+**Addendum (2026-08-11, Local Embedding-Based Semantic Similarity — Epic 9)**: Two new Worker-side components — **Vector Store Client** (all interaction with the new, separate Vector DB, mirroring Drive Connector's role for Google Drive) and **Embedding Manager** (owns *when* a transaction's own embedding gets persisted — the async/batched storage-time computation, plus the one-time historical backfill, unified into a single poll-cycle mechanism that just keeps consuming a `pending` backlog). Critically, this is separate from *query-time* embedding computation: the Categorization Engine and Recurring Payment Manager each compute a transient, non-persisted embedding of whatever they're matching *right now* and query the Vector Store Client directly — this is what actually makes FR-3/FR-4's "embedding-first" promise true at match time, and it's not a new orchestration hook since it's just an internal step of methods that already exist. Both the existing fuzzy-text matcher (WR-3/WR-20) and the amount-range gate (NFR-1) are kept exactly as-is as the fallback and safety net respectively — nothing about them changes; embedding similarity is a new candidate-finding method layered in front of them, not a replacement. See `embedding-similarity-application-design-plan.md` for the full reasoning, including why this doesn't conflict with FR-6's async-computation requirement.
+
+**Addendum (2026-08-16, Matching Precision Refinement, see `matching-precision-refinement-application-design-plan.md`)**: No new component or service, but three cross-cutting changes to how the Categorization Engine works. (1) The LLM Classifier moves from a last-resort fallback to an always-on step (FR-MPR-1): a new `classifyBatch` method fires concurrently for a whole file's transactions, called once upfront by the Ingestion Orchestrator, before the existing per-transaction loop — `categorize()` now takes the already-known classification as an input rather than computing it internally. (2) `categorize()`'s decision logic changes: agreement between similarity and LLM auto-assigns as before; only one signal being confident still auto-assigns directly (not treated as disagreement); both confident and differing is a genuine disagreement, recorded as a new **`CategorizationDisagreement`** entity (deliberately not an extension of `RecategorizationProposal` — different trigger, needs two candidate categories, not one) and surfaced on the existing Review page via the **Recategorization Review Component**, extended with pick-one-or-reject actions rather than a new API Service component. (3) Embedded text gains a price-range bucket and candidate scoring gains a small LLM-agreement boost, applied to the Categorization Engine's own matching *and* the Recurring Payment Manager's (reusing the same Epic 9 embedding infrastructure, price bucket and boost logic are the only things that change there). Each transaction's own LLM classification is now persisted (`Transaction.llm_suggested_category_id`) so the retroactive re-scan can use it as a boost signal for transactions ingested earlier.
 
 ## Story Traceability Validation (Step 10)
 
@@ -82,3 +90,47 @@ All 24 approved stories map to at least one component:
 | US-7.4 | Backup Manager (status recording), Backup Status, Frontend SPA (Review page panel) |
 
 **Result (Epic 7)**: Complete — no gaps, no new speculative components. All 4 stories map to either the extended Drive Connector or the new Backup Manager / Backup Status components.
+
+### Addendum (2026-08-08): Epic 8 — Recurring Payments, Budget Alerts & Subscription Detection
+
+| Story | Component(s) |
+|---|---|
+| US-8.1 | Recurring Payments |
+| US-8.2 | Recurring Payments |
+| US-8.3 | Recurring Payments (status data), Frontend SPA (Dashboard section) |
+| US-8.4 | Recurring Payment Manager, Recurring Payments (review), Categorization Engine (similarity matcher, reused) |
+| US-8.5 | Recurring Payment Manager |
+| US-8.6 | Recurring Payment Manager, Recurring Payments (suggestion triage) |
+| US-8.7 | Recurring Payments (status data), Frontend SPA (nav badge) |
+
+**Result (Epic 8)**: Complete — no gaps, no new speculative components. All 7 stories map to either the extended Categorization Engine or the new Recurring Payment Manager / Recurring Payments components.
+
+### Addendum (2026-08-11): Epic 9 — Local Embedding-Based Semantic Similarity
+
+| Story | Component(s) |
+|---|---|
+| US-9.1 | Embedding Manager (writes status), Transaction Management (reads status), Frontend SPA (badge) |
+| US-9.2 | Categorization Engine, Recurring Payment Manager (both extended), Vector Store Client |
+| US-9.3 | Categorization Engine (amount-gate + manual-precedence carryover, unchanged logic) |
+| US-9.4 | Embedding Manager (soft-fail), Categorization Engine / Recurring Payment Manager (fallback path) |
+| US-9.5 | Embedding Manager (backfill, same mechanism as forward processing) |
+
+**Result (Epic 9)**: Complete — no gaps, no new speculative components. All 5 stories map to either an extended existing component or one of the two new Ingestion Worker Service components (Vector Store Client, Embedding Manager).
+
+### Addendum (2026-08-16): Matching Precision Refinement
+
+No user stories this round (backend algorithm refinement — see `matching-precision-refinement-requirements.md`); traced directly to functional requirements instead.
+
+| Requirement | Component(s) |
+|---|---|
+| FR-MPR-1, FR-MPR-2, FR-MPR-3 | Categorization Engine (`classifyBatch`), Ingestion Orchestrator (new upfront pipeline step) |
+| FR-MPR-4 | Categorization Engine, Recurring Payment Manager (both, embedded text) |
+| FR-MPR-5 | Categorization Engine, Recurring Payment Manager (configurable bucket boundaries) |
+| FR-MPR-6 | Categorization Engine (`categorize()` decision logic) |
+| FR-MPR-7 | Categorization Engine, Recurring Payment Manager (both, score boost) |
+| FR-MPR-8 | Categorization Engine, Recurring Payment Manager (both, raised threshold) |
+| FR-MPR-9 | Categorization Engine (writes `CategorizationDisagreement`) |
+| FR-MPR-10, FR-MPR-11 | Recategorization Review Component (extended), Frontend SPA (Review page, extended `ProposalTable`/`ProposalRow`) |
+| FR-MPR-12 | Categorization Engine, Recurring Payment Manager (scope boundary — no disagreement branch in the latter) |
+
+**Result (Matching Precision Refinement)**: Complete — no gaps, no new speculative components. All 12 functional requirements map to either an extended existing component or the new `CategorizationDisagreement` data shape (Shared Data Store, not a component).

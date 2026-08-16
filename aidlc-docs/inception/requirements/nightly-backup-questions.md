@@ -105,4 +105,4 @@ A) Confirmed — no additional exclusion logic needed
 
 B) Other / additional concern (please describe after [Answer]: tag below)
 
-[Answer]:B. Losing the folder loses the backup too. Let's store it in a seperate Google drive folder here. https://drive.google.com/drive/folders/1vb91lAVBH8lwniPbTz8xIdH6fkdu-f9t?usp=sharing  
+[Answer]:B. Losing the folder loses the backup too. Let's store it in a seperate Google drive folder here. [redacted Drive folder URL -- see GOOGLE_DRIVE_BACKUP_FOLDER_ID in .env.example]  

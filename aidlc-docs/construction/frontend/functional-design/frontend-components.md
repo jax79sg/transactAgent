@@ -65,6 +65,7 @@ App
 - **Validation**: the category `<select>` is populated only from currently-active categories (mirrors AR-2 — the UI shouldn't even offer an inactive category as a choice, though the API still enforces it)
 - **Grouping**: a `groupBy` selector; when set, `TransactionTable` renders grouped section headers with subtotals (from `TransactionPage.groups`) above the flat row list
 - **API**: `GET /transactions`, `PUT /transactions/{id}/category`
+- **Addendum (2026-08-13, Local Embedding-Based Semantic Similarity feature — Epic 9, US-9.1)**: `TransactionRow` renders a small, quiet badge (a dot/icon with a `title` tooltip, not a banner) next to the description, reflecting `txn.embeddingStatus` (`'pending'` | `'completed'`, already present on every `TransactionDTO`). Purely presentational — no polling, no new API call, no new column (inline in the existing Description cell to avoid touching `GroupHeaderRow`'s fixed `colSpan`). Per FR-7, this is a processing-status indicator only ("has this transaction's embedding been computed"), not a claim about match quality or precedent found — deliberately styled to not compete for attention with anything actionable elsewhere on the page.
 
 ## ExportCsvButton
 
@@ -99,6 +100,14 @@ App
 - **Empty state**: "No proposals waiting for review" when the page has zero items
 - **API**: `GET /recategorization/proposals`, `POST /recategorization/proposals/{id}/approve`, `POST /recategorization/proposals/{id}/reject`, `POST /recategorization/proposals/bulk-approve`, `POST /recategorization/proposals/bulk-reject`
 
+## DisagreementTable / DisagreementRow (Addendum 2026-08-16 — Matching Precision Refinement)
+
+- **DisagreementTable**: a second, separate table on the Review page (below `ProposalTable`, its own heading — same "visually separate section" convention `BackupStatusPanel` established, not merged into the proposals list since it's a genuinely different row shape), paginated from `GET /recategorization/disagreements`
+- **DisagreementRow**: shows the candidate transaction (date, description, amount), the similarity-sourced candidate category, the LLM-sourced candidate category, and the similarity score; actions are "Use [similarity category name]", "Use [LLM category name]", and "Reject" — `POST /recategorization/disagreements/{id}/resolve` (body `{chosenCategoryId}`, one of the two candidates' ids) or `POST /recategorization/disagreements/{id}/reject`; on success, the row is removed and the nav badge count decrements (same combined count as proposals, AR-26)
+- **No checkbox, no bulk actions** (Application Design Decision 2 / AR-27) — resolving is always an individual, specific choice between two different categories; `DisagreementRow` has no `BulkActionBar` equivalent
+- **Empty state**: no separate message — the table section simply doesn't render when there are zero pending disagreements, same as `BackupStatusPanel` never hiding itself but `ProposalTable`'s own empty state already covers "nothing to review" messaging generally
+- **API**: `GET /recategorization/disagreements`, `POST /recategorization/disagreements/{id}/resolve`, `POST /recategorization/disagreements/{id}/reject`
+
 ## BackupStatusPanel (Addendum 2026-08-08 — Epic 7)
 
 - **BackupStatusPanel**: rendered on the Review page, visually separate (its own bordered section) from `ProposalTable` — per the requirements clarification that explicitly asked for this, not folded into the proposal review UI. Polls `GET /backups/status` on an interval (looser than `PendingReviewBadge`'s 30s — a nightly backup changes at most once a day, so this is an even less time-sensitive ambient indicator; see `business-logic-model.md` for the exact interval).
@@ -107,3 +116,17 @@ App
   - `outcome === 'success'`: last backup time and transaction count
   - `outcome === 'failed'`: `failureCategory === 'driveConnectivity'` shows a prompt to reconnect Google Drive (linking to the existing Settings page's connect flow); any other failure category shows a generic "Backup failed" indicator — both per FR-11's explicit dual-message requirement
 - **API**: `GET /backups/status`
+
+## DashboardPage: Recurring Payments Tab (Addendum 2026-08-08 — Epic 8)
+
+- A 4th tab on the existing Dashboard page (FR-4) — not a separate nav page. Unlike the other 3 tabs, this one doesn't use the shared date-range filter (it's a live status view, not a historical time series).
+- **Status summary**: 4 counts (due soon / overdue / pending review / new suggestions) shown at the top.
+- **Payments list**: name, expected amount, frequency/due date, a status badge (`dueSoon`/`overdue`/`pendingReview`/`paid`, per AR-15), monthly set-aside for annual payments (AR-16), optional category. Add-one-at-a-time form (US-8.1) plus a bulk-import textarea for pasted rows (US-8.2), matching `SettingsPage`'s category-management form pattern.
+- **Pending matches**: a compact table with per-row Approve/Reject (US-8.4), same interaction shape as `ReviewPage`'s `ProposalTable`.
+- **Detection suggestions**: a compact list with per-row Add/Dismiss (US-8.6).
+- **API**: `GET/POST /recurring-payments`, `PUT/DELETE /recurring-payments/{id}`, `POST /recurring-payments/bulk-import`, `GET /recurring-payments/matches`, `POST /recurring-payments/matches/{id}/approve`, `POST /recurring-payments/matches/{id}/reject`, `GET /recurring-payments/detection-suggestions`, `POST /recurring-payments/detection-suggestions/{id}/dismiss`, `POST /recurring-payments/detection-suggestions/{id}/add`, `GET /recurring-payments/status`
+
+## NavBar: Recurring Payments Badge (Addendum 2026-08-08 — Epic 8)
+
+- A badge on the **Dashboard** nav link (US-8.7), same visual pattern as `PendingReviewBadge` on Review — visible only when `overdueCount + pendingMatchCount + newSuggestionCount > 0` (`dueSoonCount` is informational, not counted — nothing has gone wrong yet).
+- **API**: `GET /recurring-payments/status`

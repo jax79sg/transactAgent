@@ -12,7 +12,7 @@
 ### FR-1: Google Drive Ingestion
 - FR-1.1: The system SHALL authenticate to Google Drive using OAuth 2.0 Authorization Code flow against the user's personal Google account.
 - FR-1.2: On first run, the system SHALL guide the user through an interactive OAuth consent flow and persist the resulting refresh token securely for subsequent runs.
-- FR-1.3: The system SHALL only scan the configured Google Drive folder (`https://drive.google.com/drive/folders/1qeJblYSk-E6BH6dhenbc8Vd0xxRkZor0`) for PDF files.
+- FR-1.3: The system SHALL only scan the configured Google Drive folder (folder ID set via `GOOGLE_DRIVE_FOLDER_ID`, redacted here -- see `.env.example`) for PDF files.
 - FR-1.4: The system SHALL only scan/process the Drive folder when explicitly triggered by the user via a UI action (button), never on a schedule or automatically on page load.
 - FR-1.5: The system SHALL display progress and results of each ingestion run (files found, files processed, files skipped as duplicates, files failed, transactions extracted).
 

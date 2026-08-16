@@ -15,6 +15,15 @@
 | Test framework | pytest + testcontainers | Matches Units 1/2 |
 | Worker loop | Simple polling (5s interval, `asyncio` sleep loop or a lightweight scheduler) — no message broker | Consistent with Application Design's "keep it simple" decision |
 
+## Addendum (2026-08-13, Local Embedding-Based Semantic Similarity feature — Epic 9)
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Vector DB | **Qdrant** (`qdrant/qdrant` image, `qdrant-client` Python SDK) | Evaluated against minimal-footprint precedent vs. genuine ANN/filtering needs — see `ingestion-worker-embedding-similarity-nfr-requirements-plan.md` for the full Qdrant vs. Chroma vs. Milvus comparison |
+| Embedding endpoint client | `httpx`, pointed at `EMBEDDING_BASE_URL` (new, separate config from `OPENROUTER_BASE_URL`) | The categorization-LLM-fallback oMLX instance already running (`gemma-4-12B-it-4bit`) is a different model/likely a different port than the embedding model (`google/embeddinggemma-300m`, FR-1) — kept as an independent config value rather than assumed-shared |
+| Embedding call retry | **None** — single attempt, 5s timeout, immediate soft-fail (WR-25) | Diverges from the Drive/Backup retry-with-backoff pattern on purpose; matches the existing no-cross-provider-retry philosophy (WR-7) — a soft-dependency (FR-10) gains nothing from retrying before falling back to the already-fast fuzzy-text path |
+| New tunables | `EMBEDDING_SIMILARITY_THRESHOLD=0.75`, `EMBEDDING_TOP_K=5`, `EMBEDDING_BATCH_SIZE=50`, `EMBEDDING_DIMENSIONS=768` | Defaults set here, to be sanity-checked against real data during Build and Test — same precedent as the original `similarity_threshold=85.0` |
+
 ## Package Dependency on Unit 1
 
 Installs the `database/` package (Unit 1) as a local editable dependency, same pattern as Unit 2.

@@ -18,6 +18,29 @@ A simple `asyncio` loop: sleep 5s (NFR Requirements Question 6 = A), check for o
 
 Already captured in Functional Design's pipeline (business-logic-model.md) — one file's extraction failure doesn't abort the run; the pattern here just confirms the retry-with-backoff above happens *inside* that per-file try/except boundary, not around the whole run.
 
+## Pattern: No-Retry Immediate Soft-Fail (added 2026-08-13 — Local Embedding-Based Semantic Similarity, Epic 9)
+
+**Category**: Resilience (deliberately diverges from "Same-Provider Retry With Backoff" above)
+
+The embedding endpoint call (`EmbeddingClient`) and every Vector Store Client call are wrapped in a single
+try/except with a short timeout (5s) and **zero retries** — any exception (timeout, connection error, HTTP
+error, non-2xx response) is caught and treated as "no embedding available for this call" (WR-25), falling
+through to the existing fuzzy-text path immediately. This is intentional, not an oversight: FR-10 frames the
+entire embedding subsystem as a soft, optional enhancement — retrying would only add latency to a call whose
+failure already has a fast, correct fallback, unlike Gemini/OpenRouter where a failure is genuinely terminal
+for that statement/transaction (WR-1/WR-4).
+
+## Pattern: Non-Blocking Vector Store Startup (added 2026-08-13 — Epic 9)
+
+Unlike the fail-fast Postgres migration pattern above, `VectorStoreClient.ensure_collections()` (creating the
+`transactions`/`recurring_payment_names` Qdrant collections if they don't exist, called once at worker
+startup) is **best-effort**: a failure is logged and the worker proceeds to its normal polling loop. Even
+though Qdrant is this project's own `docker-compose` service (not a user-managed external dependency like
+oMLX), FR-10's soft-dependency framing applies to the whole embedding subsystem, not just the oMLX call — a
+Qdrant outage must not block the worker's unrelated responsibilities (ingestion runs, backups,
+recategorization jobs, detection scans). Every embedding call site already tolerates the vector store being
+unreachable via the same WR-25 soft-fail path.
+
 ## N/A Categories (justified)
 
 - **Scalability Patterns**: N/A — single worker process, single personal user
