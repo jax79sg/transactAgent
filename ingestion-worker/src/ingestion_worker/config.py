@@ -1,10 +1,20 @@
 """Environment-sourced configuration (NFR-4.1)."""
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+# Configurable Application Settings: the shared, non-secret override file both
+# api-service and ingestion-worker mount from the same Docker volume (Infrastructure
+# Design). A fixed infrastructure path, not itself a user-tunable Settings field.
+SETTINGS_OVERRIDE_FILE = "/config/overrides/settings.env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="")
+    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     db_host: str = "database"
     db_port: int = 5432
@@ -159,6 +169,28 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """WR-33: the settings-override file takes the HIGHEST precedence -- checked
+        before process env, not after. pydantic-settings' default order (init > env >
+        dotenv > secrets) would otherwise make this file permanently ineffective for
+        every setting docker-compose.yml already maps as a process env var --
+        confirmed empirically before writing this (see
+        aidlc-docs/construction/ingestion-worker/functional-design/business-rules.md
+        WR-33). A missing file (e.g. before any setting has ever been changed via the
+        Settings page) is not an error -- DotEnvSettingsSource tolerates a nonexistent
+        env_file path, confirmed the same way.
+        """
+        override_source = DotEnvSettingsSource(settings_cls, env_file=SETTINGS_OVERRIDE_FILE)
+        return (override_source, init_settings, env_settings, dotenv_settings, file_secret_settings)
 
 
 settings = Settings()
