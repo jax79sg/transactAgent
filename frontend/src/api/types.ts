@@ -346,3 +346,39 @@ export interface RecurringPaymentsStatusSummaryDTO {
   pendingMatchCount: number;
   newSuggestionCount: number;
 }
+
+export type SettingClassification = "standard" | "advanced";
+export type SettingType = "float" | "int" | "string" | "enum";
+export type SettingOwningServiceValue = "ingestion-worker" | "api-service";
+
+export interface SettingDTO {
+  name: string;
+  value: string;
+  isOverridden: boolean;
+  owningServices: SettingOwningServiceValue[];
+  classification: SettingClassification;
+  type: SettingType;
+  min?: number;
+  max?: number;
+  allowedValues?: string[];
+}
+
+export interface RestartTargetDTO {
+  owningService: SettingOwningServiceValue;
+  restartCommand: string;
+  workerBusy?: boolean;
+}
+
+export interface SettingChangeResultDTO {
+  setting: SettingDTO;
+  restartGuidance: RestartTargetDTO[];
+}
+
+export interface SettingChangeDTO {
+  id: string;
+  settingName: string;
+  owningService: SettingOwningServiceValue;
+  previousValue: string | null;
+  newValue: string;
+  changedAt: string;
+}
