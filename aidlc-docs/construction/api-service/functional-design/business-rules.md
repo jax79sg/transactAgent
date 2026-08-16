@@ -97,3 +97,70 @@ The existing pending-count endpoint (US-6.6's nav badge) now returns the sum of 
 
 ## AR-27: No Bulk Actions for Disagreements (added 2026-08-16 — Matching Precision Refinement)
 Unlike proposals, disagreements have no bulk resolve/reject endpoint — resolving one always means a specific, individual choice between two different categories, which has no sensible bulk default (Application Design Decision 2). Bulk reject would be defensible on its own, but is deliberately not added either, to keep the action set symmetric and avoid a resolve/reject asymmetry that would need its own explanation in the UI. **Traces to**: FR-MPR-10.
+
+## AR-28: The Settings Allow-List Is the Sole Source of Truth for What's Writable (added 2026-08-16 — Configurable Application Settings)
+`listSettings`/`getSetting`/`updateSetting` all consult one static, code-owned allow-list (not the database, not user input) of exactly 35 entries — this table is the actual enforcement mechanism behind NFR-CAS-2 (Application Design's "Component Boundary Note"): a name not on this list simply has no code path to a value, secret or otherwise. Type/range constraints below are enforced by `updateSetting` (FR-CAS-8) before any write.
+
+| Setting | Owning Service | Class | Type | Constraint |
+|---|---|---|---|---|
+| `similarity_threshold` | ingestion-worker | standard | float | 0.0 – 100.0 |
+| `similarity_amount_ratio_tolerance` | ingestion-worker | standard | float | ≥ 1.0 |
+| `similarity_amount_absolute_floor` | ingestion-worker | standard | float | ≥ 0.0 |
+| `recategorization_auto_apply_threshold` | ingestion-worker | standard | float | 0.0 – 100.0 |
+| `extraction_confidence_threshold` | ingestion-worker | standard | enum | `low` \| `medium` \| `high` |
+| `poll_interval_seconds` | ingestion-worker | standard | float | > 0.0 |
+| `retry_max_attempts` | ingestion-worker | standard | int | ≥ 0 |
+| `retry_backoff_base_seconds` | ingestion-worker | standard | float | > 0.0 |
+| `reporting_currency` | ingestion-worker | standard | string | exactly 3 uppercase letters (ISO 4217-shaped) |
+| `recurring_payment_match_window_days` | ingestion-worker | standard | int | ≥ 0 |
+| `recurring_payment_trusted_amount_ratio_tolerance` | ingestion-worker | standard | float | ≥ 1.0 |
+| `recurring_payment_trusted_amount_absolute_floor` | ingestion-worker | standard | float | ≥ 0.0 |
+| `recurring_payment_detection_scan_interval_hours` | ingestion-worker | standard | int | > 0 |
+| `recurring_payment_detection_min_occurrences` | ingestion-worker | standard | int | ≥ 2 |
+| `recurring_payment_detection_cadence_min_days` | ingestion-worker | standard | int | > 0 (also see AR-29) |
+| `recurring_payment_detection_cadence_max_days` | ingestion-worker | standard | int | > 0 (also see AR-29) |
+| `embedding_similarity_threshold` | ingestion-worker | standard | float | 0.0 – 1.0 |
+| `embedding_top_k` | ingestion-worker | standard | int | ≥ 1 |
+| `embedding_batch_size` | ingestion-worker | standard | int | ≥ 1 |
+| `embedding_price_bucket_boundaries` | ingestion-worker | standard | string | comma-separated, strictly ascending, positive numbers |
+| `embedding_llm_agreement_boost` | ingestion-worker | standard | float | ≥ 0.0 |
+| `llm_classification_batch_size` | ingestion-worker | standard | int | ≥ 1 |
+| `llm_classification_concurrency` | ingestion-worker | standard | int | ≥ 1 |
+| `backup_schedule_hour` | ingestion-worker | standard | int | 0 – 23 |
+| `backup_retention_count` | ingestion-worker | standard | int | ≥ 1 |
+| `embedding_base_url` | ingestion-worker | advanced | string | empty, or a well-formed `http(s)://` URL |
+| `embedding_model` | ingestion-worker | advanced | string | non-empty |
+| `embedding_dimensions` | ingestion-worker | advanced | int | ≥ 1 |
+| `openrouter_base_url` | ingestion-worker | advanced | string | well-formed `http(s)://` URL |
+| `openrouter_model` | ingestion-worker | advanced | string | non-empty |
+| `qdrant_host` | ingestion-worker | advanced | string | non-empty |
+| `qdrant_port` | ingestion-worker | advanced | int | 1 – 65535 |
+| `gemini_model` | ingestion-worker + api-service | advanced | string | non-empty; a single `updateSetting` call updates the override key both services read (same field name, same file — see AR-32) |
+| `jwt_expiry_minutes` | api-service | standard | int | ≥ 1 |
+| `default_page_size` | api-service | standard | int | ≥ 1 (also see AR-29) |
+| `max_page_size` | api-service | standard | int | ≥ 1 (also see AR-29) |
+| `csv_export_max_rows` | api-service | standard | int | ≥ 1 |
+| `recurring_payment_due_soon_lead_days` | api-service | standard | int | ≥ 0 |
+| `frontend_origin` | api-service | advanced | string | comma-separated, each entry a well-formed `http(s)://` origin |
+| `google_oauth_redirect_uri` | api-service | advanced | string | well-formed `http(s)://` URL |
+
+**Traces to**: FR-CAS-1, FR-CAS-2, FR-CAS-8, NFR-CAS-2, NFR-CAS-4.
+
+## AR-29: Two Cross-Field Constraints Are Checked Against the Setting's Sibling, Not Just Its Own Type (added 2026-08-16 — Configurable Application Settings)
+Two of AR-28's entries can't be validated by looking at the new value alone:
+- `recurring_payment_detection_cadence_min_days` MUST be strictly less than the *current effective value* of `recurring_payment_detection_cadence_max_days` (and vice versa for a `..._max_days` update) — a scan whose cadence window has min ≥ max would treat every candidate pattern as out-of-window.
+- `default_page_size` MUST be less than or equal to the *current effective value* of `max_page_size` (and vice versa) — a request-time page-size clamp that's smaller than its own minimum default would silently reject the initial page load.
+
+`updateSetting` reads the sibling's current effective value (from the same allow-list resolution `getSetting` already uses) as part of validating either half of these pairs — a single-field update is rejected (400) if it would leave the pair inconsistent, rather than allowing a temporarily-broken intermediate state. **Traces to**: FR-CAS-8, NFR-CAS-4.
+
+## AR-30: Restart Command Is a Fixed String Per Owning Service (added 2026-08-16 — Configurable Application Settings)
+`getRestartGuidance` returns a hardcoded command per owning service — `docker restart transactagent-worker` for `ingestion-worker`-owned settings, `docker restart transactagent-api` for `api-service`-owned ones — matching the container names `docker-compose.yml` already assigns (Infrastructure Design). Not derived dynamically (e.g. by shelling out to `docker ps`) — this component has no Docker-socket access at all (Resolved Decision 2), so the command text is just a string constant keyed by `owning_service`, never itself executed by the application. **Traces to**: FR-CAS-6.
+
+## AR-31: Busy/Idle Is a Point-in-Time Read, Not a Guarantee (added 2026-08-16 — Configurable Application Settings)
+`isIngestionWorkerBusy()` (Key Design Resolution 2, Application Design) queries for any `ingestion_runs`/`recategorization_jobs` row with `status = 'running'` at the moment `getRestartGuidance` is called — a plain read, not a lock or a reservation. The worker could transition from idle to busy an instant after the response is sent (e.g. a run was just queued and claimed) — the UI's guidance is advisory, matching Resolved Decision 2's "no automation" framing: the human decides when to actually run the restart command, this is a best-effort signal to inform that decision, not a hard gate the system enforces. **Traces to**: FR-CAS-7.
+
+## AR-32: API Service's Own Config Loading Uses the Same Override-File Mechanism as Ingestion Worker (added 2026-08-16 — Configurable Application Settings)
+`api-service`'s `config.py` gains the identical `settings_customise_sources()` + `extra='ignore'` mechanism as Ingestion Worker Service's `WR-33` (`aidlc-docs/construction/ingestion-worker/functional-design/business-rules.md`) — same shared override file path, same highest-precedence source ordering, same empirically-verified reasoning. Not re-derived independently; this rule exists to record that both services' `config.py` changes are the same mechanism applied twice, not two different designs that happen to agree. **Traces to**: FR-CAS-5.
+
+## AR-33: A Write Failure Partway Through Never Leaves a Half-Applied Change (added 2026-08-16 — Configurable Application Settings)
+`updateSetting`'s four steps (validate → write override file → record `SettingChange` → return restart guidance, per `services.md`'s addendum) run in that fixed order specifically so that nothing is written until validation (AR-28/AR-29) has already passed, and the `SettingChange` history row is only recorded *after* the override file write succeeds — a failure writing the file (e.g. a permissions issue on the shared volume) must not produce a history entry describing a change that never actually took effect. **Traces to**: FR-CAS-4, FR-CAS-9.

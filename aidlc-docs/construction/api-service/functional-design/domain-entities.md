@@ -66,6 +66,16 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `DetectionSuggestionDTO`: `{ id, descriptionPattern, suggestedAmount, suggestedCategory?: { id, name }, occurrenceCount, status: 'new'|'dismissed'|'added' }`
 - `RecurringPaymentsStatusSummaryDTO`: `{ dueSoonCount, overdueCount, pendingMatchCount, newSuggestionCount }` — backs the Dashboard section and the nav badge (US-8.3/US-8.7)
 
+## Configurable Application Settings (added 2026-08-16)
+
+- `SettingDTO`: `{ name, value: string, owningService: 'ingestion-worker'|'api-service', classification: 'standard'|'advanced', type: 'float'|'int'|'string'|'enum', min?: number, max?: number, allowedValues?: string[] }` — `value` is always a string on the wire (AR-28's types are metadata for client-side input rendering/validation hints, not the wire type itself, matching `SettingChange.new_value`'s string storage at the Database layer)
+- `UpdateSettingRequest`: `{ value: string }`
+- `SettingChangeResult`: `{ setting: SettingDTO, restartGuidance: RestartGuidanceDTO }` — returned by a successful `updateSetting` call
+- `RestartGuidanceDTO`: `{ owningService: 'ingestion-worker'|'api-service', restartCommand: string, workerBusy?: boolean }` — `workerBusy` is present only when `owningService = 'ingestion-worker'` (AR-31); genuinely absent, not `null`, for `api-service`-owned settings (US-10.3's third edge case)
+- `SettingChangeDTO`: `{ id, settingName, owningService: 'ingestion-worker'|'api-service', previousValue: string | null, newValue: string, changedAt: datetime }`
+- `InvalidSettingValueError` (400): a value failing AR-28's type/range or AR-29's cross-field check
+- `UnknownSettingError` (404): a name not on the AR-28 allow-list — indistinguishable whether it's a genuinely-unknown name or one of the 13 excluded secrets (NFR-CAS-2)
+
 ## Error Shape (all endpoints)
 
 - `ErrorResponse`: `{ error: string, message: string, details?: object }` — consistent shape across all `400`/`401`/`404`/`409` responses so the Frontend has one error-handling code path.

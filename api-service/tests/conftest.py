@@ -75,3 +75,17 @@ def auth_headers(client, test_user):
     )
     token = response.json()["token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def settings_override_path(tmp_path, monkeypatch):
+    """Configurable Application Settings: redirects the settings-override file to a
+    per-test temp path -- app_settings/service.py imports SETTINGS_OVERRIDE_FILE by
+    name (`from api_service.config import SETTINGS_OVERRIDE_FILE`), so the module
+    actually read from at runtime is api_service.app_settings.service, not
+    api_service.config."""
+    import api_service.app_settings.service as settings_service_module
+
+    path = str(tmp_path / "settings.env")
+    monkeypatch.setattr(settings_service_module, "SETTINGS_OVERRIDE_FILE", path)
+    return path

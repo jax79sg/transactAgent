@@ -165,6 +165,24 @@ class InvalidResolutionCategoryError(ApiError):
     error_code = "invalid_resolution_category"
 
 
+class UnknownSettingError(ApiError):
+    """AR-28 (Configurable Application Settings): the name isn't on the static
+    allow-list -- indistinguishable whether it's genuinely unknown or one of the 13
+    excluded secrets (NFR-CAS-2), by design."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+    error_code = "unknown_setting"
+
+
+class InvalidSettingValueError(ApiError):
+    """AR-28/AR-29 (Configurable Application Settings): the proposed value fails its
+    type/range check, or would break a cross-field constraint with a sibling
+    setting."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_setting_value"
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:

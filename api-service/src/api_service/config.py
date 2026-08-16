@@ -1,10 +1,20 @@
 """Environment-sourced configuration (NFR-4.1 — no secrets hardcoded)."""
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    DotEnvSettingsSource,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+# Configurable Application Settings (AR-32): same shared override file and mechanism
+# as Ingestion Worker Service's WR-33 -- see that unit's business-rules.md for the
+# full reasoning. A fixed infrastructure path, not itself a user-tunable field.
+SETTINGS_OVERRIDE_FILE = "/config/overrides/settings.env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="")
+    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     db_host: str = "database"
     db_port: int = 5432
@@ -56,6 +66,22 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
         )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """AR-32: identical mechanism to Ingestion Worker Service's WR-33 -- the
+        settings-override file takes the HIGHEST precedence, checked before process
+        env. See that unit's business-rules.md for the full empirically-verified
+        reasoning; not re-derived independently here."""
+        override_source = DotEnvSettingsSource(settings_cls, env_file=SETTINGS_OVERRIDE_FILE)
+        return (override_source, init_settings, env_settings, dotenv_settings, file_secret_settings)
 
 
 settings = Settings()

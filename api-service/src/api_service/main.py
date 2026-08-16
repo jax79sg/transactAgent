@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api_service.ai_assistant.router import router as ai_assistant_router
+from api_service.app_settings.router import router as app_settings_router
 from api_service.auth.router import router as auth_router
 from api_service.backup.router import router as backup_router
 from api_service.categories.router import router as categories_router
@@ -66,6 +67,7 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     app.include_router(recategorization_router)
     app.include_router(backup_router)
     app.include_router(recurring_payments_router)
+    app.include_router(app_settings_router)
 
     return app
 
