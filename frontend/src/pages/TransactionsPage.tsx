@@ -164,9 +164,20 @@ function EmbeddingStatusBadge({ status }: { status: TransactionDTO["embeddingSta
   );
 }
 
-function TransactionRow({ txn, onCorrected }: { txn: TransactionDTO; onCorrected: () => void }) {
+function TransactionRow({
+  txn,
+  index,
+  onCorrected,
+}: {
+  txn: TransactionDTO;
+  index: number;
+  onCorrected: () => void;
+}) {
   return (
-    <tr data-testid={`transaction-row-${txn.id}`} className="border-b border-slate-100">
+    <tr
+      data-testid={`transaction-row-${txn.id}`}
+      className={`border-b border-slate-100 ${index % 2 === 1 ? "bg-slate-100" : "bg-white"}`}
+    >
       <td className="py-2">{txn.transactionDate}</td>
       <td>
         {txn.description}
@@ -346,13 +357,13 @@ export function TransactionsPage() {
                       <GroupHeaderRow group={group} />
                       {data.items
                         .filter((txn) => groupKeyFor(txn, filter.groupBy!) === group.groupKey)
-                        .map((txn) => (
-                          <TransactionRow key={txn.id} txn={txn} onCorrected={refetchAfterCorrection} />
+                        .map((txn, index) => (
+                          <TransactionRow key={txn.id} txn={txn} index={index} onCorrected={refetchAfterCorrection} />
                         ))}
                     </Fragment>
                   ))
-              : data.items.map((txn) => (
-                  <TransactionRow key={txn.id} txn={txn} onCorrected={refetchAfterCorrection} />
+              : data.items.map((txn, index) => (
+                  <TransactionRow key={txn.id} txn={txn} index={index} onCorrected={refetchAfterCorrection} />
                 ))}
           </tbody>
         </table>
