@@ -42,6 +42,18 @@ Also verified clean: `tsc -b`, `docker compose config`, and `docker compose buil
 
 Attempted via the automated browser tool (session-token injection into `sessionStorage`, bypassing the real login form since the real account password isn't known to this session) but blocked by a token-persistence quirk in the automation harness itself — every authenticated page (not just this feature's) returned 401 after a tool-driven navigation, while the identical token worked correctly via direct `curl` to the same endpoint. Not a product issue: confirmed by the fact every pre-existing authenticated route failed identically, and by the frontend's own 95 passing unit tests exercising this exact component tree (edit → confirm → save → restart guidance → busy/idle → history) against a mocked API. A real click-through was not completed; noted explicitly rather than claimed.
 
+## Post-Summary Correction (2026-08-16, from user feedback)
+
+The "Known Limitation" noted above turned out not to be acceptable in practice: the user's real deployment had several settings already customized via `.env` (`OPENROUTER_MODEL` in particular, set to a specific local model), and the Settings page reported the catalog's stock default instead — the user caught this directly ("openrouter_model should be gemma-4-26b-a4b-it-4bit isn't it?"). They also flagged that settings had no description or categorization despite `.env.example` already being well-organized with per-setting comments. Investigating both surfaced a third, unrelated defect: `ai_assistant_max_transactions` was in the original Requirements scope but had never actually been implemented.
+
+All three fixed (see `configurable-app-settings-requirements.md`'s second Post-Approval Change section and `business-rules.md` AR-28's correction / new AR-34 for full detail):
+
+1. `api-service`'s `Settings` class gained a display-only mirror of every Ingestion-Worker-owned field, fed the identical `docker-compose.yml` env vars Ingestion Worker itself receives — both services' `Settings` objects now agree by construction, live-reverified: `GET /settings/openrouter_model` and `GET /settings/embedding_base_url` both now correctly return the real deployed `.env` values (`gemma-4-26b-a4b-it-4bit`, `http://host.docker.internal:8000/v1`), not stock defaults.
+2. Every setting now carries a `category` (7 groups, matching `.env.example`'s own section organization) and a `description` sourced directly from that same file's explanatory comments — the Settings page groups by category and shows the real description per row.
+3. `ai_assistant_max_transactions` added; true setting count is **41**, not 40.
+
+Full stack rebuilt and redeployed again (`docker compose build`/`up -d --build`) against the same real live stack; all 3 fixes live-verified via real HTTP requests as described above. All 4 units' test suites re-run from the deployed checkout: **663/663 passing** (57 Database + 272 Ingestion Worker + 239 API Service [+3 net] + 95 Frontend), zero regressions.
+
 ## Result
 
-**Configurable Application Settings: COMPLETE** — merged into `feature/recurring-payments-budget-alerts`, not yet merged to `main`. All 4 units live-verified against the real running stack; 660/660 unit tests passing project-wide.
+**Configurable Application Settings: COMPLETE** — merged into `feature/recurring-payments-budget-alerts`, not yet merged to `main`. All 4 units live-verified against the real running stack, including a real post-delivery correction driven by direct user verification rather than assumed-correct; 663/663 unit tests passing project-wide.
