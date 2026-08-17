@@ -19,7 +19,7 @@ multi-modal shape), not a plain string, even with no image involved.
 import argparse
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from clearml import Task
@@ -71,10 +71,14 @@ def _load_vlm_dataset(path: Path) -> list[dict]:
 
 
 def train(dataset_dir: Path, output_dir: Path, config: TrainingConfig) -> TrainingRunResult:
-    from mlx_tune import FastVisionModel, UnslothVisionDataCollator, VLMSFTTrainer  # noqa: PLC0415
-    from mlx_tune.vlm import VLMSFTConfig  # noqa: PLC0415
+    from mlx_tune import (
+        FastVisionModel,
+        UnslothVisionDataCollator,
+        VLMSFTTrainer,
+    )
+    from mlx_tune.vlm import VLMSFTConfig
 
-    task = Task.init(project_name=_CLEARML_PROJECT, task_name=f"finetune-{datetime.now(timezone.utc).isoformat()}")
+    task = Task.init(project_name=_CLEARML_PROJECT, task_name=f"finetune-{datetime.now(UTC).isoformat()}")
     task.connect(asdict(config))
 
     model, processor = FastVisionModel.from_pretrained(_BASE_MODEL, load_in_4bit=True)

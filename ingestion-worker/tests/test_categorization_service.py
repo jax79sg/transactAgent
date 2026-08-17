@@ -4,13 +4,6 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from sqlalchemy import select
-
-from ingestion_worker.categorization.service import (
-    categorize,
-    classify_batch,
-    find_similar_transaction_via_embedding,
-    recategorize_unsure_from_precedent,
-)
 from transactagent_db.models import (
     BankStatement,
     Category,
@@ -20,6 +13,13 @@ from transactagent_db.models import (
     RecategorizationProposalSourceBucket,
     RecategorizationProposalStatus,
     Transaction,
+)
+
+from ingestion_worker.categorization.service import (
+    categorize,
+    classify_batch,
+    find_similar_transaction_via_embedding,
+    recategorize_unsure_from_precedent,
 )
 
 

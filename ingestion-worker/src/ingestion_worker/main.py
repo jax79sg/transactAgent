@@ -6,6 +6,8 @@ import asyncio
 import logging
 from pathlib import Path
 
+from transactagent_db.migrate import run_migrations_with_lock
+
 from ingestion_worker.backup import service as backup_service
 from ingestion_worker.config import settings
 from ingestion_worker.db import session_scope
@@ -15,7 +17,6 @@ from ingestion_worker.heartbeat import touch_heartbeat
 from ingestion_worker.logging_capture import DbLogHandler
 from ingestion_worker.orchestrator import pipeline, repository
 from ingestion_worker.recurring_payments import service as recurring_payments_service
-from transactagent_db.migrate import run_migrations_with_lock
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ async def run_forever() -> None:
         touch_heartbeat()
         try:
             poll_once()
-        except Exception:  # noqa: BLE001 - a bug in one poll cycle must not kill the worker process
+        except Exception:
             logger.exception("Unhandled error during poll cycle")
         await asyncio.sleep(settings.poll_interval_seconds)
 

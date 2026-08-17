@@ -5,7 +5,6 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
-
 from transactagent_db.models import (
     CategorizationDisagreement,
     CategorizationDisagreementStatus,

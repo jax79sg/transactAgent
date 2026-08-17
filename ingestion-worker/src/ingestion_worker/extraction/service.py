@@ -44,8 +44,7 @@ def _parse_llm_json(raw_text: str) -> dict:
     text = raw_text.strip()
     if text.startswith("```"):
         text = text.split("```")[1]
-        if text.startswith("json"):
-            text = text[len("json") :]
+        text = text.removeprefix("json")
     return json.loads(text.strip())
 
 

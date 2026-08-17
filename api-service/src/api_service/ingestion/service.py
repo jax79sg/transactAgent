@@ -5,10 +5,14 @@ Trigger & Status Component). Implements AR-6 (single active run).
 from uuid import UUID
 
 from sqlalchemy.orm import Session
-
-from api_service.errors import IngestionRunAlreadyActiveError, NotFoundError, RunNotCancellableError
-from api_service.ingestion import repository
 from transactagent_db.models import IngestionRun, IngestionRunStatus
+
+from api_service.errors import (
+    IngestionRunAlreadyActiveError,
+    NotFoundError,
+    RunNotCancellableError,
+)
+from api_service.ingestion import repository
 
 _CANCELLABLE_STATUSES = (IngestionRunStatus.QUEUED, IngestionRunStatus.RUNNING)
 

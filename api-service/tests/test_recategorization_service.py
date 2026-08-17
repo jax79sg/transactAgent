@@ -3,6 +3,18 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from transactagent_db.models import (
+    BankStatement,
+    CategorizationDisagreement,
+    CategorizationDisagreementStatus,
+    Category,
+    CategorySource,
+    RecategorizationJob,
+    RecategorizationProposal,
+    RecategorizationProposalSourceBucket,
+    RecategorizationProposalStatus,
+    Transaction,
+)
 
 from api_service.errors import (
     DisagreementNotPendingError,
@@ -11,18 +23,6 @@ from api_service.errors import (
     ProposalNotPendingError,
 )
 from api_service.recategorization import service
-from transactagent_db.models import (
-    BankStatement,
-    Category,
-    CategorizationDisagreement,
-    CategorizationDisagreementStatus,
-    CategorySource,
-    RecategorizationJob,
-    RecategorizationProposal,
-    RecategorizationProposalSourceBucket,
-    RecategorizationProposalStatus,
-    Transaction,
-)
 
 
 def _make_category(db, name):

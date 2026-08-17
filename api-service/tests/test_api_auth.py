@@ -5,7 +5,7 @@ class TestLoginEndpoint:
         )
         assert response.status_code == 200
         body = response.json()
-        assert "token" in body and body["token"]
+        assert body.get("token")
         assert "expiresAt" in body
 
     def test_wrong_password_returns_401(self, client, test_user):

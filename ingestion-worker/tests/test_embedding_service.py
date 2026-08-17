@@ -3,7 +3,6 @@ from datetime import date
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from ingestion_worker.embedding import service
 from transactagent_db.models import (
     BankStatement,
     Category,
@@ -13,6 +12,8 @@ from transactagent_db.models import (
     RecurringPaymentFrequency,
     Transaction,
 )
+
+from ingestion_worker.embedding import service
 
 
 def _make_category(db, name=None):

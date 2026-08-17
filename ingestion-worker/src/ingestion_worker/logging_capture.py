@@ -10,8 +10,9 @@ actually see.
 import logging
 import traceback
 
-from ingestion_worker.db import SessionLocal
 from transactagent_db.models import IngestionRunLog
+
+from ingestion_worker.db import SessionLocal
 
 _current_run_id: str | None = None
 

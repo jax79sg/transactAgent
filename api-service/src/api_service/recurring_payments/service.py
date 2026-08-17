@@ -7,6 +7,16 @@ from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from transactagent_db.models import (
+    Category,
+    DetectionSuggestion,
+    DetectionSuggestionStatus,
+    EmbeddingStatus,
+    RecurringPayment,
+    RecurringPaymentFrequency,
+    RecurringPaymentMatch,
+    RecurringPaymentMatchStatus,
+)
 
 from api_service.config import settings
 from api_service.errors import (
@@ -31,23 +41,13 @@ from api_service.recurring_payments.schemas import (
     RecurringPaymentUpdateRequest,
 )
 from api_service.transactions.schemas import CategoryRef, TransactionDTO
-from transactagent_db.models import (
-    Category,
-    DetectionSuggestion,
-    DetectionSuggestionStatus,
-    EmbeddingStatus,
-    RecurringPayment,
-    RecurringPaymentFrequency,
-    RecurringPaymentMatch,
-    RecurringPaymentMatchStatus,
-)
 
 
 def _validate_frequency_shape(frequency_raw: str, due_month: int | None, due_day: int) -> RecurringPaymentFrequency:
     try:
         frequency = RecurringPaymentFrequency(frequency_raw)
     except ValueError:
-        raise InvalidRecurringPaymentError(f"Unrecognized frequency '{frequency_raw}' -- must be monthly or annual")
+        raise InvalidRecurringPaymentError(f"Unrecognized frequency '{frequency_raw}' -- must be monthly or annual") from None
 
     if frequency == RecurringPaymentFrequency.ANNUAL and due_month is None:
         raise InvalidRecurringPaymentError("An annual recurring payment requires dueMonth")  # BR-19
@@ -150,14 +150,14 @@ def update_recurring_payment(db: Session, payment_id: UUID, request: RecurringPa
     payment = _get_or_404(db, payment_id)
     frequency = _validate_frequency_shape(request.frequency, request.due_month, request.due_day)
     _resolve_category(db, request.category_id)
-    fields = dict(
-        name=request.name,
-        expected_amount=request.expected_amount,
-        frequency=frequency,
-        due_month=request.due_month,
-        due_day=request.due_day,
-        category_id=request.category_id,
-    )
+    fields = {
+        "name": request.name,
+        "expected_amount": request.expected_amount,
+        "frequency": frequency,
+        "due_month": request.due_month,
+        "due_day": request.due_day,
+        "category_id": request.category_id,
+    }
     # AR-22 (Epic 9): a name change invalidates whatever embedding is currently
     # stored (or pending) for this payment -- reset so the Ingestion Worker's
     # Embedding Manager re-embeds the new text. Any other field change leaves
@@ -177,7 +177,7 @@ def _parse_bulk_row_amount(amount_raw: str) -> Decimal:
     try:
         return Decimal(amount_raw)
     except InvalidOperation:
-        raise InvalidRecurringPaymentError(f"'{amount_raw}' is not a valid amount")
+        raise InvalidRecurringPaymentError(f"'{amount_raw}' is not a valid amount") from None
 
 
 def _parse_bulk_row_int(label: str, value_raw: str | None) -> int | None:
@@ -186,7 +186,7 @@ def _parse_bulk_row_int(label: str, value_raw: str | None) -> int | None:
     try:
         return int(value_raw)
     except ValueError:
-        raise InvalidRecurringPaymentError(f"'{value_raw}' is not a valid {label}")
+        raise InvalidRecurringPaymentError(f"'{value_raw}' is not a valid {label}") from None
 
 
 def bulk_import_recurring_payments(db: Session, request: BulkImportRequest) -> BulkImportResponse:

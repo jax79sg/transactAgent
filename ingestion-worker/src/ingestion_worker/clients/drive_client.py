@@ -3,6 +3,7 @@
 OAuth flow itself — see aidlc-docs/audit.md 2026-08-01 for why the flow lives in Unit 2.
 """
 
+import io
 from dataclasses import dataclass
 
 from google.auth.exceptions import RefreshError, TransportError
@@ -12,11 +13,10 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from sqlalchemy.orm import Session
-import io
+from transactagent_db.models import OAuthCredential
 
 from ingestion_worker.clients.retry import TransientError, retry_with_backoff
 from ingestion_worker.config import settings
-from transactagent_db.models import OAuthCredential
 
 _TRANSIENT_HTTP_STATUS = {429, 500, 502, 503, 504}
 

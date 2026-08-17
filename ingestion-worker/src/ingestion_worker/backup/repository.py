@@ -2,8 +2,11 @@ from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
-from transactagent_db.models import BackupRun, BackupRunFailureCategory, BackupRunOutcome
+from transactagent_db.models import (
+    BackupRun,
+    BackupRunFailureCategory,
+    BackupRunOutcome,
+)
 
 
 def find_backup_run_for_date(db: Session, backup_date: date) -> BackupRun | None:

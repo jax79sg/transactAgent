@@ -2,7 +2,6 @@ from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from transactagent_db.models import OAuthCredential
 
 PROVIDER = "google_drive"

@@ -2,8 +2,9 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
-from api_service.ai_assistant.prompts import build_prompt
 from transactagent_db.models import Category, Transaction
+
+from api_service.ai_assistant.prompts import build_prompt
 
 
 def _txn(

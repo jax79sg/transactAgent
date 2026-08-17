@@ -1,6 +1,5 @@
 """Pure unit tests for app_settings/validation.py (AR-28/AR-29) -- no DB, no file I/O."""
 
-import pytest
 
 from api_service.app_settings.catalog import SETTINGS_BY_NAME
 from api_service.app_settings.validation import check_cross_field, parse_and_validate
@@ -182,5 +181,5 @@ def test_every_setting_has_a_parseable_default():
     """Sanity check: every spec's own documented default must pass its own
     validation -- catches a typo'd default before it ever reaches a real user."""
     for spec in SETTINGS_BY_NAME.values():
-        parsed, error = parse_and_validate(spec, str(spec.default))
+        _parsed, error = parse_and_validate(spec, str(spec.default))
         assert error is None, f"{spec.name}'s default {spec.default!r} fails its own validation: {error}"

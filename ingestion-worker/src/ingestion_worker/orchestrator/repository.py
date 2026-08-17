@@ -1,6 +1,7 @@
+from datetime import UTC
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from transactagent_db.models import (
     IngestionRun,
     IngestionRunFile,
@@ -88,20 +89,20 @@ def update_run_progress(
 
 
 def complete_run(db: Session, run: IngestionRun) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     run.status = (
         IngestionRunStatus.COMPLETED_WITH_FAILURES if run.files_failed_count > 0 else IngestionRunStatus.COMPLETED
     )
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     db.commit()
 
 
 def fail_run(db: Session, run: IngestionRun) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     run.status = IngestionRunStatus.FAILED
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     db.commit()
 
 
@@ -118,10 +119,10 @@ def is_cancellation_requested(db: Session, run_id) -> bool:
 
 
 def cancel_run(db: Session, run: IngestionRun) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     run.status = IngestionRunStatus.CANCELLED
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     db.commit()
 
 
@@ -162,17 +163,17 @@ def claim_recategorize_job(db: Session, job: RecategorizationJob) -> None:
 
 
 def complete_recategorize_job(db: Session, job: RecategorizationJob, updated_count: int) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     job.status = RecategorizationJobStatus.COMPLETED
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     job.updated_transaction_count = updated_count
     db.flush()
 
 
 def fail_recategorize_job(db: Session, job: RecategorizationJob) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     job.status = RecategorizationJobStatus.FAILED
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     db.flush()

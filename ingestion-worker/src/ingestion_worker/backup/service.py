@@ -5,18 +5,26 @@ recategorization job was found that cycle (services.md addendum)."""
 import csv
 import io
 import logging
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from googleapiclient.errors import HttpError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from transactagent_db.models import (
+    BackupRunFailureCategory,
+    BackupRunOutcome,
+    Transaction,
+)
 
 from ingestion_worker.backup import repository as backup_repository
 from ingestion_worker.clients import drive_client
-from ingestion_worker.clients.drive_client import DriveFileRef, DriveNotConnectedError, DriveReauthRequiredError
+from ingestion_worker.clients.drive_client import (
+    DriveFileRef,
+    DriveNotConnectedError,
+    DriveReauthRequiredError,
+)
 from ingestion_worker.clients.retry import TransientError
 from ingestion_worker.config import settings
-from transactagent_db.models import BackupRunFailureCategory, BackupRunOutcome, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +75,7 @@ def run_backup(db: Session) -> None:
     rest of the day, a silent retry storm that breaks FR-9's no-same-night-retry
     rule."""
     backup_date = date.today()
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     try:
         transactions = list(db.scalars(select(Transaction)))
         csv_bytes = _build_csv(transactions)
@@ -79,7 +87,7 @@ def run_backup(db: Session) -> None:
             db,
             backup_date=backup_date,
             started_at=started_at,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             outcome=BackupRunOutcome.SUCCESS,
             transaction_count=len(transactions),
             backup_filename=filename,
@@ -91,17 +99,17 @@ def run_backup(db: Session) -> None:
             db,
             backup_date=backup_date,
             started_at=started_at,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             outcome=BackupRunOutcome.FAILED,
             failure_category=BackupRunFailureCategory.DRIVE_CONNECTIVITY,
         )
-    except Exception:  # noqa: BLE001 - WR-12: must never let an exception escape this function
+    except Exception:
         logger.exception("Backup %s failed unexpectedly", backup_date)
         backup_repository.record_backup_run(
             db,
             backup_date=backup_date,
             started_at=started_at,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             outcome=BackupRunOutcome.FAILED,
             failure_category=BackupRunFailureCategory.OTHER,
         )

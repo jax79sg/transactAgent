@@ -37,9 +37,9 @@ def _make_transaction(db, description="GYM MEMBERSHIP FEE", txn_date=None, categ
 def _make_payment(db, **overrides):
     from transactagent_db.models import RecurringPayment, RecurringPaymentFrequency
 
-    defaults = dict(
-        name="Gym Membership", expected_amount=Decimal("80.00"), frequency=RecurringPaymentFrequency.MONTHLY, due_day=15
-    )
+    defaults = {
+        "name": "Gym Membership", "expected_amount": Decimal("80.00"), "frequency": RecurringPaymentFrequency.MONTHLY, "due_day": 15
+    }
     defaults.update(overrides)
     payment = RecurringPayment(**defaults)
     db.add(payment)

@@ -34,3 +34,20 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Deliberately curated, not ruff's bare defaults (which turned out to enable
+# nearly every rule family in this ruff version, including irrelevant ones like
+# Python-2-compat checks). See CI workflow comments for how this was chosen.
+select = ["E4", "E7", "E9", "F", "B", "I", "UP", "C4", "SIM", "RUF", "BLE", "PLW1510", "FURB"]
+ignore = [
+    "B008",  # FastAPI's Depends()-as-default-argument is the framework's own DI pattern, not a bug
+    "DTZ",    # this app has no timezone concept -- deliberately local/naive dates throughout (single-deployment)
+    "UP042",  # (str, Enum) -> StrEnum is an unsafe fix per ruff itself -- touches serialization behavior on 16 enum classes
+]
+# Line length is intentionally not enforced (E5 not selected) -- this codebase
+# favors long, dense explanatory comments over wrapping.
+

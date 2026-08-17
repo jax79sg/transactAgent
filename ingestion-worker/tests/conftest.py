@@ -19,7 +19,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
-
 from transactagent_db.models import Base
 
 

@@ -1,8 +1,20 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
+from transactagent_db.models import (
+    BankStatement,
+    Category,
+    CategorySource,
+    DetectionSuggestion,
+    EmbeddingStatus,
+    RecurringPayment,
+    RecurringPaymentFrequency,
+    RecurringPaymentMatch,
+    RecurringPaymentMatchStatus,
+    Transaction,
+)
 
 from api_service.errors import (
     CategoryNotFoundError,
@@ -18,18 +30,6 @@ from api_service.recurring_payments.schemas import (
     BulkImportRow,
     RecurringPaymentCreateRequest,
     RecurringPaymentUpdateRequest,
-)
-from transactagent_db.models import (
-    BankStatement,
-    Category,
-    CategorySource,
-    DetectionSuggestion,
-    EmbeddingStatus,
-    RecurringPayment,
-    RecurringPaymentFrequency,
-    RecurringPaymentMatch,
-    RecurringPaymentMatchStatus,
-    Transaction,
 )
 
 
@@ -63,9 +63,9 @@ def _make_transaction(db, description="GYM MEMBERSHIP FEE", amount="80.00", txn_
 
 
 def _make_payment(db, **overrides):
-    defaults = dict(
-        name="Gym Membership", expected_amount=Decimal("80.00"), frequency=RecurringPaymentFrequency.MONTHLY, due_day=15
-    )
+    defaults = {
+        "name": "Gym Membership", "expected_amount": Decimal("80.00"), "frequency": RecurringPaymentFrequency.MONTHLY, "due_day": 15
+    }
     defaults.update(overrides)
     payment = RecurringPayment(**defaults)
     db.add(payment)
@@ -80,7 +80,7 @@ def _make_match(db, payment, txn, cycle_period, match_status):
         cycle_period=cycle_period,
         status=match_status,
         amount_at_match=Decimal("80.00"),
-        resolved_at=datetime.now(timezone.utc) if match_status != RecurringPaymentMatchStatus.PENDING else None,
+        resolved_at=datetime.now(UTC) if match_status != RecurringPaymentMatchStatus.PENDING else None,
     )
     db.add(match)
     db.flush()
@@ -356,7 +356,7 @@ class TestApproveRejectMatch:
 
 class TestDetectionSuggestions:
     def _make_suggestion(self, db, **overrides):
-        defaults = dict(description_pattern="STREAMING SERVICE", suggested_amount=Decimal("15.00"), occurrence_count=2)
+        defaults = {"description_pattern": "STREAMING SERVICE", "suggested_amount": Decimal("15.00"), "occurrence_count": 2}
         defaults.update(overrides)
         suggestion = DetectionSuggestion(**defaults)
         db.add(suggestion)

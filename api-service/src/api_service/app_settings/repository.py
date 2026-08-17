@@ -3,7 +3,6 @@ Settings) and the AR-31 busy/idle read against existing Ingestion Worker state."
 
 from sqlalchemy import exists, or_, select
 from sqlalchemy.orm import Session
-
 from transactagent_db.models import (
     IngestionRun,
     IngestionRunStatus,

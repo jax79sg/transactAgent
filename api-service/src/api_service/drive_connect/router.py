@@ -6,7 +6,10 @@ from api_service.auth.dependencies import get_current_user_id
 from api_service.config import settings
 from api_service.db import get_db
 from api_service.drive_connect import service
-from api_service.drive_connect.schemas import DriveAuthorizationUrl, DriveConnectionStatus
+from api_service.drive_connect.schemas import (
+    DriveAuthorizationUrl,
+    DriveConnectionStatus,
+)
 
 router = APIRouter(prefix="/drive", tags=["drive"])
 

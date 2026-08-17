@@ -4,7 +4,7 @@ PBT is not applied to this unit (see database-code-generation-plan.md — no pur
 transformation functions exist here; this unit is declarative schema/constraints only).
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -15,9 +15,9 @@ from transactagent_db.models import (
     BackupRunFailureCategory,
     BackupRunOutcome,
     BankStatement,
-    Category,
     CategorizationDisagreement,
     CategorizationDisagreementStatus,
+    Category,
     CategorySource,
     DetectionScanRun,
     DetectionSuggestion,
@@ -55,15 +55,15 @@ def _make_bank_statement(session, pdf_content_hash="a" * 64):
 def _base_transaction_kwargs(session, **overrides):
     category = overrides.pop("category", None) or _make_category(session)
     statement = overrides.pop("bank_statement", None) or _make_bank_statement(session)
-    kwargs = dict(
-        bank_statement_id=statement.id,
-        transaction_date=date(2026, 1, 15),
-        description="NTUC FAIRPRICE",
-        currency="SGD",
-        bank_name="DBS",
-        category_id=category.id,
-        category_source=CategorySource.SIMILARITY,
-    )
+    kwargs = {
+        "bank_statement_id": statement.id,
+        "transaction_date": date(2026, 1, 15),
+        "description": "NTUC FAIRPRICE",
+        "currency": "SGD",
+        "bank_name": "DBS",
+        "category_id": category.id,
+        "category_source": CategorySource.SIMILARITY,
+    }
     kwargs.update(overrides)
     return kwargs
 
@@ -234,14 +234,14 @@ class TestIngestionRunCancellation:
         assert run.cancel_requested_at is None
 
     def test_cancelled_run_with_requested_at_is_valid(self, db_session):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from transactagent_db.models import IngestionRun, IngestionRunStatus, User
 
         user = User(username="account_owner", password_hash="hashed")
         db_session.add(user)
         db_session.flush()
-        requested_at = datetime.now(timezone.utc)
+        requested_at = datetime.now(UTC)
         run = IngestionRun(
             triggered_by_user_id=user.id,
             status=IngestionRunStatus.CANCELLED,
@@ -411,7 +411,7 @@ class TestBackupRun:
     """
 
     def _now(self):
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
     def test_successful_backup_run_is_valid(self, db_session):
         run = BackupRun(
@@ -698,12 +698,12 @@ class TestRecurringPaymentMatch:
     """
 
     def _make_payment(self, session, **overrides):
-        defaults = dict(
-            name="Gym Membership",
-            expected_amount=Decimal("80.00"),
-            frequency=RecurringPaymentFrequency.MONTHLY,
-            due_day=15,
-        )
+        defaults = {
+            "name": "Gym Membership",
+            "expected_amount": Decimal("80.00"),
+            "frequency": RecurringPaymentFrequency.MONTHLY,
+            "due_day": 15,
+        }
         defaults.update(overrides)
         payment = RecurringPayment(**defaults)
         session.add(payment)

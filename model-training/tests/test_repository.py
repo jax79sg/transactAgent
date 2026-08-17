@@ -7,8 +7,8 @@ import inspect
 import uuid
 from datetime import date
 from decimal import Decimal
+from typing import ClassVar
 
-from model_training import repository
 from transactagent_db.models import (
     BankStatement,
     Category,
@@ -19,6 +19,8 @@ from transactagent_db.models import (
     RecategorizationProposalStatus,
     Transaction,
 )
+
+from model_training import repository
 
 
 def _make_category(db, name, active=True):
@@ -190,7 +192,7 @@ class TestReadOnlyDiscipline:
     matching) so this doesn't false-positive on the module's own docstring
     mentioning these method names in prose."""
 
-    _FORBIDDEN_METHODS = {"add", "flush", "commit", "delete", "merge", "execute"}
+    _FORBIDDEN_METHODS: ClassVar[set[str]] = {"add", "flush", "commit", "delete", "merge", "execute"}
     # 'execute' would also flag legitimate SELECT execution -- excluded from the
     # forbidden set actually enforced below; kept here only as a documented
     # reminder that raw SQL writes via execute() are the other thing to watch for

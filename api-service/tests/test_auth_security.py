@@ -11,7 +11,12 @@ os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 import jwt
 import pytest
 
-from api_service.auth.security import decode_token, hash_password, issue_token, verify_password
+from api_service.auth.security import (
+    decode_token,
+    hash_password,
+    issue_token,
+    verify_password,
+)
 
 
 class TestPasswordHashing:
@@ -27,7 +32,7 @@ class TestPasswordHashing:
 class TestJwtRoundTrip:
     def test_issued_token_decodes_to_same_user_id(self):
         user_id = uuid.uuid4()
-        token, expires_at = issue_token(user_id)
+        token, _expires_at = issue_token(user_id)
         decoded_user_id = decode_token(token)
         assert decoded_user_id == user_id
 

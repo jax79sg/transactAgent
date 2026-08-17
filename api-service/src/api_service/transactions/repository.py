@@ -11,8 +11,12 @@ from uuid import UUID
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, joinedload
-
-from transactagent_db.models import Category, RecategorizationJob, RecategorizationJobStatus, Transaction
+from transactagent_db.models import (
+    Category,
+    RecategorizationJob,
+    RecategorizationJobStatus,
+    Transaction,
+)
 
 
 def _stringify_group_key(value: object) -> str:

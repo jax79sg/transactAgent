@@ -7,6 +7,7 @@ while in use), and BR-6 (soft delete) at the application layer.
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from transactagent_db.models import Category
 
 from api_service.categories import repository
 from api_service.errors import (
@@ -15,7 +16,6 @@ from api_service.errors import (
     DuplicateCategoryNameError,
     ReservedCategoryError,
 )
-from transactagent_db.models import Category
 
 
 def list_categories(db: Session) -> list[tuple[Category, int]]:

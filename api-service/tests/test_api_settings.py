@@ -1,3 +1,6 @@
+from datetime import UTC
+
+
 class TestListSettingsApi:
     def test_requires_auth(self, client, settings_override_path):
         response = client.get("/settings")
@@ -157,11 +160,11 @@ class TestSettingHistoryApi:
         # test's client/db_session fixtures deliberately share one transaction across
         # requests, so two same-transaction PUTs would tie on changed_at. Explicit
         # timestamps here test the ORDER BY itself deterministically instead.
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         from transactagent_db.models import SettingChange, SettingOwningService
 
-        base = datetime(2026, 8, 16, 9, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 8, 16, 9, 0, 0, tzinfo=UTC)
         db_session.add(
             SettingChange(
                 setting_name="similarity_threshold",

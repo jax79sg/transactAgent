@@ -7,6 +7,8 @@ status-only additions (latest_instance_on_or_before, next_instance_after).
 
 from datetime import date
 
+from transactagent_db.models import RecurringPaymentFrequency
+
 from api_service.recurring_payments.cycle import (
     cycle_period_for,
     latest_instance_on_or_before,
@@ -14,7 +16,6 @@ from api_service.recurring_payments.cycle import (
     nearest_monthly_due_date_instance,
     next_instance_after,
 )
-from transactagent_db.models import RecurringPaymentFrequency
 
 
 class TestNearestMonthlyDueDateInstance:

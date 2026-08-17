@@ -1,6 +1,5 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from transactagent_db.models import User
 
 

@@ -6,7 +6,7 @@ ValueError during passlib's own internal wrap-bug detection), a known unresolved
 upstream issue. Calling bcrypt directly avoids it entirely.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import bcrypt
@@ -26,7 +26,7 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
 
 def issue_token(user_id: UUID) -> tuple[str, datetime]:
     """Issue a JWT with a sliding 24h expiry (Question 2 = A)."""
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expiry_minutes)
+    expires_at = datetime.now(UTC) + timedelta(minutes=settings.jwt_expiry_minutes)
     payload = {"sub": str(user_id), "exp": expires_at}
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token, expires_at

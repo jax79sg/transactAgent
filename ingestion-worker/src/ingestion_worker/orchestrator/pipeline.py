@@ -7,11 +7,20 @@ run; only one run is ever processed at a time.
 import logging
 
 from sqlalchemy.orm import Session
+from transactagent_db.models import IngestionRunFileOutcome, Transaction
 
 from ingestion_worker.categorization import repository as categorization_repository
-from ingestion_worker.categorization.service import UNSURE_NAME, categorize, classify_batch, recategorize_unsure_from_precedent
+from ingestion_worker.categorization.service import (
+    UNSURE_NAME,
+    categorize,
+    classify_batch,
+    recategorize_unsure_from_precedent,
+)
 from ingestion_worker.clients import drive_client
-from ingestion_worker.clients.drive_client import DriveNotConnectedError, DriveReauthRequiredError
+from ingestion_worker.clients.drive_client import (
+    DriveNotConnectedError,
+    DriveReauthRequiredError,
+)
 from ingestion_worker.clients.retry import TransientError
 from ingestion_worker.currency.service import resolve_converted_amount
 from ingestion_worker.duplicate_detection import service as duplicate_detection
@@ -19,7 +28,6 @@ from ingestion_worker.extraction.service import ExtractionFailure, extract_state
 from ingestion_worker.logging_capture import set_current_run
 from ingestion_worker.orchestrator import repository as orchestrator_repository
 from ingestion_worker.recurring_payments import service as recurring_payments_service
-from transactagent_db.models import IngestionRunFileOutcome, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +49,7 @@ def _process_run(db: Session, run) -> None:
         logger.warning("Ingestion run %s failed at Drive listing: %s", run.id, exc)
         orchestrator_repository.fail_run(db, run)
         return
-    except Exception:  # noqa: BLE001 - any other listing failure (e.g. a raw googleapiclient
+    except Exception:
         # HttpError, such as the Drive API being disabled on the Google Cloud project) must
         # still resolve the run to a terminal status. Leaving it "running" would permanently
         # block every future run via ingestion_runs' single-active-run unique constraint, since
@@ -69,7 +77,7 @@ def _process_run(db: Session, run) -> None:
                 return
             logger.info("Ingestion run %s: processing file %d/%d: %s", run.id, index, len(files), file_ref.name)
             _process_one_file(db, run, file_ref)
-    except Exception:  # noqa: BLE001 - same reasoning: an unexpected bug per-file must not
+    except Exception:
         # leave the run stuck "running" forever.
         logger.exception("Ingestion run %s failed unexpectedly while processing files", run.id)
         orchestrator_repository.fail_run(db, run)
@@ -146,11 +154,11 @@ def _process_one_file(db: Session, run, file_ref) -> None:
         db,
         [
             (raw_txn.description, conversion.converted_amount_sgd)
-            for raw_txn, conversion in zip(result.transactions, conversions)
+            for raw_txn, conversion in zip(result.transactions, conversions, strict=True)
         ],
     )
 
-    for raw_txn, conversion in zip(result.transactions, conversions):
+    for raw_txn, conversion in zip(result.transactions, conversions, strict=True):
         _persist_transaction(
             db,
             statement,
