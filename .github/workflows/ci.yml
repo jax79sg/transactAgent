@@ -1,0 +1,81 @@
+name: CI
+
+# model-training/ (Unit 5) is deliberately not covered here: it depends on mlx-tune,
+# which requires Apple Silicon/Metal and has no path through a Linux CI runner at all
+# (not even in a container -- there's no GPU passthrough to be had). Its own README
+# documents how to run its tests locally on macOS.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch/PR so pushes don't queue up stale jobs.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: Database
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: database
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Real Postgres via testcontainers -- ubuntu-latest runners have Docker
+      # preinstalled and running, no extra setup needed.
+      - run: uv sync --extra test
+      - run: uv run pytest -v
+
+  api-service:
+    name: API Service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra test
+      - run: uv run pytest -v
+
+  ingestion-worker:
+    name: Ingestion Worker
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ingestion-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --extra test
+      - run: uv run pytest -v
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run test
+      - run: npm run build
