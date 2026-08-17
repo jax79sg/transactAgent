@@ -32,11 +32,11 @@ from transactagent_db.models import (
 UNSURE_NAME = "UNSURE"
 
 
-def _chunk(items: list[str], size: int) -> list[list[str]]:
+def _chunk(items: list[tuple[str, Decimal | None]], size: int) -> list[list[tuple[str, Decimal | None]]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
-def classify_batch(db: Session, descriptions: list[str]) -> dict[str, str]:
+def classify_batch(db: Session, items: list[tuple[str, Decimal | None]]) -> dict[str, str]:
     """WR-27 (Matching Precision Refinement, revised after live testing against a
     real local model server showed one HTTP call per transaction was too many
     round-trips for a large statement): every transaction gets classified by the
@@ -44,13 +44,23 @@ def classify_batch(db: Session, descriptions: list[str]) -> dict[str, str]:
     per-transaction persistence loop begins (Application Design Key Design
     Resolution 2).
 
+    `items` is a list of (description, amountSgd) pairs -- WR-34 (Categorization
+    Model Fine-Tuning): the converted SGD amount is included in the prompt
+    alongside description, so the live prompt's input shape matches what the
+    Model Training unit's Dataset Curator trains against. `amountSgd` may be
+    `None` when conversion was unavailable for that transaction (WR-6) -- the
+    prompt renders that as "unknown", never a crash.
+
     Two phases:
-    1. Descriptions are de-duplicated, chunked into groups of
-       `llm_classification_batch_size`, and each chunk is classified in a single
-       prompt/response (`llm_classifier.classify_batch_prompt`) -- chunks run
-       concurrently, bounded by `llm_classification_concurrency` (NFR-MPR-1), so at
-       most `concurrency` HTTP requests are in flight at once regardless of how
-       many transactions are in the file.
+    1. Items are de-duplicated by description (a repeated description keeps the
+       amount from its first occurrence -- amount is a secondary signal here, and
+       a genuinely repeated description is expected to carry a similar amount
+       anyway), chunked into groups of `llm_classification_batch_size`, and each
+       chunk is classified in a single prompt/response
+       (`llm_classifier.classify_batch_prompt`) -- chunks run concurrently, bounded
+       by `llm_classification_concurrency` (NFR-MPR-1), so at most `concurrency`
+       HTTP requests are in flight at once regardless of how many transactions are
+       in the file.
     2. Any description the batch phase didn't return a value for (a parse failure,
        a too-short response, or an individual entry that wasn't a valid whitelist
        name/UNSURE -- see `classify_batch_prompt`'s docstring) falls back to an
@@ -61,23 +71,26 @@ def classify_batch(db: Session, descriptions: list[str]) -> dict[str, str]:
     Returns a value in the whitelist or the literal UNSURE for every unique
     description given -- llm_classifier's existing WR-4 "never raises" contract,
     unchanged."""
-    unique_descriptions = list(dict.fromkeys(descriptions))
-    if not unique_descriptions:
+    unique_items: dict[str, Decimal | None] = {}
+    for description, amount_sgd in items:
+        if description not in unique_items:
+            unique_items[description] = amount_sgd
+    if not unique_items:
         return {}
     whitelist = [name for name in repository.list_active_category_names(db) if name != UNSURE_NAME]
 
     results: dict[str, str] = {}
-    chunks = _chunk(unique_descriptions, settings.llm_classification_batch_size)
+    chunks = _chunk(list(unique_items.items()), settings.llm_classification_batch_size)
     with ThreadPoolExecutor(max_workers=settings.llm_classification_concurrency) as executor:
         futures = [executor.submit(llm_classifier.classify_batch_prompt, chunk, whitelist) for chunk in chunks]
         for future in as_completed(futures):
             results.update(future.result())
 
-    missing = [description for description in unique_descriptions if description not in results]
+    missing = [description for description in unique_items if description not in results]
     if missing:
         with ThreadPoolExecutor(max_workers=settings.llm_classification_concurrency) as executor:
             future_to_description = {
-                executor.submit(llm_classifier.classify, description, whitelist): description
+                executor.submit(llm_classifier.classify, description, unique_items[description], whitelist): description
                 for description in missing
             }
             for future in as_completed(future_to_description):

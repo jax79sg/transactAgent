@@ -2,6 +2,7 @@
 
 import json
 import re
+from decimal import Decimal
 
 from ingestion_worker.clients.openrouter_client import classify_description, classify_descriptions_batch
 from ingestion_worker.clients.retry import TransientError
@@ -11,11 +12,14 @@ UNSURE = "UNSURE"
 _JSON_ARRAY = re.compile(r"\[.*\]", re.DOTALL)
 
 
-def classify(description: str, whitelist: list[str]) -> str:
+def classify(description: str, amount_sgd: Decimal | None, whitelist: list[str]) -> str:
     """Always returns a value in `whitelist` or the literal UNSURE — never raises,
-    never returns a free-text/invalid value (WR-4)."""
+    never returns a free-text/invalid value (WR-4).
+
+    `amount_sgd` (WR-34): the transaction's converted SGD amount, included in the
+    prompt alongside `description`; `None` when conversion was unavailable."""
     try:
-        answer = classify_description(description, whitelist)
+        answer = classify_description(description, amount_sgd, whitelist)
     except TransientError:
         # WR-7: exhausted retries, no cross-provider fallback -- terminal for this transaction
         return UNSURE
@@ -28,7 +32,7 @@ def classify(description: str, whitelist: list[str]) -> str:
     return UNSURE
 
 
-def classify_batch_prompt(descriptions: list[str], whitelist: list[str]) -> dict[str, str]:
+def classify_batch_prompt(items: list[tuple[str, Decimal | None]], whitelist: list[str]) -> dict[str, str]:
     """Matching Precision Refinement (WR-27, revised): classifies a whole batch in
     one call, returning only the entries it could confidently parse and validate --
     a description missing from the returned dict (network/parse failure, a
@@ -38,11 +42,12 @@ def classify_batch_prompt(descriptions: list[str], whitelist: list[str]) -> dict
     responsible for falling every missing description back to an individual
     `classify()` call -- this function only ever returns a subset, never guesses.
 
-    `descriptions` must already be de-duplicated by the caller (a repeated
-    description would collide as a dict key here).
+    `items` is a list of (description, amountSgd) pairs (WR-34) and must already
+    be de-duplicated by description by the caller (a repeated description would
+    collide as a dict key here).
     """
     try:
-        raw = classify_descriptions_batch(descriptions, whitelist)
+        raw = classify_descriptions_batch(items, whitelist)
     except TransientError:
         return {}
     except Exception:  # noqa: BLE001 - any other OpenRouter error -- whole batch falls back
@@ -59,7 +64,7 @@ def classify_batch_prompt(descriptions: list[str], whitelist: list[str]) -> dict
         return {}
 
     result: dict[str, str] = {}
-    for description, answer in zip(descriptions, parsed):
+    for (description, _amount_sgd), answer in zip(items, parsed):
         if not isinstance(answer, str):
             continue
         normalized = answer.strip()

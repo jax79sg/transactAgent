@@ -277,7 +277,7 @@ class TestProcessRunCancellation:
         def fake_download(db, file_ref):
             return b"fake-pdf-bytes-" + file_ref.id.encode()
 
-        def classify_and_request_cancellation(description, whitelist, model=None):
+        def classify_and_request_cancellation(description, amount_sgd, whitelist, model=None):
             # Simulates the API committing cancel_requested_at while file1 (the
             # only file with a transaction to classify) is still being processed --
             # file1 must still finish and be recorded; only file2 gets skipped.

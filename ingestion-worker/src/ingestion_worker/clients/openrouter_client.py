@@ -5,10 +5,21 @@ fallback. Defaults to OpenRouter but works against any OpenAI-compatible endpoin
 Text-only, constrained to the whitelist + "UNSURE" (WR-4).
 """
 
+from decimal import Decimal
+
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from ingestion_worker.clients.retry import TransientError, retry_with_backoff
 from ingestion_worker.config import settings
+
+_UNKNOWN_AMOUNT = "unknown"
+
+
+def _format_amount_sgd(amount_sgd: Decimal | None) -> str:
+    """WR-34: renders as 'unknown' rather than 'None'/crashing when conversion was
+    unavailable for a transaction (WR-6) -- the model still gets a well-formed
+    prompt, just without a usable amount signal for that one item."""
+    return f"{amount_sgd} SGD" if amount_sgd is not None else _UNKNOWN_AMOUNT
 
 _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -29,9 +40,16 @@ def _client() -> OpenAI:
 
 
 @retry_with_backoff()
-def classify_description(description: str, whitelist: list[str], model: str | None = None) -> str:
+def classify_description(
+    description: str, amount_sgd: Decimal | None, whitelist: list[str], model: str | None = None
+) -> str:
     """Returns the model's raw text answer (validated against the whitelist by
     categorization/llm_classifier.py — this wrapper does not itself enforce WR-4).
+
+    `amount_sgd` (WR-34, Categorization Model Fine-Tuning): the transaction's
+    converted SGD amount, included in the prompt alongside `description` so the
+    live prompt's input shape matches what the Model Training unit's Dataset
+    Curator trains against -- `None` renders as "unknown" (`_format_amount_sgd`).
 
     `model` defaults to `settings.openrouter_model` (env-configurable: OPENROUTER_MODEL,
     per user request 2026-08-01), read fresh on each call rather than bound as a
@@ -46,7 +64,8 @@ def classify_description(description: str, whitelist: list[str], model: str | No
         "Classify this bank transaction description into exactly one of the following "
         "categories, responding with ONLY the category name and nothing else:\n\n"
         f"Categories: {', '.join(whitelist)}\n\n"
-        f"Transaction description: {description}\n\n"
+        f"Transaction description: {description}\n"
+        f"Transaction amount: {_format_amount_sgd(amount_sgd)}\n\n"
         "If none of the categories clearly fit, respond with exactly: UNSURE"
     )
     try:
@@ -78,7 +97,9 @@ def classify_description(description: str, whitelist: list[str], model: str | No
 
 
 @retry_with_backoff()
-def classify_descriptions_batch(descriptions: list[str], whitelist: list[str], model: str | None = None) -> str:
+def classify_descriptions_batch(
+    items: list[tuple[str, Decimal | None]], whitelist: list[str], model: str | None = None
+) -> str:
     """Matching Precision Refinement (WR-27, revised): classifies up to
     `llm_classification_batch_size` descriptions in a single prompt/response,
     rather than one call per description -- fewer round-trips to the local model
@@ -88,6 +109,10 @@ def classify_descriptions_batch(descriptions: list[str], whitelist: list[str], m
     job (this wrapper does not itself enforce WR-4), same split of responsibility
     as classify_description above.
 
+    `items` is a list of (description, amountSgd) pairs (WR-34) -- each numbered
+    line includes both, same "unknown" rendering as classify_description for a
+    `None` amount.
+
     Same retry/exception-mapping behavior as classify_description -- a transient
     network/server error retries via `retry_with_backoff`; a non-transient error
     propagates to the caller, which (per llm_classifier.classify_batch_prompt)
@@ -95,11 +120,14 @@ def classify_descriptions_batch(descriptions: list[str], whitelist: list[str], m
     to an individual classify_description call rather than raising further.
     """
     model = model or settings.openrouter_model
-    numbered = "\n".join(f"{i + 1}. {description}" for i, description in enumerate(descriptions))
+    numbered = "\n".join(
+        f"{i + 1}. {description} (amount: {_format_amount_sgd(amount_sgd)})"
+        for i, (description, amount_sgd) in enumerate(items)
+    )
     prompt = (
         "Classify each of the following bank transaction descriptions into exactly one of the "
         "following categories. Respond with ONLY a JSON array of "
-        f"{len(descriptions)} strings, in the same order as the transactions below, one category "
+        f"{len(items)} strings, in the same order as the transactions below, one category "
         "name per transaction (or the literal string \"UNSURE\" if none clearly fit that one "
         "transaction). Respond with ONLY the JSON array and nothing else -- no explanation, no "
         "markdown code fences.\n\n"

@@ -12,6 +12,7 @@ TransientError) to categorization/llm_classifier.py's catch-all -- giving up as
 UNSURE after zero retries instead of retrying a transient blip.
 """
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -47,7 +48,7 @@ class TestExceptionMapping:
             patch("ingestion_worker.clients.retry.time.sleep"),
             pytest.raises(TransientError),
         ):
-            classify_description("NTUC FAIRPRICE", ["Groceries"])
+            classify_description("NTUC FAIRPRICE", Decimal("45.20"), ["Groceries"])
 
         # retry_with_backoff's default max_attempts (3) -- proves it actually retried,
         # not just mapped-and-immediately-gave-up.
@@ -63,7 +64,7 @@ class TestExceptionMapping:
             patch("ingestion_worker.clients.retry.time.sleep"),
             pytest.raises(TransientError),
         ):
-            classify_description("NTUC FAIRPRICE", ["Groceries"])
+            classify_description("NTUC FAIRPRICE", Decimal("45.20"), ["Groceries"])
 
         assert fake_client.chat.completions.create.call_count == 3
 
@@ -90,7 +91,9 @@ class TestClassifyDescriptionsBatch:
         ]
 
         with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
-            result = classify_descriptions_batch(["NTUC FAIRPRICE", "STARBUCKS"], ["Groceries", "Dining"])
+            result = classify_descriptions_batch(
+                [("NTUC FAIRPRICE", Decimal("45.20")), ("STARBUCKS", Decimal("6.50"))], ["Groceries", "Dining"]
+            )
 
         assert result == '["Groceries", "Dining"]'
         prompt = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
@@ -109,9 +112,52 @@ class TestClassifyDescriptionsBatch:
             patch("ingestion_worker.clients.retry.time.sleep"),
             pytest.raises(TransientError),
         ):
-            classify_descriptions_batch(["NTUC FAIRPRICE"], ["Groceries"])
+            classify_descriptions_batch([("NTUC FAIRPRICE", Decimal("45.20"))], ["Groceries"])
 
         assert fake_client.chat.completions.create.call_count == 3
 
     def _fake_request(self):
         return httpx.Request("POST", "http://host.docker.internal:8000/v1/chat/completions")
+
+
+class TestAmountInPrompt:
+    """WR-34 (Categorization Model Fine-Tuning): the converted SGD amount is now
+    part of the categorization prompt, both single and batch, so the live prompt's
+    input shape matches what the Model Training unit trains against."""
+
+    def test_classify_description_includes_amount(self):
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content="Groceries"))]
+
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            classify_description("NTUC FAIRPRICE", Decimal("45.20"), ["Groceries"])
+
+        prompt = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+        assert "45.20 SGD" in prompt
+
+    def test_classify_description_renders_none_amount_as_unknown(self):
+        """WR-6: conversion can be unavailable for a transaction -- the prompt must
+        still be well-formed, not crash on a None amount."""
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content="Groceries"))]
+
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            classify_description("NTUC FAIRPRICE", None, ["Groceries"])
+
+        prompt = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+        assert "unknown" in prompt
+
+    def test_classify_descriptions_batch_includes_every_amount(self):
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value.choices = [
+            MagicMock(message=MagicMock(content='["Groceries", "Dining"]'))
+        ]
+
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            classify_descriptions_batch(
+                [("NTUC FAIRPRICE", Decimal("45.20")), ("STARBUCKS", None)], ["Groceries", "Dining"]
+            )
+
+        prompt = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
+        assert "45.20 SGD" in prompt
+        assert "unknown" in prompt
