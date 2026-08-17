@@ -370,3 +370,38 @@ Build order: Database → {Ingestion Worker Service, API Service} → Frontend S
 ## Post-Delivery Correction (2026-08-16)
 
 - [x] Fixed 3 real defects found from direct user verification: (1) never-overridden settings displayed a stale hardcoded default instead of the real deployed `.env` value [root cause: `api-service` had no visibility into Ingestion-Worker-owned env vars; fixed via a display-only Settings mirror fed the same docker-compose env vars]; (2) no per-setting description/category despite `.env.example` being well-organized [fixed: 7 categories + real descriptions sourced from `.env.example`/`config.py`, added to `SettingDTO`]; (3) `ai_assistant_max_transactions` was in-scope per the original Requirements but never implemented [added; true count 41, not 40]. Live-reverified against the real deployment (`openrouter_model`/`embedding_base_url` now correctly show real `.env` values). 663/663 unit tests passing [up from 660]. Full write-up: `configurable-app-settings-build-and-test-summary.md`'s "Post-Summary Correction" section.
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning
+
+Tracked separately (base project status unchanged: COMPLETE; all prior post-completion changes above also COMPLETE).
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-17; `aidlc-docs/inception/requirements/categorization-model-finetuning-requirements.md`; 10 FRs, 6 NFRs). Real hardware mismatch found and resolved during this phase: the categorization LLM (`gemma-4-26b-a4b-it-4bit`) is served via oMLX on the same Mac, which has no CUDA GPU, so the originally-named Unsloth library (CUDA-only) cannot run there — resolved via user-proposed, independently-verified substitution with `mlx-tune` (MLX-native, Apple-Silicon, explicitly supports this exact model). Ground-truth dataset selection required investigating the real data model (`recategorization_proposals`/`categorization_disagreements` audit trails) since "human-approved similarity" isn't a distinct field — resolved to a real, queried, 1247-row (manual + human-approved-similarity) dataset. `categorization-model-finetuning-questions.md` (10 questions) + `categorization-model-finetuning-clarification-questions.md` (2 clarifications, both resolved) both fully answered.
+- [x] User Stories — Skipped (2026-08-17; developer/ML tooling feature, no new user-facing functionality or personas; recommendation accepted implicitly on approval)
+- [x] Workflow Planning — Complete & Approved (2026-08-17; `aidlc-docs/inception/plans/categorization-model-finetuning-execution-plan.md`; Application Design EXECUTE, Units Generation EXECUTE [new Unit 5: Model Training]; per-unit: Ingestion Worker Service [Functional Design + Code Generation only, NFR/Infra SKIP -- existing tech stack], Model Training [Functional Design + NFR Requirements + NFR Design + Infrastructure Design + Code Generation, all EXECUTE -- brand-new tech stack + a real infra decision: Postgres currently has no host port published]; sequence Ingestion Worker Service -> Model Training; Risk: Medium)
+- [x] Application Design — Complete & Approved (2026-08-17; `categorization-model-finetuning-application-design-plan.md`; no blocking design questions -- approved requirements already resolved every open point; updated `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`, `application-design.md` in place with dated addenda; new Model Training unit -- Dataset Curator + Fine-Tuning Trainer components; Categorization Engine extended for FR-CFT-9; first purely read-only Shared-DB consumer, width-verified ASCII diagram added). **Blanket approval granted for remaining stage-completion gates on this feature** — proceed without stopping except for genuine open questions/ambiguities.
+- [x] Units Generation — Complete (2026-08-17; blanket approval; added **Unit 5: Model Training** to `unit-of-work.md`/`unit-of-work-dependency.md`/`unit-of-work-story-map.md` -- own directory `model-training/`, no docker-compose entry, first read-only unit dependency in the project)
+
+## INCEPTION PHASE (this change): COMPLETE
+
+### 🟢 CONSTRUCTION PHASE (this change, per-unit loop)
+Build order: Ingestion Worker Service (Unit 3, scoped change) → Model Training (Unit 5, new)
+- [ ] Construction — pending
+  - [x] Ingestion Worker Service — Functional Design: Complete (2026-08-17; blanket approval; `business-rules.md` WR-34, `business-logic-model.md` Categorization Engine addendum)
+  - [x] Ingestion Worker Service — Code Generation: Complete (2026-08-17; blanket approval; real discovery during implementation corrected the Functional Design's assumption -- `converted_amount_sgd` wasn't actually available at the original `classifyBatch` call site, since currency conversion ran later in the pipeline; fixed by reordering conversion to run upfront per transaction, reused rather than recomputed at persist time; `classify_batch`/`classify_batch_prompt`/`classify`/`classify_description`/`classify_descriptions_batch` all gain an amount parameter; `_format_amount_sgd` renders unavailable conversion as "unknown"; 276/276 unit tests passing [up from 272]; `docker compose build ingestion-worker` verified clean)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for this feature)**
+  - [x] Model Training — Functional Design: Complete (2026-08-17; blanket approval; `domain-entities.md`, `business-rules.md` MTR-1..9, `business-logic-model.md`; real gap found and resolved -- MTR-7, no on-demand-classification endpoint exists anywhere in this codebase, resolved via an independent oMLX HTTP call rather than a new endpoint)
+  - [x] Model Training — NFR Requirements: Complete (2026-08-17; blanket approval; `nfr-requirements.md`, `tech-stack-decisions.md`; platform constraint identified -- mlx-tune needs Metal, no Docker path exists on this Mac at all)
+  - [x] Model Training — NFR Design: Complete (2026-08-17; blanket approval; `nfr-design-patterns.md`, `logical-components.md`)
+  - [x] Model Training — Infrastructure Design: Complete (2026-08-17; blanket approval; `infrastructure-design.md`, `deployment-architecture.md`; resolved the Postgres-no-host-port gap via a loopback-only `127.0.0.1:5433` mapping, applied to `docker-compose.yml` and live-verified)
+  - [x] Model Training — Code Generation: Complete (2026-08-17; blanket approval; full `model-training/` unit created, 29/29 tests passing; real correction found via installed-package signature verification -- Gemma 4 requires mlx-tune's VLM API path (`FastVisionModel`/`VLMSFTTrainer`), not the plain-text path the README quick start and this feature's earlier design docs assumed; real live curation run against production DB produced 1,245 real training examples)
+
+**UNIT: MODEL TRAINING — COMPLETE (code + tests; live fine-tuning smoke test deferred, see build-and-test-summary)**
+
+**ALL 2 UNITS COMPLETE (for this feature) — proceeding to Build and Test**
+
+## CONSTRUCTION PHASE (Categorization Model Fine-Tuning): Code Generation complete for both units
+
+- [x] Build and Test — Partially Complete (2026-08-17; `aidlc-docs/construction/build-and-test/categorization-model-finetuning-build-and-test-summary.md`; 276/276 Ingestion Worker + 29/29 Model Training unit tests passing; real live curation run against production DB verified; real API-signature verification against installed mlx-tune/clearml packages; Infrastructure change [Postgres port] live-verified. **Deferred**: full live fine-tuning smoke test [needs the user's oMLX server running, not currently up] and Ingestion Worker Service's live container redeploy [a real production categorization-prompt behavior change, held for explicit user go-ahead rather than silently deployed])

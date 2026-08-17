@@ -5,6 +5,7 @@ exercised indirectly through test_categorization_service.py/test_orchestrator_pi
 new parsing behavior worth its own direct coverage.
 """
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from ingestion_worker.categorization.llm_classifier import UNSURE, classify_batch_prompt
@@ -13,7 +14,14 @@ from ingestion_worker.clients.retry import TransientError
 
 class TestClassifyBatchPrompt:
     def _descriptions(self):
-        return ["NTUC FAIRPRICE", "STARBUCKS COFFEE", "SHELL PETROL"]
+        """WR-34: classify_batch_prompt now takes (description, amountSgd) pairs --
+        the amount values here are arbitrary, since every assertion in this file is
+        about description-keyed parsing behavior, not amount handling."""
+        return [
+            ("NTUC FAIRPRICE", Decimal("45.20")),
+            ("STARBUCKS COFFEE", Decimal("6.50")),
+            ("SHELL PETROL", Decimal("80.00")),
+        ]
 
     def _whitelist(self):
         return ["Groceries", "Dining", "Petrol"]

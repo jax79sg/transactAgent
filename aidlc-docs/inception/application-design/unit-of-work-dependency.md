@@ -11,6 +11,8 @@
 
 **Note on Unit 2 <-> Unit 3**: They do not depend on each other directly (no direct API calls between them, per Application Design's `services.md`) — they coordinate only indirectly through Unit 1's shared schema (the `ingestion_runs`/jobs table acts as the coordination point). This is intentionally listed as a Unit 1 dependency for both, not a Unit 2 <-> Unit 3 dependency.
 
+| Unit 5: Model Training *(added 2026-08-17)* | Unit 1 (Database) — **read-only** | Reads `transactions`/`recategorization_proposals`/`categorization_disagreements` directly via the shared `transactagent_db` package; writes nothing. First read-only unit dependency in this table — every entry above both reads and writes. |
+
 ## Dependency Diagram
 
 ```
@@ -38,6 +40,24 @@
 ```
 
 **Text validation**: ASCII-only (`+ - | v ^`), no unicode box-drawing; all 4 boxes programmatically verified at exactly 33 characters wide per line.
+
+### Unit 5 Dependency Diagram *(added 2026-08-17, Categorization Model Fine-Tuning feature)*
+
+Shown separately rather than merged into the diagram above, matching this project's established convention of a self-contained diagram for a relationship of a genuinely new kind (see `component-dependency.md`'s equivalent precedent) — here, the first **read-only** unit dependency:
+
+```
++-------------------------+
+| Model Training (Unit 5) |
++-------------------------+
+              |
+              | read-only
+              v
++-------------------------+
+| Database (Unit 1)       |
++-------------------------+
+```
+
+**Text validation**: ASCII-only; both boxes a consistent 27 characters wide (programmatically verified).
 
 ## Implications for Build Order
 

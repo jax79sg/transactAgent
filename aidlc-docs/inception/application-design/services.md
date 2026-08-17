@@ -129,6 +129,19 @@ A second, genuinely new coordination mechanism, alongside the Run/Job Queue abov
 
 Not a "direct call" in the sense the Run/Job Queue section's rule means: no RPC, no synchronous request/response, no availability coupling between the two services at write time. One side writes a file; the other passively reads it, independently, whenever it next starts. Busy/idle status (FR-CAS-7) is deliberately **not** part of this channel — see Key Design Resolution 2: it's answered by a Shared DB query instead, keeping the original "coordinate only through the DB" rule fully intact for that piece.
 
+## Service: Model Training *(new, 2026-08-17, Categorization Model Fine-Tuning feature — not a docker-compose "service" — see `categorization-model-finetuning-application-design-plan.md`)*
+
+**Responsibility**: Curate a fine-tuning dataset from labeled transactions and fine-tune the categorization model. Documented here alongside the two real services for consistency, but architecturally different in a way worth being explicit about: no persistent process, no `poll_once()` loop, no Run/Job Queue participation, no docker-compose entry.
+
+**Orchestration pattern**: Two independent, manually-invoked CLI scripts, run in sequence by the person operating it — not by each other:
+
+```
+$ python -m model_training.curate   # Dataset Curator Component.curateDataset()
+$ python -m model_training.train    # Fine-Tuning Trainer Component.train() -> evaluate() -> saveArtifact()
+```
+
+`curate` must complete before `train` runs (the latter reads the former's output directory) — a filesystem hand-off, not a DB or queue-mediated one like the two real services use with each other. Neither script talks to the API Service or Ingestion Worker Service directly; `train`'s `evaluate()` step calls the live categorization path only to compare predictions (read-only, no state change), the same way any other client of that functionality would.
+
 ## Data Flow Summary
 
 ```

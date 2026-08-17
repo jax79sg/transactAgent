@@ -24,6 +24,8 @@
 | Vector Store Client Component *(added 2026-08-11)* | Vector DB (external, dedicated service — not the Shared DB) | REST/gRPC (external, product TBD at NFR Requirements) |
 | Embedding Manager Component *(added 2026-08-11)* | oMLX (external, user-managed local endpoint, config-supplied URL); Vector Store Client Component (same service); Shared DB (`transactions.embedding_status`) | REST (external); in-process method call; in-process DB query |
 | Configuration Loading *(both services, added 2026-08-16, Configurable Application Settings feature — cross-cutting, not a business-logic component)* | Shared override-settings volume, read side — both services' `Settings` classes read it via `env_file` at process start | Filesystem read at startup, not a DB query, not a call to the other service |
+| Dataset Curator Component *(added 2026-08-17, Model Training unit)* | Shared DB (transactions, recategorization_proposals, categorization_disagreements tables) — **read-only** | Direct DB query via the shared `transactagent_db` package, not a new data-access layer |
+| Fine-Tuning Trainer Component *(added 2026-08-17, Model Training unit)* | Dataset Curator Component's output (same unit, filesystem hand-off); HuggingFace Hub (external, base model download); ClearML SaaS (external, run tracking); the oMLX server (`evaluate()` only, for the agreement-rate comparison — see Functional Design MTR-7 correction: an independent HTTP call replicating the live prompt template, not a call into API Service/Ingestion Worker Service code, since no such endpoint exists) | Filesystem read; REST (external) x3, all direct HTTP, no dependency on either existing service |
 
 ## Communication Patterns Summary
 
@@ -37,6 +39,9 @@
 - **Ingestion Worker Service ↔ oMLX** *(added 2026-08-11)*: the new Embedding Manager Component only, and only for the async/batched storage-time embedding computation (`processNextEmbeddingBatch`) — plus the Categorization Engine/Recurring Payment Manager's query-time transient embedding calls (both addended above), which also go through `EmbeddingManager.computeEmbedding()`, not a second, separate client. User-managed, host-native, config-pointed — not part of `docker-compose` (NFR-5).
 - **API Service ↔ Ingestion Worker Service** *(addendum, 2026-08-16)*: the extended Recategorization Review Component holds to the same "no direct call" rule for the new `categorization_disagreements` table too — it only reads/resolves rows the Worker's Categorization Engine already wrote, same as every other review-style component before it.
 - **API Service ↔ Ingestion Worker Service** *(addendum, 2026-08-16, Configurable Application Settings feature)*: a second, genuinely new coordination channel is introduced — a shared, non-secret override-settings file on a new Docker volume bind-mounted into both containers (Configuration Component writes; both services' `Settings` classes read via `env_file` at their own next startup). Still not a "direct call" in the sense this rule means — no RPC, no synchronous request/response, no availability coupling at write time — see `services.md`'s new "Cross-Service Coordination: Settings Override File" section for the full reasoning. Busy/idle status (FR-CAS-7) deliberately does **not** use this new channel — it's answered by a Shared DB query instead (Key Design Resolution 2), so the original DB-only coordination rule stays fully intact for that piece.
+- **Model Training ↔ Shared DB** *(addendum, 2026-08-17, Categorization Model Fine-Tuning feature)*: the first consumer with a **read-only** relationship to the Shared DB — no writer/reader pairing like every entry above. Connects directly (reusing the `transactagent_db` package), not through either existing service.
+- **Model Training ↔ API Service / Ingestion Worker Service**: **no dependency in either direction, full stop** — corrected during Functional Design (MTR-7): `evaluate()`'s "compare against the live model" step does not call into either service's code or any endpoint (none exists for on-demand classification) — it independently replicates WR-34's prompt template and calls the same oMLX server directly. Nothing on the API Service/Ingestion Worker Service side is aware Model Training exists, and nothing in Model Training imports or calls either service's package.
+- **Model Training ↔ External Services** *(new)*: HuggingFace Hub (download the base model), ClearML SaaS (run tracking), and the oMLX server (`evaluate()`'s live-model comparison, MTR-7 — the same server `ingestion-worker` talks to, but reached independently, not through it) — three external dependencies, all isolated to this one unit (NFR-CFT-1/NFR-CFT-3).
 
 ## Data Flow Diagram
 
@@ -130,3 +135,24 @@ The genuinely new, non-DB coordination channel from `services.md`'s "Cross-Servi
 ```
 
 **Text validation**: All lines ASCII-only; all 3 boxes are a consistent 31 characters wide (programmatically verified). Busy/idle status (FR-CAS-7) is intentionally absent from this diagram — it flows through the existing Shared DB (main diagram above), not this channel, per Key Design Resolution 2.
+
+### Data Flow Diagram: Model Training Unit *(new, 2026-08-17, Categorization Model Fine-Tuning feature)*
+
+Shown separately rather than merged into the main diagram above — Model Training isn't part of either existing service's request/response or Run/Job Queue flow, and is the first component with a purely **read-only** relationship to the Shared DB:
+
+```
++---------------------------+
+| Model Training (new unit) |
+| - Dataset Curator         |
+| - Fine-Tuning Trainer     |
++---------------------------+
+              |
+              | read-only query (transactagent_db)
+              v
++-------------+
+| Shared DB   |
+| (read-only) |
++-------------+
+```
+
+**Text validation**: All lines ASCII-only; both boxes internally consistent width (29 and 15 characters respectively, programmatically verified). Not shown as boxes: Model Training's three other dependencies — HuggingFace Hub (base model download), ClearML SaaS (run tracking), and the oMLX server (`evaluate()`'s live-model comparison, MTR-7 correction — reached directly, not through Ingestion Worker Service) — all outbound REST calls to external/local-network services, already fully captured in the Dependency Matrix and Communication Patterns Summary above without needing further boxes.

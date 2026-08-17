@@ -147,3 +147,16 @@ See `configurable-app-settings-application-design-plan.md` for the full reasonin
 | US-10.4 | Configuration Component (`listSettingHistory`, writes `SettingChange`), Frontend SPA (history view) |
 
 **Result (Configurable Application Settings)**: Complete — no gaps, no new speculative components, no new Frontend component. All 4 stories map to the extended Configuration Component and the existing Frontend SPA convention. One genuinely new architectural element not attributable to any single component: the shared, file-backed override-settings channel between API Service and Ingestion Worker Service (Key Design Resolution 3) — a new kind of cross-service coordination, deliberately narrow in scope (config values only; busy/idle stays DB-based, Key Design Resolution 2) and forced by a real startup-ordering constraint, not a preference.
+
+### Addendum (2026-08-17): Categorization Model Fine-Tuning
+
+No user stories this round (developer/ML tooling — see `categorization-model-finetuning-requirements.md`); traced directly to functional requirements. This is this project's first genuinely new **unit** since the original 4 (Database, API Service, Ingestion Worker Service, Frontend SPA) — see `categorization-model-finetuning-execution-plan.md` for why it doesn't fit inside any existing one.
+
+| Requirement | Component(s) |
+|---|---|
+| FR-CFT-1..4 | Dataset Curator Component (new, Model Training unit) |
+| FR-CFT-5..8 | Fine-Tuning Trainer Component (new, Model Training unit) |
+| FR-CFT-9 | Categorization Engine Component (extended — `classify`/`classifyBatch` gain an `amountSgd` parameter) |
+| FR-CFT-10 | Model Training unit as a whole (two standalone CLI entry points — see `services.md`) |
+
+**Result (Categorization Model Fine-Tuning)**: Complete — no gaps. All 10 functional requirements map to either the two new Model Training components or a scoped extension of the existing Categorization Engine. Two genuinely new architectural elements: (1) the Model Training unit itself — no docker-compose service, no persistent process, its own isolated ML dependency set (NFR-CFT-1); (2) the project's first purely **read-only** consumer of the Shared DB — every prior addendum above described a writer/reader pair between the two existing services, this is the first one-directional relationship. Two new external dependencies, both isolated to this one unit: HuggingFace Hub (base model download) and ClearML SaaS (run tracking).

@@ -108,6 +108,17 @@ poll ingestion_runs for status='queued' (every 5s, Question 6 = A)
   ```
   `recategorizeUnsureFromPrecedent`'s pairwise embedding check also gains price-bucketed text (WR-29) and an LLM-agreement boost (WR-30), but does **not** gain disagreement detection or a `CategorizationDisagreement`-writing branch — that decision (WR-28) is scoped to `categorize()`'s ingestion-time call only, since the retroactive re-scan has no analogous "two independently-computed suggestions for the same not-yet-decided transaction" shape (it's propagating one already-decided correction to other transactions, not deciding a fresh one).
 
+- **Addendum (2026-08-17 — Categorization Model Fine-Tuning, FR-CFT-9, WR-34)**: `classifyBatch`'s LLM prompt gains a second per-item field, `amountSgd` (the transaction's `converted_amount_sgd`), alongside `description`:
+  ```
+  # Ingestion Orchestrator, once per file, right after extraction succeeds:
+  llm_category_by_description = Categorization Engine.classifyBatch(
+      [{description: t.description, amountSgd: t.converted_amount_sgd} for t in file.raw_transactions],
+      whitelist)   [WR-34: amountSgd added to the prompt, keyed by description as before]
+  ```
+  This exists solely so the live prompt's input shape matches what the new Model Training unit's Dataset Curator produces (Requirements' Resolved Decision 6) — the fine-tuned model is trained on `{description, amountSgd} -> category`, so inference has to offer the same shape or the fine-tune wouldn't transfer. No change to the fallback chain, the whitelist constraint, disagreement detection, or any other part of `categorize()`'s decision logic above — this is purely a prompt-content change. Bank name is deliberately excluded (Requirements' Resolved Decision 5 — "a very weak signal").
+
+  **Correction found at Code Generation**: `amountSgd` is not actually available at `classifyBatch`'s original call time — Currency Conversion previously ran later, per-transaction, inside the persistence loop. The Ingestion Orchestrator's pipeline was restructured so conversion resolves upfront, per transaction, before `classifyBatch` (same conversion logic/DB effects, just reordered), and the already-computed result is reused rather than recomputed during persistence.
+
 ## Currency Conversion Component
 
 - **Primary source** (Clarification 2a = A): if the Statement Extraction step captured a printed SGD-converted amount for a transaction (common on Singapore bank/card statements per user's domain knowledge), use it directly as `converted_amount_sgd`; `conversion_is_approximate = false`, `fx_rate_used_id = NULL` (no API rate was used — the source was the statement itself, not a cached rate).

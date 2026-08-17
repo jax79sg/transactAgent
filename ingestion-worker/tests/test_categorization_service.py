@@ -607,7 +607,13 @@ class TestClassifyBatch:
     llm_classification_concurrency: (1) chunks of llm_classification_batch_size
     descriptions classified via classify_batch_prompt (one prompt per chunk), (2)
     any description that phase didn't answer falls back to an individual
-    classify() call."""
+    classify() call.
+
+    WR-34 (Categorization Model Fine-Tuning): classify_batch's input is now a list
+    of (description, amountSgd) pairs, not bare descriptions -- every call below
+    is updated accordingly. The amount values themselves aren't under test here
+    (that's covered by test_openrouter_client.py's prompt-content tests); an
+    arbitrary Decimal is used throughout."""
 
     def test_fully_resolved_by_the_batch_phase_never_calls_individual_classify(self, db_session):
         _make_category(db_session, "Groceries")
@@ -621,7 +627,10 @@ class TestClassifyBatch:
             ),
             patch("ingestion_worker.categorization.service.llm_classifier.classify") as mock_classify,
         ):
-            result = classify_batch(db_session, ["NTUC FAIRPRICE", "STARBUCKS", "NTUC FAIRPRICE"])
+            result = classify_batch(
+                db_session,
+                [("NTUC FAIRPRICE", Decimal("45.20")), ("STARBUCKS", Decimal("6.50")), ("NTUC FAIRPRICE", Decimal("45.20"))],
+            )
 
         assert result == {"NTUC FAIRPRICE": "Groceries", "STARBUCKS": "Dining"}
         mock_classify.assert_not_called()
@@ -642,11 +651,12 @@ class TestClassifyBatch:
                 "ingestion_worker.categorization.service.llm_classifier.classify", return_value="Dining"
             ) as mock_classify,
         ):
-            result = classify_batch(db_session, ["NTUC FAIRPRICE", "STARBUCKS"])
+            result = classify_batch(db_session, [("NTUC FAIRPRICE", Decimal("45.20")), ("STARBUCKS", Decimal("6.50"))])
 
         assert result == {"NTUC FAIRPRICE": "Groceries", "STARBUCKS": "Dining"}
         mock_classify.assert_called_once()
         assert mock_classify.call_args.args[0] == "STARBUCKS"
+        assert mock_classify.call_args.args[1] == Decimal("6.50")
 
     def test_whole_batch_phase_failure_falls_every_description_back_individually(self, db_session):
         """classify_batch_prompt returning {} (its own WR-4-style "never raises,
@@ -661,7 +671,9 @@ class TestClassifyBatch:
                 "ingestion_worker.categorization.service.llm_classifier.classify", return_value="Groceries"
             ) as mock_classify,
         ):
-            result = classify_batch(db_session, ["NTUC FAIRPRICE", "COLD STORAGE"])
+            result = classify_batch(
+                db_session, [("NTUC FAIRPRICE", Decimal("45.20")), ("COLD STORAGE", Decimal("12.00"))]
+            )
 
         assert result == {"NTUC FAIRPRICE": "Groceries", "COLD STORAGE": "Groceries"}
         assert mock_classify.call_count == 2
@@ -669,16 +681,16 @@ class TestClassifyBatch:
     def test_chunks_descriptions_into_configured_batch_size(self, db_session):
         _make_category(db_session, "Groceries")
         _make_category(db_session, "UNSURE")
-        descriptions = [f"MERCHANT {i}" for i in range(5)]
+        items = [(f"MERCHANT {i}", Decimal("10.00")) for i in range(5)]
 
         with (
             patch("ingestion_worker.categorization.service.settings.llm_classification_batch_size", 2),
             patch(
                 "ingestion_worker.categorization.service.llm_classifier.classify_batch_prompt",
-                side_effect=lambda chunk, whitelist: {d: "Groceries" for d in chunk},
+                side_effect=lambda chunk, whitelist: {d: "Groceries" for d, _amount in chunk},
             ) as mock_batch_prompt,
         ):
-            result = classify_batch(db_session, descriptions)
+            result = classify_batch(db_session, items)
 
         assert len(result) == 5
         chunk_sizes = sorted(len(call.args[0]) for call in mock_batch_prompt.call_args_list)
@@ -686,7 +698,7 @@ class TestClassifyBatch:
 
     def test_deduplicates_before_dispatch(self, db_session):
         """Two transactions sharing identical description text within the same file
-        are classified once, not twice."""
+        are classified once, not twice -- keeping the first occurrence's amount."""
         _make_category(db_session, "Groceries")
         _make_category(db_session, "UNSURE")
 
@@ -694,10 +706,17 @@ class TestClassifyBatch:
             "ingestion_worker.categorization.service.llm_classifier.classify_batch_prompt",
         ) as mock_batch_prompt:
             mock_batch_prompt.return_value = {"NTUC FAIRPRICE": "Groceries"}
-            classify_batch(db_session, ["NTUC FAIRPRICE", "NTUC FAIRPRICE", "NTUC FAIRPRICE"])
+            classify_batch(
+                db_session,
+                [
+                    ("NTUC FAIRPRICE", Decimal("45.20")),
+                    ("NTUC FAIRPRICE", Decimal("99.99")),
+                    ("NTUC FAIRPRICE", Decimal("1.00")),
+                ],
+            )
 
         mock_batch_prompt.assert_called_once()
-        assert mock_batch_prompt.call_args.args[0] == ["NTUC FAIRPRICE"]
+        assert mock_batch_prompt.call_args.args[0] == [("NTUC FAIRPRICE", Decimal("45.20"))]
 
     def test_empty_input_returns_empty_dict_without_calling_llm(self, db_session):
         with patch("ingestion_worker.categorization.service.llm_classifier.classify_batch_prompt") as mock_batch_prompt:
@@ -717,8 +736,26 @@ class TestClassifyBatch:
             "ingestion_worker.categorization.service.llm_classifier.classify_batch_prompt",
             return_value={"NTUC FAIRPRICE": "Groceries"},
         ) as mock_batch_prompt:
-            classify_batch(db_session, ["NTUC FAIRPRICE"])
+            classify_batch(db_session, [("NTUC FAIRPRICE", Decimal("45.20"))])
 
         called_whitelist = mock_batch_prompt.call_args.args[1]
         assert "UNSURE" not in called_whitelist
         assert "Groceries" in called_whitelist
+
+    def test_amount_unavailable_is_passed_through_as_none(self, db_session):
+        """WR-34: a transaction whose conversion was unavailable (WR-6) still gets
+        classified -- amountSgd flows through as None, not a crash or a dropped
+        item."""
+        _make_category(db_session, "Groceries")
+        _make_category(db_session, "UNSURE")
+
+        with (
+            patch("ingestion_worker.categorization.service.llm_classifier.classify_batch_prompt", return_value={}),
+            patch(
+                "ingestion_worker.categorization.service.llm_classifier.classify", return_value="Groceries"
+            ) as mock_classify,
+        ):
+            result = classify_batch(db_session, [("NTUC FAIRPRICE", None)])
+
+        assert result == {"NTUC FAIRPRICE": "Groceries"}
+        assert mock_classify.call_args.args[1] is None

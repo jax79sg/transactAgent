@@ -6,6 +6,13 @@ services:
       POSTGRES_DB: ${DB_NAME:-transactagent}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      # Categorization Model Fine-Tuning (Model Training unit, Infrastructure Design):
+      # loopback-only so model-training/'s host-run scripts (mlx-tune has no container
+      # path on macOS -- no Metal passthrough) can reach Postgres read-only. Non-default
+      # host port (5433) to avoid colliding with a developer machine's own local Postgres
+      # on 5432. No LAN/remote exposure -- this unit only ever runs on this same host.
+      - "127.0.0.1:5433:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     healthcheck:

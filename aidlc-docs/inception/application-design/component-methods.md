@@ -119,6 +119,7 @@ High-level method signatures per component. Types are conceptual (language-agnos
     - Changed: `findSimilarPastTransaction`'s embedded query text now includes a price-range bucket alongside the description (FR-MPR-4), and its candidate scoring receives a small boost when a candidate's actual category agrees with `llmCategory` (FR-MPR-7) — exact boost mechanics deferred to Functional Design (Design Decision 4).
     - Changed: at the end of ingestion-time categorization, the transaction's own `llmCategory` (whatever `classifyBatch` returned for it, including `UNSURE`) is persisted to `llm_suggested_category_id` (Key Design Resolution 3), so `recategorizeUnsureFromPrecedent`'s own boost logic (below) can read it back later for transactions ingested in an earlier run.
     - Changed: `recategorizeUnsureFromPrecedent`'s pairwise embedding comparison also gets the price-bucket embedding text (FR-MPR-4) and a small score boost when the *candidate* transaction's persisted `llm_suggested_category_id` agrees with the category being proposed (FR-MPR-7) — this method does **not** gain a disagreement-review branch (FR-MPR-12: disagreement-routing is scoped to `categorize()`'s ingestion-time decision only).
+  - *Addendum (2026-08-17, Categorization Model Fine-Tuning feature — FR-CFT-9)*: `classify(description, amountSgd, whitelist) -> category | UNSURE` and `classifyBatch(items: {description, amountSgd}[], whitelist) -> Map<description, category|UNSURE>` — both gain an `amountSgd` parameter (the transaction's `converted_amount_sgd`), included in the prompt text alongside `description`. Callers (`categorize()`, the Ingestion Orchestrator's upfront batch step) updated to pass it through. No other signature or behavior change.
 
 ### Currency Conversion Component
 - `getRate(fromCurrency, toCurrency='SGD', date) -> {rate, isApproximate, sourceDate} | RateUnavailable`
@@ -146,4 +147,18 @@ High-level method signatures per component. Types are conceptual (language-agnos
 *Addendum (2026-08-11, Local Embedding-Based Semantic Similarity feature — Epic 9)*
 - `computeEmbedding(text) -> Vector | EmbeddingUnavailable` — calls the configured oMLX endpoint with the raw, unnormalized text (FR-9); used both by this component's own batch below and, transiently/non-persisted, by the Categorization Engine and Recurring Payment Manager at query time (see the plan doc's "Key Design Resolution")
 - `processNextEmbeddingBatch() -> {processedCount}` — the poll-cycle handler (fifth `poll_once()` branch, see `services.md`): selects a bounded batch of transactions with `embedding_status = pending`, computes + persists (via Vector Store Client) each one's embedding, updates `embedding_status`; serves both newly-ingested transactions (FR-6) and the one-time historical backfill (FR-11) as the same mechanism. Stops early for the cycle on an endpoint-unavailable error rather than burning through the whole batch on doomed calls (FR-10); already-processed transactions are never revisited, and an interrupted batch simply resumes next cycle (NFR-4).
+
+---
+
+## Model Training (new unit, 2026-08-17, Categorization Model Fine-Tuning feature — see `categorization-model-finetuning-application-design-plan.md`)
+
+Both components below are invoked directly as CLI entry points (`python -m ...` or equivalent) — no service loop, no polling, no job queue. Exact CLI argument shapes are deferred to Functional Design.
+
+### Dataset Curator Component
+- `curateDataset(outputDir, trainSplitRatio=0.85) -> {trainCount, valCount, sourceBreakdown: {manual, humanApprovedSimilarity}}` — FR-CFT-1..4: queries eligible transactions, builds `{description, amountSgd, categoryName, transactionId}` examples, splits, and writes both splits to `outputDir` in mlx-tune-`SFTTrainer`-ready form. Deterministic given the same DB state (NFR-CFT-4).
+
+### Fine-Tuning Trainer Component
+- `train(datasetDir, config: {loraRank, loraAlpha, learningRate, steps, ...}) -> TrainingRunResult` — FR-CFT-5/6: loads `mlx-community/gemma-4-26b-a4b-it-4bit` via mlx-tune's `FastLanguageModel`, attaches LoRA adapters per `config`, fine-tunes via `SFTTrainer` against `datasetDir`'s training split, logging configuration/metrics/artifacts to ClearML throughout.
+- `evaluate(modelHandle, validationSplitPath) -> {accuracy, confusionMatrix, agreementWithLiveModel}` — FR-CFT-7: runs the fine-tuned model against the held-out validation split; separately calls the live categorization endpoint (same input shape, post-FR-CFT-9) for each validation example to compute the agreement/disagreement rate; both logged to ClearML. Called by `train()` at the end of a run, not invoked standalone.
+- `saveArtifact(modelHandle, outputPath, format: 'lora_adapter'|'merged') -> ArtifactPath` — FR-CFT-8: local save only, via mlx-tune's own `save_pretrained`/`save_pretrained_merged`. No conversion, no deployment call.
   - *Addendum (2026-08-12, retroactively during Ingestion Worker Service Functional Design)*: also selects a bounded batch of `RecurringPayment` rows with `embedding_status = pending` (Database `BR-25`, added retroactively) and processes them the same way, targeting the `recurring_payment_names` collection — one unified mechanism draining both entity types' backlogs, not two separate handlers.

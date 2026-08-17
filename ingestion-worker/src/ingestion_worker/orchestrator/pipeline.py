@@ -121,14 +121,43 @@ def _process_one_file(db: Session, run, file_ref) -> None:
         db, drive_file_id=file_ref.id, pdf_content_hash=content_hash, bank_name=result.bank_name
     )
 
+    # WR-34 (Categorization Model Fine-Tuning): converted SGD amount is now part of
+    # the categorization prompt (alongside description), so conversion is resolved
+    # here, upfront per transaction -- moved earlier than its previous call site
+    # inside _persist_transaction -- and the result is reused there rather than
+    # recomputed. Conversion itself has no dependency on categorization, so this
+    # reordering changes nothing about its own behavior (same FX cache reads/writes,
+    # just earlier in the file's processing).
+    conversions = [
+        resolve_converted_amount(
+            db,
+            amount=raw_txn.amount,
+            currency=result.currency,
+            transaction_date=raw_txn.transaction_date,
+            printed_converted_amount_sgd=raw_txn.printed_converted_amount_sgd,
+        )
+        for raw_txn in result.transactions
+    ]
+
     # WR-27 (Matching Precision Refinement): every transaction gets classified by
     # the LLM, always -- one upfront, concurrent batch call per file, before the
     # per-transaction persistence loop, rather than a per-transaction last resort.
-    llm_category_by_description = classify_batch(db, [raw_txn.description for raw_txn in result.transactions])
+    llm_category_by_description = classify_batch(
+        db,
+        [
+            (raw_txn.description, conversion.converted_amount_sgd)
+            for raw_txn, conversion in zip(result.transactions, conversions)
+        ],
+    )
 
-    for raw_txn in result.transactions:
+    for raw_txn, conversion in zip(result.transactions, conversions):
         _persist_transaction(
-            db, statement, result.currency, raw_txn, llm_category_by_description.get(raw_txn.description, UNSURE_NAME)
+            db,
+            statement,
+            result.currency,
+            raw_txn,
+            llm_category_by_description.get(raw_txn.description, UNSURE_NAME),
+            conversion,
         )
 
     logger.info("%s: done", file_ref.name)
@@ -141,7 +170,7 @@ def _process_one_file(db: Session, run, file_ref) -> None:
     orchestrator_repository.update_run_progress(db, run, processed_delta=1)
 
 
-def _persist_transaction(db: Session, statement, currency: str, raw_txn, llm_category: str) -> Transaction:
+def _persist_transaction(db: Session, statement, currency: str, raw_txn, llm_category: str, conversion) -> Transaction:
     categorization = categorize(db, raw_txn.description, raw_txn.amount, llm_category)
     category = categorization_repository.find_category_by_name(db, categorization.category_name)
     # find_category_by_name always resolves here: categorize() only ever returns a
@@ -152,13 +181,9 @@ def _persist_transaction(db: Session, statement, currency: str, raw_txn, llm_cat
         else None
     )  # BR-26: null when the LLM abstained or its endpoint was unreachable
 
-    conversion = resolve_converted_amount(
-        db,
-        amount=raw_txn.amount,
-        currency=currency,
-        transaction_date=raw_txn.transaction_date,
-        printed_converted_amount_sgd=raw_txn.printed_converted_amount_sgd,
-    )
+    # WR-34: conversion is now resolved upfront by the caller (alongside every other
+    # transaction in the file, before classify_batch), not here -- reused, not
+    # recomputed.
 
     transaction = Transaction(
         bank_statement_id=statement.id,
