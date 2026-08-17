@@ -1,9 +1,9 @@
+from datetime import UTC
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from transactagent_db.models import (
     DetectionScanRun,
     DetectionSuggestion,
@@ -44,7 +44,7 @@ def record_match(
     status: RecurringPaymentMatchStatus,
     amount_at_match: Decimal,
 ) -> RecurringPaymentMatch:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     match = RecurringPaymentMatch(
         recurring_payment_id=recurring_payment_id,
@@ -52,7 +52,7 @@ def record_match(
         cycle_period=cycle_period,
         status=status,
         amount_at_match=amount_at_match,
-        resolved_at=datetime.now(timezone.utc) if status != RecurringPaymentMatchStatus.PENDING else None,
+        resolved_at=datetime.now(UTC) if status != RecurringPaymentMatchStatus.PENDING else None,
     )
     db.add(match)
     db.flush()

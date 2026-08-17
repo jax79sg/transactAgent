@@ -80,11 +80,11 @@ class TestResolveConversionSourceProperties:
     @given(amount=_amounts, currency=_currencies, exact_rate=_rates, fallback_rate=_rates, printed=_amounts)
     def test_priority_order_is_total_and_deterministic(self, amount, currency, exact_rate, fallback_rate, printed):
         """Calling twice with identical inputs always yields identical output (no hidden state)."""
-        args = dict(
-            amount=amount,
-            currency=currency,
-            printed_converted_amount_sgd=printed,
-            exact_rate=exact_rate,
-            fallback_rate=fallback_rate,
-        )
+        args = {
+            "amount": amount,
+            "currency": currency,
+            "printed_converted_amount_sgd": printed,
+            "exact_rate": exact_rate,
+            "fallback_rate": fallback_rate,
+        }
         assert resolve_conversion_source(**args) == resolve_conversion_source(**args)

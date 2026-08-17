@@ -1,11 +1,16 @@
 """Query wrappers for IngestionRun / IngestionRunFile / IngestionRunLog (Repository Layer)."""
 
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
-from transactagent_db.models import IngestionRun, IngestionRunFile, IngestionRunLog, IngestionRunStatus
+from transactagent_db.models import (
+    IngestionRun,
+    IngestionRunFile,
+    IngestionRunLog,
+    IngestionRunStatus,
+)
 
 
 def find_active_run(db: Session) -> IngestionRun | None:
@@ -32,10 +37,10 @@ def request_cancellation(db: Session, run: IngestionRun) -> None:
     separate process) is the sole writer of `status`; it checks this column
     between files (never mid-file) and transitions the run to CANCELLED itself.
     This split keeps the two processes from ever racing on the same column."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     if run.cancel_requested_at is None:
-        run.cancel_requested_at = datetime.now(timezone.utc)
+        run.cancel_requested_at = datetime.now(UTC)
         db.commit()
 
 

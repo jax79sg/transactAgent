@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
-
 from transactagent_db.models import (
     Category,
     DetectionSuggestion,
@@ -125,7 +124,7 @@ def find_match_by_id(db: Session, match_id: UUID) -> RecurringPaymentMatch | Non
 
 def resolve_match(db: Session, match: RecurringPaymentMatch, status: RecurringPaymentMatchStatus) -> None:
     match.status = status
-    match.resolved_at = datetime.now(timezone.utc)
+    match.resolved_at = datetime.now(UTC)
     db.flush()
 
 
@@ -151,5 +150,5 @@ def find_detection_suggestion(db: Session, suggestion_id: UUID) -> DetectionSugg
 
 def resolve_detection_suggestion(db: Session, suggestion: DetectionSuggestion, status: DetectionSuggestionStatus) -> None:
     suggestion.status = status
-    suggestion.resolved_at = datetime.now(timezone.utc)
+    suggestion.resolved_at = datetime.now(UTC)
     db.flush()

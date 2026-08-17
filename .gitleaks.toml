@@ -1,0 +1,24 @@
+title = "transactAgent gitleaks config"
+
+[extend]
+useDefault = true
+
+# Default rules don't catch bcrypt hashes (verified: they missed the real one that
+# leaked into aidlc-docs/audit.md's first commit, via a pasted terminal command --
+# see git history / CI audit trail). This project's audit.md logs raw user-pasted
+# terminal input verbatim, so a password hash pasted into chat is a realistic,
+# recurring way for one to end up committed -- not a hypothetical.
+[[rules]]
+id = "bcrypt-hash"
+description = "bcrypt password hash"
+regex = '''\$2[aby]\$\d{2}\$[A-Za-z0-9./]{53}'''
+tags = ["password", "bcrypt"]
+
+[allowlist]
+description = "Known false positives, reviewed by hand"
+regexes = [
+  # aidlc-docs/construction/api-service/code/recurring-payments-summary.md:8 --
+  # the phrase "match/suggestion" (a doc heading fragment) trips the generic
+  # high-entropy secret heuristic. Not a secret -- verified by hand.
+  '''match/suggestion''',
+]

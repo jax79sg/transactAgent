@@ -9,6 +9,11 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from transactagent_db.models import (
+    CategorySource,
+    RecategorizationProposalSourceBucket,
+    RecategorizationProposalStatus,
+)
 
 from ingestion_worker.categorization import llm_classifier, repository
 from ingestion_worker.categorization.similarity import (
@@ -23,11 +28,6 @@ from ingestion_worker.embedding import client as embedding_client
 from ingestion_worker.embedding import text as embedding_text
 from ingestion_worker.embedding import vector_store
 from ingestion_worker.embedding.similarity import cosine_similarity
-from transactagent_db.models import (
-    CategorySource,
-    RecategorizationProposalSourceBucket,
-    RecategorizationProposalStatus,
-)
 
 UNSURE_NAME = "UNSURE"
 

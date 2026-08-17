@@ -5,6 +5,7 @@ through AR-33 (business-logic-model.md / business-rules.md).
 
 from dotenv import dotenv_values, set_key
 from sqlalchemy.orm import Session
+from transactagent_db.models import SettingOwningService
 
 from api_service import config
 from api_service.app_settings import repository
@@ -12,7 +13,6 @@ from api_service.app_settings.catalog import SETTINGS_BY_NAME, SettingSpec
 from api_service.app_settings.validation import check_cross_field, parse_and_validate
 from api_service.config import SETTINGS_OVERRIDE_FILE
 from api_service.errors import InvalidSettingValueError, UnknownSettingError
-from transactagent_db.models import SettingOwningService
 
 # AR-30: fixed strings, matching docker-compose.yml's container_name values. Never
 # executed by this service -- no Docker-socket access exists (Resolved Decision 2).

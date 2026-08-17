@@ -8,9 +8,8 @@ worker startup so a plain restart self-heals instead of needing manual DB surger
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from ingestion_worker.orchestrator import repository
 from transactagent_db.models import (
     IngestionRun,
     IngestionRunStatus,
@@ -19,6 +18,8 @@ from transactagent_db.models import (
     Transaction,
     User,
 )
+
+from ingestion_worker.orchestrator import repository
 
 
 def _make_user(db):
@@ -122,7 +123,7 @@ class TestCancellation:
         run = IngestionRun(
             triggered_by_user_id=user.id,
             status=IngestionRunStatus.RUNNING,
-            cancel_requested_at=datetime.now(timezone.utc),
+            cancel_requested_at=datetime.now(UTC),
         )
         db_session.add(run)
         db_session.flush()
@@ -135,7 +136,7 @@ class TestCancellation:
         run = IngestionRun(
             triggered_by_user_id=user.id,
             status=IngestionRunStatus.RUNNING,
-            cancel_requested_at=datetime.now(timezone.utc),
+            cancel_requested_at=datetime.now(UTC),
         )
         db_session.add(run)
         db_session.flush()
@@ -154,7 +155,7 @@ class TestCancellation:
         run = IngestionRun(
             triggered_by_user_id=user.id,
             status=IngestionRunStatus.RUNNING,
-            cancel_requested_at=datetime.now(timezone.utc),
+            cancel_requested_at=datetime.now(UTC),
         )
         db_session.add(run)
         db_session.flush()

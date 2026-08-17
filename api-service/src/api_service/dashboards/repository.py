@@ -2,7 +2,6 @@
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
 from transactagent_db.models import Category, Transaction
 
 
@@ -22,7 +21,7 @@ def _base_scope(db: Session, filters):
 
 
 def category_trend_series(db: Session, filters) -> list[dict]:
-    conditions = _base_scope(db, filters) + [Transaction.out_flow.is_not(None)]
+    conditions = [*_base_scope(db, filters), Transaction.out_flow.is_not(None)]
     # month_expr is built once and reused for select/group_by/order_by: calling
     # _month_expr() separately for each clause creates distinct bound-parameter
     # expressions that Postgres does not recognize as equivalent for GROUP BY,

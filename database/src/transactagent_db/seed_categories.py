@@ -79,7 +79,6 @@ def seed_categories(session: Session) -> int:
 
 
 if __name__ == "__main__":
-    import os
 
     from sqlalchemy import create_engine
 

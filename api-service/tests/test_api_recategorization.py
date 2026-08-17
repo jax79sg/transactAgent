@@ -126,7 +126,7 @@ class TestApproveProposalApi:
 
 class TestRejectProposalApi:
     def test_reject_leaves_candidate_untouched(self, client, auth_headers, db_session):
-        proposal, candidate, household = _make_pending_proposal(db_session)
+        proposal, candidate, _household = _make_pending_proposal(db_session)
         original_category_id = candidate.category_id
 
         response = client.post(f"/recategorization/proposals/{proposal.id}/reject", headers=auth_headers)
@@ -172,7 +172,11 @@ class TestBulkRejectApi:
 
 
 def _make_pending_disagreement(db, description="NTUC FAIRPRICE"):
-    from transactagent_db.models import CategorizationDisagreement, CategorizationDisagreementStatus, CategorySource
+    from transactagent_db.models import (
+        CategorizationDisagreement,
+        CategorizationDisagreementStatus,
+        CategorySource,
+    )
 
     household = _make_category(db, f"Household-{uuid.uuid4().hex[:8]}")
     dining = _make_category(db, f"Dining-{uuid.uuid4().hex[:8]}")
@@ -223,7 +227,7 @@ class TestPendingCountIncludesDisagreementsApi:
 
 class TestResolveDisagreementApi:
     def test_resolve_writes_chosen_category_and_returns_updated_disagreement(self, client, auth_headers, db_session):
-        disagreement, txn, household, dining = _make_pending_disagreement(db_session)
+        disagreement, txn, _household, dining = _make_pending_disagreement(db_session)
 
         response = client.post(
             f"/recategorization/disagreements/{disagreement.id}/resolve",

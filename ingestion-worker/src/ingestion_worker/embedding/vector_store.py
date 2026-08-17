@@ -46,7 +46,7 @@ def ensure_collections() -> None:
                     vectors_config=VectorParams(size=settings.embedding_dimensions, distance=Distance.COSINE),
                 )
                 logger.info("Created vector store collection %r", name)
-    except Exception:  # noqa: BLE001 - non-blocking startup pattern (nfr-design-patterns.md)
+    except Exception:
         logger.warning(
             "Vector store collection setup failed (Qdrant unreachable?) -- embedding "
             "features will degrade gracefully to fuzzy-text matching until it recovers",
@@ -61,7 +61,7 @@ def upsert_embedding(collection: str, entity_id: str, vector: list[float]) -> bo
     try:
         _client().upsert(collection_name=collection, points=[PointStruct(id=entity_id, vector=vector)])
         return True
-    except Exception:  # noqa: BLE001 - WR-25
+    except Exception:
         logger.info("Vector store upsert unavailable (collection=%r)", collection, exc_info=True)
         return False
 
@@ -84,7 +84,7 @@ def query_nearest_neighbors(
     try:
         limit = top_k + 1 if exclude_entity_id is not None else top_k
         response = _client().query_points(collection_name=collection, query=vector, limit=limit)
-    except Exception:  # noqa: BLE001 - WR-25
+    except Exception:
         logger.info("Vector store query unavailable (collection=%r)", collection, exc_info=True)
         return None
     results = [(str(point.id), point.score) for point in response.points if str(point.id) != exclude_entity_id]

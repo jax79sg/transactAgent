@@ -13,10 +13,15 @@ import uuid
 from unittest.mock import patch
 
 from sqlalchemy.orm import Session, sessionmaker
+from transactagent_db.models import (
+    IngestionRun,
+    IngestionRunLog,
+    IngestionRunStatus,
+    User,
+)
 
 from ingestion_worker import logging_capture
 from ingestion_worker.logging_capture import DbLogHandler, set_current_run
-from transactagent_db.models import IngestionRun, IngestionRunLog, IngestionRunStatus, User
 
 
 def _make_committed_run(engine):

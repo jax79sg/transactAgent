@@ -99,7 +99,7 @@ def select_best_match(scored: list[SimilarityMatch]) -> SimilarityMatch | None:
     if not scored:
         return None
     manual_matches = [m for m in scored if m.candidate.category_source == MANUAL_SOURCE]
-    pool = manual_matches if manual_matches else scored
+    pool = manual_matches or scored
     return max(pool, key=lambda m: m.score)
 
 

@@ -2,12 +2,21 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from transactagent_db.models import (
+    BankStatement,
+    CategorySource,
+    RecategorizationJobStatus,
+    Transaction,
+)
 
 from api_service.categories import service as categories_service
-from api_service.errors import CategoryNotFoundError, InactiveCategoryError, InvalidCurrencyError
+from api_service.errors import (
+    CategoryNotFoundError,
+    InactiveCategoryError,
+    InvalidCurrencyError,
+)
 from api_service.transactions import service as transactions_service
 from api_service.transactions.schemas import TransactionListQuery
-from transactagent_db.models import BankStatement, CategorySource, RecategorizationJobStatus, Transaction
 
 
 def _make_transaction(db, category, description="NTUC FAIRPRICE", bank_name="DBS"):
@@ -97,5 +106,5 @@ class TestListTransactionsCurrencyValidation:
         category = categories_service.add_category(db_session, "Dining Out")
         _make_transaction(db_session, category)
         query = TransactionListQuery(currency="SGD")
-        items, total_count, groups = transactions_service.list_transactions(db_session, query)
+        _items, total_count, _groups = transactions_service.list_transactions(db_session, query)
         assert total_count >= 1

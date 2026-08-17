@@ -4,7 +4,6 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
-
 from transactagent_db.models import Base
 
 
@@ -59,8 +58,9 @@ def client(db_session):
 
 @pytest.fixture
 def test_user(db_session):
-    from api_service.auth.security import hash_password
     from transactagent_db.models import User
+
+    from api_service.auth.security import hash_password
 
     user = User(username="account_owner", password_hash=hash_password("correct horse battery staple"))
     db_session.add(user)

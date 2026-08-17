@@ -61,7 +61,7 @@ def _run_alembic_upgrade(alembic_ini_path: str | Path) -> None:
     # container (caught by actually running `docker compose up`, not by the
     # testcontainers-based unit tests, which bypass this subprocess path entirely via
     # run_migrations=False).
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: PLW1510 - checked manually below to capture stdout/stderr into the raised error
         [sys.executable, "-m", "alembic", "-c", str(alembic_ini_path), "upgrade", "head"],
         capture_output=True,
         text=True,

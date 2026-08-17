@@ -4,11 +4,10 @@ date/similarity math, unlike drive_client-dependent components).
 """
 
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
-from ingestion_worker.recurring_payments import service
 from transactagent_db.models import (
     BankStatement,
     Category,
@@ -20,6 +19,8 @@ from transactagent_db.models import (
     RecurringPaymentMatchStatus,
     Transaction,
 )
+
+from ingestion_worker.recurring_payments import service
 
 
 def _make_category(db, name=None):
@@ -52,12 +53,12 @@ def _make_transaction(db, description, amount, transaction_date, category=None):
 
 
 def _make_payment(db, **overrides):
-    defaults = dict(
-        name="Gym Membership",
-        expected_amount=Decimal("80.00"),
-        frequency=RecurringPaymentFrequency.MONTHLY,
-        due_day=15,
-    )
+    defaults = {
+        "name": "Gym Membership",
+        "expected_amount": Decimal("80.00"),
+        "frequency": RecurringPaymentFrequency.MONTHLY,
+        "due_day": 15,
+    }
     defaults.update(overrides)
     payment = RecurringPayment(**defaults)
     db.add(payment)
@@ -235,13 +236,13 @@ class TestIsDetectionScanDueNow:
         assert service.is_detection_scan_due_now(db_session) is True
 
     def test_not_due_when_recent_scan_exists(self, db_session):
-        db_session.add(DetectionScanRun(ran_at=datetime.now(timezone.utc)))
+        db_session.add(DetectionScanRun(ran_at=datetime.now(UTC)))
         db_session.flush()
 
         assert service.is_detection_scan_due_now(db_session) is False
 
     def test_due_when_last_scan_older_than_interval(self, db_session):
-        stale = datetime.now(timezone.utc) - timedelta(hours=48)
+        stale = datetime.now(UTC) - timedelta(hours=48)
         db_session.add(DetectionScanRun(ran_at=stale))
         db_session.flush()
 

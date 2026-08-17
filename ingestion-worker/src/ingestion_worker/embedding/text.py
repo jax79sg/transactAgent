@@ -21,7 +21,7 @@ def price_bucket_label(amount: Decimal) -> str:
     (buckets on magnitude, matching amounts_in_range's own magnitude-only
     reasoning -- out_flow/in_flow are both stored positive, BR-2)."""
     magnitude = abs(amount)
-    lower = Decimal("0")
+    lower = Decimal(0)
     for boundary in _boundaries():
         if magnitude <= boundary:
             return f"${lower} to ${boundary}"

@@ -1,11 +1,15 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
+from transactagent_db.models import BankStatement, CategorySource, Transaction
 
 from api_service.categories import service
-from api_service.errors import CategoryInUseError, DuplicateCategoryNameError, ReservedCategoryError
-from transactagent_db.models import BankStatement, CategorySource, Transaction
-from datetime import date
+from api_service.errors import (
+    CategoryInUseError,
+    DuplicateCategoryNameError,
+    ReservedCategoryError,
+)
 
 
 def _make_bank_statement(db, pdf_content_hash="a" * 64):

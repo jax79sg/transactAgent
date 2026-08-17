@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session
 
 from api_service.auth.dependencies import get_current_user_id
 from api_service.categories import repository, service
-from api_service.categories.schemas import AddCategoryRequest, CategoryDTO, RenameCategoryRequest
+from api_service.categories.schemas import (
+    AddCategoryRequest,
+    CategoryDTO,
+    RenameCategoryRequest,
+)
 from api_service.db import get_db
 
 router = APIRouter(prefix="/categories", tags=["categories"], dependencies=[Depends(get_current_user_id)])

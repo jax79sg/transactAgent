@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from transactagent_db.migrate import run_migrations_with_lock
 
 from api_service.ai_assistant.router import router as ai_assistant_router
 from api_service.app_settings.router import router as app_settings_router
@@ -20,7 +21,6 @@ from api_service.ingestion.router import router as ingestion_router
 from api_service.recategorization.router import router as recategorization_router
 from api_service.recurring_payments.router import router as recurring_payments_router
 from api_service.transactions.router import router as transactions_router
-from transactagent_db.migrate import run_migrations_with_lock
 
 _DATABASE_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "database" / "alembic.ini"
 

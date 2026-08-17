@@ -6,15 +6,15 @@ the Backup Manager's own decision logic (WR-11..15), not Drive API behavior
 test_models.py).
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock, patch
 
 from googleapiclient.errors import HttpError
+from transactagent_db.models import BackupRunFailureCategory, BackupRunOutcome
 
 from ingestion_worker.backup import service as backup_service
 from ingestion_worker.clients.drive_client import DriveFileRef, DriveNotConnectedError
 from ingestion_worker.clients.retry import TransientError
-from transactagent_db.models import BackupRunFailureCategory, BackupRunOutcome
 
 
 class TestIsBackupDueNow:
@@ -83,8 +83,8 @@ class TestRunBackup:
             "conversion_is_approximate": False,
             "conversion_unavailable": False,
             "fx_rate_used_id": None,
-            "created_at": datetime(2026, 8, 7, tzinfo=timezone.utc),
-            "updated_at": datetime(2026, 8, 7, tzinfo=timezone.utc),
+            "created_at": datetime(2026, 8, 7, tzinfo=UTC),
+            "updated_at": datetime(2026, 8, 7, tzinfo=UTC),
         }
         defaults.update(overrides)
         for key, value in defaults.items():

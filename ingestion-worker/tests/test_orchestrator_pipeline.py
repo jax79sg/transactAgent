@@ -4,11 +4,9 @@ external clients (Drive, Gemini, OpenRouter, FX) mocked at their client-module b
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
-from ingestion_worker.clients.drive_client import DriveFileRef
-from ingestion_worker.orchestrator import pipeline
 from transactagent_db.models import (
     Category,
     IngestionRun,
@@ -18,6 +16,9 @@ from transactagent_db.models import (
     Transaction,
     User,
 )
+
+from ingestion_worker.clients.drive_client import DriveFileRef
+from ingestion_worker.orchestrator import pipeline
 
 _VALID_EXTRACTION_RESPONSE = json.dumps(
     {
@@ -281,7 +282,7 @@ class TestProcessRunCancellation:
             # Simulates the API committing cancel_requested_at while file1 (the
             # only file with a transaction to classify) is still being processed --
             # file1 must still finish and be recorded; only file2 gets skipped.
-            run.cancel_requested_at = datetime.now(timezone.utc)
+            run.cancel_requested_at = datetime.now(UTC)
             db_session.commit()
             return "Groceries"
 
@@ -326,7 +327,7 @@ class TestProcessRunCancellation:
     def test_cancellation_requested_before_any_file_processes_nothing(self, db_session):
         _seed_whitelist(db_session)
         run = _make_run(db_session)
-        run.cancel_requested_at = datetime.now(timezone.utc)
+        run.cancel_requested_at = datetime.now(UTC)
         db_session.commit()
         file_ref = DriveFileRef(id="drive-cancel-early", name="never-touched.pdf")
 
@@ -344,7 +345,7 @@ class TestProcessRunCancellation:
     def test_cancelling_a_run_frees_the_single_active_run_slot_for_a_new_one(self, db_session):
         _seed_whitelist(db_session)
         run = _make_run(db_session)
-        run.cancel_requested_at = datetime.now(timezone.utc)
+        run.cancel_requested_at = datetime.now(UTC)
         db_session.commit()
 
         with patch("ingestion_worker.clients.drive_client.list_folder_pdf_files", return_value=[]):

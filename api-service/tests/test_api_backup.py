@@ -1,17 +1,21 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
-from transactagent_db.models import BackupRun, BackupRunFailureCategory, BackupRunOutcome
+from transactagent_db.models import (
+    BackupRun,
+    BackupRunFailureCategory,
+    BackupRunOutcome,
+)
 
 
 def _make_backup_run(db, **overrides):
-    defaults = dict(
-        backup_date=date(2026, 8, 8),
-        started_at=datetime(2026, 8, 8, 2, 0, tzinfo=timezone.utc),
-        completed_at=datetime(2026, 8, 8, 2, 0, 5, tzinfo=timezone.utc),
-        outcome=BackupRunOutcome.SUCCESS,
-        transaction_count=2174,
-        backup_filename="transactions-backup-20260808T020000Z.csv",
-    )
+    defaults = {
+        "backup_date": date(2026, 8, 8),
+        "started_at": datetime(2026, 8, 8, 2, 0, tzinfo=UTC),
+        "completed_at": datetime(2026, 8, 8, 2, 0, 5, tzinfo=UTC),
+        "outcome": BackupRunOutcome.SUCCESS,
+        "transaction_count": 2174,
+        "backup_filename": "transactions-backup-20260808T020000Z.csv",
+    }
     defaults.update(overrides)
     run = BackupRun(**defaults)
     db.add(run)

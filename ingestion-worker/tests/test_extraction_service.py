@@ -3,6 +3,7 @@ and PDF-to-image conversion mocked (no real network/PDF rendering needed)."""
 
 import json
 from datetime import date, timedelta
+from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
@@ -253,7 +254,7 @@ class TestAmbiguousDateCorrection:
     "expected" is the true date printed on the statement."""
 
     # (literal transaction_date as Gemini emitted it, description, amount, expected corrected date)
-    _REAL_STATEMENT_SEQUENCE = [
+    _REAL_STATEMENT_SEQUENCE: ClassVar[list[tuple[str, str, float, str]]] = [
         ("2026-02-01", "PAYMENT BY INTERNET", 1056.10, "2026-02-01"),  # excluded (payment) -- already correct
         ("2025-12-31", "-0773 BUS/MRT 771790695", 1.28, "2025-12-31"),  # unambiguous (day>12), trusted as-is
         ("2026-01-01", "-0773 VISTA PANCAKES PTE", 7.80, "2026-01-01"),  # day==month, no-op

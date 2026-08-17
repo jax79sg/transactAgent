@@ -28,22 +28,22 @@ class TestPriceBucketLabelProperties:
 
 class TestPriceBucketLabelEdgeCases:
     def test_zero_falls_in_first_bucket(self):
-        assert price_bucket_label(Decimal("0")) == "$0 to $1"
+        assert price_bucket_label(Decimal(0)) == "$0 to $1"
 
     def test_amount_exactly_on_a_boundary_falls_in_the_lower_bucket(self):
-        assert price_bucket_label(Decimal("5")) == "$1 to $5"
+        assert price_bucket_label(Decimal(5)) == "$1 to $5"
 
     def test_amount_just_above_a_boundary_falls_in_the_next_bucket(self):
         assert price_bucket_label(Decimal("5.01")) == "$5 to $10"
 
     def test_amount_above_last_boundary_is_open_ended(self):
-        assert price_bucket_label(Decimal("6000")) == "$5000+"
+        assert price_bucket_label(Decimal(6000)) == "$5000+"
 
     def test_negative_amount_buckets_by_magnitude(self):
         """out_flow/in_flow are both stored positive (BR-2), but this function is
         sign-agnostic regardless -- matching amounts_in_range's own magnitude-only
         reasoning."""
-        assert price_bucket_label(Decimal("-3")) == price_bucket_label(Decimal("3"))
+        assert price_bucket_label(Decimal(-3)) == price_bucket_label(Decimal(3))
 
 
 class TestBuildEmbeddingText:
@@ -52,5 +52,5 @@ class TestBuildEmbeddingText:
         assert text == "NTUC FAIRPRICE | $1 to $5"
 
     def test_preserves_description_prefix(self):
-        text = build_embedding_text("STARBUCKS #4521", Decimal("6000"))
+        text = build_embedding_text("STARBUCKS #4521", Decimal(6000))
         assert text.startswith("STARBUCKS #4521 | ")

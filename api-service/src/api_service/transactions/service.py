@@ -11,13 +11,17 @@ import re
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from transactagent_db.models import CategorySource, RecategorizationJob, Transaction
 
 from api_service.categories import repository as categories_repository
 from api_service.config import settings
-from api_service.errors import CategoryNotFoundError, InactiveCategoryError, InvalidCurrencyError
+from api_service.errors import (
+    CategoryNotFoundError,
+    InactiveCategoryError,
+    InvalidCurrencyError,
+)
 from api_service.transactions import repository
 from api_service.transactions.schemas import TransactionFilter, TransactionListQuery
-from transactagent_db.models import CategorySource, RecategorizationJob, Transaction
 
 _ISO4217_PATTERN = re.compile(r"^[A-Z]{3}$")
 

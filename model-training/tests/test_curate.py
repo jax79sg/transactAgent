@@ -6,8 +6,9 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from model_training.curate import curate_dataset
 from transactagent_db.models import BankStatement, Category, CategorySource, Transaction
+
+from model_training.curate import curate_dataset
 
 
 def _make_category(db, name, active=True):

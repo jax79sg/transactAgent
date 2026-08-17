@@ -15,5 +15,5 @@ def health(db: Session = Depends(get_db)) -> JSONResponse:
     try:
         db.execute(text("SELECT 1"))
         return JSONResponse(status_code=200, content={"status": "ok"})
-    except Exception:
+    except Exception:  # noqa: BLE001 - any DB failure means "unavailable", not a 500
         return JSONResponse(status_code=503, content={"status": "unavailable"})

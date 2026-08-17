@@ -46,9 +46,8 @@ class TestRetryWithBackoff:
             calls.append(1)
             raise TransientError("still failing")
 
-        with patch("ingestion_worker.clients.retry.time.sleep"):
-            with pytest.raises(TransientError):
-                always_fails()
+        with patch("ingestion_worker.clients.retry.time.sleep"), pytest.raises(TransientError):
+            always_fails()
 
         assert len(calls) == 3
 
@@ -60,9 +59,8 @@ class TestRetryWithBackoff:
             calls.append(1)
             raise ValueError("not transient")
 
-        with patch("ingestion_worker.clients.retry.time.sleep") as mock_sleep:
-            with pytest.raises(ValueError):
-                raises_value_error()
+        with patch("ingestion_worker.clients.retry.time.sleep") as mock_sleep, pytest.raises(ValueError):
+            raises_value_error()
 
         assert len(calls) == 1
         mock_sleep.assert_not_called()
@@ -72,9 +70,8 @@ class TestRetryWithBackoff:
         def always_fails():
             raise TransientError("fail")
 
-        with patch("ingestion_worker.clients.retry.time.sleep") as mock_sleep:
-            with pytest.raises(TransientError):
-                always_fails()
+        with patch("ingestion_worker.clients.retry.time.sleep") as mock_sleep, pytest.raises(TransientError):
+            always_fails()
 
         mock_sleep.assert_any_call(2.0)  # 2 * 2^0
         mock_sleep.assert_any_call(4.0)  # 2 * 2^1

@@ -50,7 +50,7 @@ def compute_embedding(text: str) -> list[float] | None:
     try:
         response = _client().embeddings.create(model=settings.embedding_model, input=text)
         vector = response.data[0].embedding
-    except Exception:  # noqa: BLE001 - WR-25: every failure class soft-fails identically,
+    except Exception:
         # with no retry (contrast clients/retry.py's TransientError-only retry scope).
         logger.info("Embedding computation unavailable (endpoint unreachable or errored)", exc_info=True)
         return None

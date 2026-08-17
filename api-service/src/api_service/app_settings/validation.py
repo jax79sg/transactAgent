@@ -49,9 +49,8 @@ def validate_format(spec: SettingSpec, value: str) -> str | None:
             return "every boundary must be positive"
         if numbers != sorted(numbers) or len(set(numbers)) != len(numbers):
             return "boundaries must be strictly ascending"
-    elif spec.format == "non_empty":
-        if not value.strip():
-            return "must not be empty"
+    elif spec.format == "non_empty" and not value.strip():
+        return "must not be empty"
     return None
 
 

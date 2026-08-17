@@ -7,11 +7,16 @@ lowest-priority branch (services.md addendum).
 import logging
 import re
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from rapidfuzz import fuzz
+from transactagent_db.models import (
+    RecurringPayment,
+    RecurringPaymentMatchStatus,
+    Transaction,
+)
 
 from ingestion_worker.categorization.service import UNSURE_NAME
 from ingestion_worker.categorization.similarity import amounts_in_range
@@ -21,7 +26,6 @@ from ingestion_worker.embedding import text as embedding_text
 from ingestion_worker.embedding import vector_store
 from ingestion_worker.embedding.similarity import cosine_similarity
 from ingestion_worker.recurring_payments import cycle, repository
-from transactagent_db.models import RecurringPayment, RecurringPaymentMatchStatus, Transaction
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +136,7 @@ def is_detection_scan_due_now(db) -> bool:
     latest = repository.find_latest_detection_scan_run(db)
     if latest is None:
         return True
-    elapsed = datetime.now(timezone.utc) - latest.ran_at
+    elapsed = datetime.now(UTC) - latest.ran_at
     return elapsed >= timedelta(hours=settings.recurring_payment_detection_scan_interval_hours)
 
 

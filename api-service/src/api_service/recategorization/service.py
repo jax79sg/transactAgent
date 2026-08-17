@@ -6,6 +6,13 @@ from uuid import UUID
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from transactagent_db.models import (
+    CategorizationDisagreement,
+    CategorizationDisagreementStatus,
+    CategorySource,
+    RecategorizationProposal,
+    RecategorizationProposalStatus,
+)
 
 from api_service.errors import (
     DisagreementNotPendingError,
@@ -14,13 +21,6 @@ from api_service.errors import (
     ProposalNotPendingError,
 )
 from api_service.recategorization import repository
-from transactagent_db.models import (
-    CategorizationDisagreement,
-    CategorizationDisagreementStatus,
-    CategorySource,
-    RecategorizationProposal,
-    RecategorizationProposalStatus,
-)
 
 
 def list_pending_proposals(db: Session, page: int, page_size: int) -> tuple[list[RecategorizationProposal], int]:

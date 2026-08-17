@@ -3,18 +3,18 @@ from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
-from ingestion_worker.categorization.similarity import SimilarityCandidate
 from transactagent_db.models import (
-    Category,
     CategorizationDisagreement,
     CategorizationDisagreementStatus,
+    Category,
     CategorySource,
     RecategorizationProposal,
     RecategorizationProposalSourceBucket,
     RecategorizationProposalStatus,
     Transaction,
 )
+
+from ingestion_worker.categorization.similarity import SimilarityCandidate
 
 
 def list_similarity_candidates(db: Session) -> list[SimilarityCandidate]:

@@ -4,6 +4,7 @@ one (WR-34) -- the whole point of Requirements' Resolved Decision 5/6."""
 
 from decimal import Decimal
 from pathlib import Path
+from typing import ClassVar
 
 from model_training.prompt import format_amount_sgd, render_classification_prompt
 
@@ -44,7 +45,7 @@ class TestMatchesLiveIngestionWorkerTemplate:
     survives incidental reformatting of the source (e.g. line-wrapping) without
     losing its ability to catch an actual wording change."""
 
-    _EXPECTED_FRAGMENTS = [
+    _EXPECTED_FRAGMENTS: ClassVar[list[str]] = [
         "Classify this bank transaction description into exactly one of the following ",
         "categories, responding with ONLY the category name and nothing else:",
         "Categories: {",

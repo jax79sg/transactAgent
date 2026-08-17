@@ -1,8 +1,7 @@
 import uuid
-from datetime import date
+from datetime import UTC, date
 from decimal import Decimal
 
-from ingestion_worker.embedding import repository
 from transactagent_db.models import (
     BankStatement,
     Category,
@@ -12,6 +11,8 @@ from transactagent_db.models import (
     RecurringPaymentFrequency,
     Transaction,
 )
+
+from ingestion_worker.embedding import repository
 
 
 def _make_category(db, name=None):
@@ -83,10 +84,10 @@ class TestListPendingTransactions:
         IDENTICAL created_at values, making insertion order untestable through the
         ORM default alone (caught by actually running this against Postgres, not
         assumed)."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        earlier = datetime.now(timezone.utc) - timedelta(minutes=5)
-        later = datetime.now(timezone.utc)
+        earlier = datetime.now(UTC) - timedelta(minutes=5)
+        later = datetime.now(UTC)
         first = _make_transaction(db_session, "FIRST", created_at=earlier)
         second = _make_transaction(db_session, "SECOND", created_at=later)
 

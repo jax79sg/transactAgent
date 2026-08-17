@@ -2,13 +2,14 @@
 
 from datetime import date
 
+from transactagent_db.models import RecurringPaymentFrequency
+
 from ingestion_worker.recurring_payments.cycle import (
     cycle_period_for,
     nearest_annual_due_date_instance,
     nearest_due_date_instance,
     nearest_monthly_due_date_instance,
 )
-from transactagent_db.models import RecurringPaymentFrequency
 
 
 class TestNearestMonthlyDueDateInstance:

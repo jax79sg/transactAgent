@@ -14,7 +14,12 @@ class TestCategoriesApi:
         from datetime import date
         from decimal import Decimal
 
-        from transactagent_db.models import BankStatement, Category, CategorySource, Transaction
+        from transactagent_db.models import (
+            BankStatement,
+            Category,
+            CategorySource,
+            Transaction,
+        )
 
         used_category = Category(name="Dining", active=True, is_reserved=False)
         unused_category = Category(name="Travel", active=True, is_reserved=False)
@@ -51,7 +56,12 @@ class TestCategoriesApi:
         from datetime import date
         from decimal import Decimal
 
-        from transactagent_db.models import BankStatement, Category, CategorySource, Transaction
+        from transactagent_db.models import (
+            BankStatement,
+            Category,
+            CategorySource,
+            Transaction,
+        )
 
         category = Category(name="Shopping", active=True, is_reserved=False)
         db_session.add(category)
@@ -87,7 +97,12 @@ class TestCategoriesApi:
         from datetime import date
         from decimal import Decimal
 
-        from transactagent_db.models import BankStatement, Category, CategorySource, Transaction
+        from transactagent_db.models import (
+            BankStatement,
+            Category,
+            CategorySource,
+            Transaction,
+        )
 
         category = Category(name="Transport", active=True, is_reserved=False)
         db_session.add(category)

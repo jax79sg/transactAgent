@@ -7,10 +7,10 @@ currency/service.py)."""
 
 import json
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable
 
 from model_training import omlx_client
 
@@ -37,7 +37,7 @@ def score_predictions(
     confusion: dict[str, dict[str, int]] = defaultdict(Counter)
     correct = 0
     agree = 0
-    for truth, fine_tuned, live in zip(ground_truth, fine_tuned_predictions, live_predictions):
+    for truth, fine_tuned, live in zip(ground_truth, fine_tuned_predictions, live_predictions, strict=True):
         confusion[truth][fine_tuned] += 1
         if fine_tuned == truth:
             correct += 1

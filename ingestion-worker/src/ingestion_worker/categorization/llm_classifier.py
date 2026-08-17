@@ -4,7 +4,10 @@ import json
 import re
 from decimal import Decimal
 
-from ingestion_worker.clients.openrouter_client import classify_description, classify_descriptions_batch
+from ingestion_worker.clients.openrouter_client import (
+    classify_description,
+    classify_descriptions_batch,
+)
 from ingestion_worker.clients.retry import TransientError
 
 UNSURE = "UNSURE"
@@ -64,7 +67,12 @@ def classify_batch_prompt(items: list[tuple[str, Decimal | None]], whitelist: li
         return {}
 
     result: dict[str, str] = {}
-    for (description, _amount_sgd), answer in zip(items, parsed):
+    # strict=False deliberately: a shorter-than-requested `parsed` array is an
+    # expected, tested outcome (a too-short LLM response), not a bug -- the
+    # trailing items are simply left unanswered here, per this function's own
+    # docstring ("a description missing from the returned dict... is simply
+    # absent, never a raised exception").
+    for (description, _amount_sgd), answer in zip(items, parsed, strict=False):
         if not isinstance(answer, str):
             continue
         normalized = answer.strip()

@@ -1,9 +1,10 @@
 name: CI
 
-# model-training/ (Unit 5) is deliberately not covered here: it depends on mlx-tune,
-# which requires Apple Silicon/Metal and has no path through a Linux CI runner at all
-# (not even in a container -- there's no GPU passthrough to be had). Its own README
-# documents how to run its tests locally on macOS.
+# model-training/ (Unit 5) is deliberately not covered by the *test* job below: it
+# depends on mlx-tune, which requires Apple Silicon/Metal and has no path through a
+# Linux CI runner at all (not even in a container -- there's no GPU passthrough to be
+# had). Its own README documents how to run its tests locally on macOS. Its source
+# IS linted here (lint-model-training below) -- static analysis needs no ML runtime.
 
 on:
   push:
@@ -16,6 +17,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Lint + unit tests, per Python unit. Each job lints (ruff) then tests (pytest)
+  # its own unit -- a lint failure and a test failure are both real, both block.
+  # ---------------------------------------------------------------------------
   database:
     name: Database
     runs-on: ubuntu-latest
@@ -28,10 +33,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Real Postgres via testcontainers -- ubuntu-latest runners have Docker
-      # preinstalled and running, no extra setup needed.
       - run: uv sync --extra test
-      - run: uv run pytest -v
+      - name: Lint (ruff)
+        run: uv run --with ruff ruff check src tests
+      - name: Test
+        run: uv run pytest -v
 
   api-service:
     name: API Service
@@ -45,8 +51,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # Real Postgres via testcontainers -- ubuntu-latest runners have Docker
+      # preinstalled and running, no extra setup needed.
       - run: uv sync --extra test
-      - run: uv run pytest -v
+      - name: Lint (ruff)
+        run: uv run --with ruff ruff check src tests
+      - name: Test
+        run: uv run pytest -v
 
   ingestion-worker:
     name: Ingestion Worker
@@ -61,7 +72,26 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --extra test
-      - run: uv run pytest -v
+      - name: Lint (ruff)
+        run: uv run --with ruff ruff check src tests
+      - name: Test
+        run: uv run pytest -v
+
+  # Static analysis only -- see the top-of-file note on why model-training has no
+  # test job here.
+  lint-model-training:
+    name: Model Training (lint only)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: model-training
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv run --with ruff ruff check src tests
 
   frontend:
     name: Frontend
@@ -77,5 +107,86 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: npm run test
-      - run: npm run build
+      - name: Lint (eslint)
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Build validation -- confirms each service's real Dockerfile still builds,
+  # the same "docker build" a deploy would run. database has no image of its
+  # own (a shared package, not a standalone service) so isn't included.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Docker Build (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-service, ingestion-worker, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          push: false
+
+  # ---------------------------------------------------------------------------
+  # Secrets scanning -- blocking. Unlike dependency CVEs (below), a leaked
+  # secret is unambiguous and immediately actionable, so this fails the build.
+  # Scans only the commits in this push/PR, not full history (a one-time full-
+  # history audit was already done by hand -- see .gitleaks.toml's comment on
+  # the one real historical finding, already remediated).
+  # ---------------------------------------------------------------------------
+  secrets-scan:
+    name: Secrets Scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # Dependency vulnerability scanning (SCA) -- reporting only for now, NOT
+  # blocking. Known, already-identified findings (react-router-dom, vite/
+  # vitest/esbuild, pytest, clearml/pyjwt) all require major-version upgrades
+  # that need real regression testing, tracked as separate follow-up work --
+  # making this blocking today would red the pipeline for already-known issues
+  # rather than catching new ones. Revisit turning this blocking once those
+  # land.
+  # ---------------------------------------------------------------------------
+  dependency-scan:
+    name: Dependency Scan (SCA)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit (Python units)
+        run: |
+          # `|| true` on the pip-audit call: GitHub Actions runs each `run:` block
+          # with bash's `-e`, so a non-zero exit (pip-audit's own signal that it
+          # found something) would otherwise abort this loop at the first unit
+          # with a finding, silently skipping the rest.
+          for unit in database api-service ingestion-worker model-training; do
+            echo "### $unit" >> "$GITHUB_STEP_SUMMARY"
+            (cd "$unit" && uv export --extra test --no-hashes --no-emit-project > /tmp/reqs.txt)
+            uv tool run --python 3.12 pip-audit --local -r /tmp/reqs.txt | tee -a "$GITHUB_STEP_SUMMARY" || true
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: npm audit (frontend)
+        working-directory: frontend
+        run: |
+          npm ci
+          echo "### frontend (production dependencies)" >> "$GITHUB_STEP_SUMMARY"
+          npm audit --omit=dev | tee -a "$GITHUB_STEP_SUMMARY"
