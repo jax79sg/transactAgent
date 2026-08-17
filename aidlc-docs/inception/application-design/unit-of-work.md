@@ -2,6 +2,8 @@
 
 Per plan decisions: 3 proposed units (Question 1 = A) plus a dedicated shared Database unit (Question 2 = A) = **4 units total**. Code organization: monorepo (Question 3 = A). Build order: no fixed preference — determined during Code Generation planning (Question 4 = B), though a database-first, then-backend, then-frontend sequence is the natural dependency order and will likely be followed.
 
+**Addendum (2026-08-17, Categorization Model Fine-Tuning feature)**: A 5th unit is added — **Model Training** (see below) — the first addition to this list since the original 4. Unlike Units 2-4, it is deliberately not a docker-compose service.
+
 ---
 
 ## Unit 1: Database
@@ -37,6 +39,16 @@ Per plan decisions: 3 proposed units (Question 1 = A) plus a dedicated shared Da
 
 ---
 
+## Unit 5: Model Training *(added 2026-08-17, Categorization Model Fine-Tuning feature — see `categorization-model-finetuning-application-design-plan.md`)*
+
+- **Type**: Standalone offline tooling — **not** a docker-compose service, no runtime process, no container. Two manual CLI entry points, run on demand.
+- **Responsibilities**: Curate a fine-tuning dataset from labeled transactions (FR-CFT-1..4); fine-tune the categorization model via mlx-tune, evaluate it, and save the resulting artifact (FR-CFT-5..8).
+- **Owns components from Application Design**: Dataset Curator, Fine-Tuning Trainer
+- **Depends on**: Unit 1 (Database schema — read-only; the first unit with a read-only relationship to Unit 1, every other unit above both reads and writes)
+- **Code organization**: `model-training/` directory at repo root, alongside the 4 existing unit directories — but deliberately **excluded** from `docker-compose.yml` (no service entry) and given its own isolated Python dependency manifest, per NFR-CFT-1, since mlx-tune/ClearML are heavyweight ML dependencies not needed by (and not to be added to) any of the other 4 units' environments.
+
+---
+
 ## Code Organization Strategy (Greenfield, Monorepo)
 
 ```
@@ -45,9 +57,10 @@ transactAgent/                  (workspace root — application code, NEVER in a
   api-service/                  (Unit 2)
   ingestion-worker/             (Unit 3)
   frontend/                     (Unit 4)
-  docker-compose.yml            (orchestrates all 4 units + the DB engine container)
+  model-training/               (Unit 5 — added 2026-08-17, no docker-compose entry)
+  docker-compose.yml            (orchestrates Units 1-4's containers; Unit 5 is deliberately absent)
   .env.example                  (documents required secrets/config, no real values)
   aidlc-docs/                   (documentation only — unchanged)
 ```
 
-Single git repository at the workspace root (Question 3 = A). Each unit directory is self-contained with its own dependency manifest (e.g., `requirements.txt`/`pyproject.toml` or `package.json`, exact choice made in NFR Requirements per unit) and its own `Dockerfile`.
+Single git repository at the workspace root (Question 3 = A). Each unit directory is self-contained with its own dependency manifest (e.g., `requirements.txt`/`pyproject.toml` or `package.json`, exact choice made in NFR Requirements per unit) and its own `Dockerfile`. **Exception**: Unit 5 has a dependency manifest (its own `pyproject.toml`/`requirements.txt`, exact tooling decided at NFR Requirements) but no `Dockerfile`/container — it runs directly on the host per Resolved Decision 9 (`categorization-model-finetuning-requirements.md`).

@@ -34,3 +34,16 @@ Each of the 24 approved stories is mapped to its primary implementing unit. Wher
 - **All 24 stories assigned**: Yes — every story above has at least one primary unit.
 - **Unassigned units**: None — Unit 1 (Database) has no directly-assigned stories since it's a foundational schema unit with no user-facing behavior of its own; it is exercised indirectly by every story that reads/writes data (all of them except pure-config stories like US-5.3).
 - **Cross-cutting stories flagged**: US-1.2, US-3.4, US-3.7, US-4.6, US-5.3 explicitly span 2 units — this is expected given the async, decoupled architecture (Application Design `services.md`) and is not a design flaw; each spanning story has a clear split of responsibility documented above.
+
+## Addendum (2026-08-17): Unit 5 — Model Training
+
+No stories to map — User Stories was skipped for the Categorization Model Fine-Tuning feature (developer/ML tooling, no user-facing functionality). Traced to functional requirements instead, same treatment as the Matching Precision Refinement feature:
+
+| Requirement | Unit |
+|---|---|
+| FR-CFT-1..4 | Unit 5: Model Training (Dataset Curator Component) |
+| FR-CFT-5..8 | Unit 5: Model Training (Fine-Tuning Trainer Component) |
+| FR-CFT-9 | Unit 3: Ingestion Worker Service (Categorization Engine, extended) |
+| FR-CFT-10 | Unit 5: Model Training (as a whole — CLI entry points) |
+
+**Coverage**: All 10 functional requirements assigned. Unit 5 owns 8 of them outright; FR-CFT-9 is the only requirement touching an existing unit (Unit 3).

@@ -2196,3 +2196,139 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Genuine defects found via direct user verification against the real deployment, not assumed correct from automated tests alone -- consistent with this project's standing precedent of trusting live verification over test-suite-green as the final word. Feature remains merged into feature/recurring-payments-budget-alerts, not yet merged to main.
 
 ---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Request Received
+**Timestamp**: 2026-08-16T23:24:25Z
+**User Input**: "let's work on a new feature. the goal of this feature isto fine tune existing local model to be better at categorising the transactions. this would involve two major aspects. 1: to curate the datasets based on what was labelled so far(except unsure). 2: to create a set of training codes that would use unsloth library to fine tune the local model that's used for categorisation. the training should use ClearML for mlops."
+**AI Response**: "Starting Requirements Analysis. Pulled technical context from the live system first: `category_source` distribution is similarity=4961, manual=537, unsure=50, llm=594 (6142 total, 6092 non-'unsure'); the categorization LLM is configured via `OPENROUTER_BASE_URL=http://host.docker.internal:8000/v1`, `OPENROUTER_MODEL=gemma-4-26b-a4b-it-4bit` (an oMLX/Apple-Silicon-served local model, not a CUDA endpoint); the categorization prompt (`llm_classifier.classify_batch_prompt`) takes only `description` text + the 54-active-category whitelist, no other transaction fields. This surfaces a real hardware/tooling mismatch worth confirming before proceeding: Unsloth is CUDA-only (no native Apple Silicon/MLX support), so training cannot run on the same Mac that serves the model via oMLX -- needs its own clarifying question rather than an assumption. Creating `categorization-model-finetuning-questions.md` before any design/code work."
+**Context**: Requirements Analysis, Step 2-5 (intent analysis + completeness analysis) for new Post-Completion Change. Request type: New Feature (ML training pipeline). Scope estimate: Cross-system (new training codebase + dataset export from existing DB + eventual redeploy of inference model). Complexity: Complex (new tech stack, hardware/environment constraints, MLOps integration, no existing precedent in this project).
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Clarifying Questions Presented
+**Timestamp**: 2026-08-16T23:24:25Z
+**User Input**: (none — AI-initiated per mandatory Step 6)
+**AI Response**: "Created `categorization-model-finetuning-questions.md` with 10 questions: (1) fine-tuning target — categorization LLM vs embedding model vs both; (2) training compute environment, flagging that Unsloth is CUDA-only and this Mac serves the model via oMLX/Apple Silicon with no CUDA GPU; (3) exact base model checkpoint identity, since 'gemma-4-26b-a4b-it-4bit' doesn't match a known published naming scheme Unsloth would recognize; (4) ground-truth quality/source-selection for dataset curation given similarity-sourced labels are 81% of the eligible data and not human-verified, plus the circular-reinforcement risk of training on the same model family's own past `llm`-sourced outputs; (5) dataset input format — match the live prompt contract (description + whitelist only) vs richer context; (6) deployment path back into the running oMLX server after training; (7) ClearML hosting — SaaS vs self-hosted; (8) where the training code should live relative to the existing 4 units; (9) trigger mechanism — manual CLI vs future in-app hook; (10) evaluation approach for judging whether the fine-tuned model is actually better." 
+**Context**: Requirements Analysis Step 6 (Gate: Await User Answers). Awaiting user answers in `aidlc-docs/inception/requirements/categorization-model-finetuning-questions.md` before Step 7 (Requirements Document generation).
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Answers Received, 2 Clarifications Raised
+**Timestamp**: 2026-08-17T00:05:00Z
+**User Input**: "done." (answers filled into `categorization-model-finetuning-questions.md`: Q1=A [categorization LLM only]; Q2=D/Other ["Consider https://github.com/ARahim3/mlx-tune instead"]; Q3=A/link [`https://huggingface.co/mlx-community/gemma-4-26b-a4b-it-4bit`]; Q4=C ["Include manual and similarity that was approved by human"]; Q5=B [include amount/bank as richer training input]; Q6=A [out of scope, artifact only]; Q7=A [ClearML SaaS, own credentials]; Q8=A [standalone `model-training/` dir]; Q9=A [manual CLI, no scheduling]; Q10=C [both accuracy metrics + A/B vs live model])."
+**AI Response**: "Investigated before drafting requirements rather than taking answers at face value. (1) Q4's 'similarity approved by human' isn't a distinct category_source value in the schema -- traced the real mechanism: `recategorization/service.py`'s `approve_proposal()` and `resolve_disagreement()` both leave `category_source='similarity'` even when a human approved it via the Review page, distinguishable only by joining against `recategorization_proposals.status='approved'` (via candidate_transaction_id) or `categorization_disagreements.status='resolved' AND resolved_category_id=similarity_category_id` (via transaction_id). Queried the real DB: 710 distinct transactions qualify via the approved-proposal path, 0 via disagreements -- confirmed as a real, implementable, non-trivial signal (710 of 4961 similarity-sourced rows), not a guess. (2) Verified `github.com/ARahim3/mlx-tune` is real (1382 stars, Apache-2.0, actively maintained, `gh api repos/ARahim3/mlx-tune`) and read its README: runs natively on Apple Silicon via MLX [no CUDA needed at all, mooting Q2's original GPU-hardware options], explicitly lists Gemma 4 26B-A4B MoE fine-tuning as stable-supported [exact match], loads HuggingFace `mlx-community/*-4bit` repos directly [exact match to the Q3 link], and deliberately mirrors Unsloth's own API. Two remaining items don't have a clean resolution from research alone -- created `categorization-model-finetuning-clarification-questions.md`: (1) explicit confirm/reject of mlx-tune as a full substitution for Unsloth (not just 'an option'), now that it's verified viable; (2) Q5's amount/bank-name enrichment has a real consequence -- it means the LIVE production categorization prompt code (`ingestion-worker`'s `llm_classifier.py`/`openrouter_client.py`) would also need to change to match, otherwise the fine-tuned model trains on a different input shape than what it sees in production; asked whether that live-code change is in scope for this feature or deferred, plus which exact fields and what numeric form (raw amount+currency vs. converted SGD)."
+**Context**: Requirements Analysis Step 5 (Thorough Completeness Analysis) + question-format-guide.md's mandatory contradiction/ambiguity detection step. Awaiting user answers in `categorization-model-finetuning-clarification-questions.md` before Step 7.
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Requirements Document Generated
+**Timestamp**: 2026-08-17T00:15:00Z
+**User Input**: "done" (clarification answers: Clarification 1=A [mlx-tune fully replaces Unsloth]; Clarification 2a=D/Other ["Just Amount will do. Bank name is actually a very weak signal."]; Clarification 2b=B [use `converted_amount_sgd`, not raw amount+currency]).
+**AI Response**: "All ambiguities resolved -- no remaining contradictions. Created `categorization-model-finetuning-requirements.md`: 10 FRs (FR-CFT-1..10) + 6 NFRs (NFR-CFT-1..6). Key resolved decisions: fine-tune the categorization LLM only via mlx-tune (full Unsloth replacement) against `mlx-community/gemma-4-26b-a4b-it-4bit`; ground truth = manual (537) union human-approved-similarity (710, via the approved-proposal join) = 1247 rows, excluding raw similarity/llm/unsure; dataset input = description + converted_amount_sgd (bank name excluded as a weak signal); live ingestion-worker categorization prompt also updated to include amount so training/inference inputs match (FR-CFT-9, goes through normal per-unit Construction, not the offline training tooling); deployment of the fine-tuned artifact back to oMLX is out of scope; ClearML hosted SaaS with local-only credentials; new standalone `model-training/` directory, own Python env, manual CLI trigger only; evaluation = held-out accuracy/confusion-matrix + agreement-rate vs. the current live model, both to ClearML."
+**Context**: Requirements Analysis Step 7 (Generate Requirements Document) complete. Step 8 (state tracking) and Step 9 (present completion, await approval) next.
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Requirements Analysis Completion Presented
+**Timestamp**: 2026-08-17T00:16:00Z
+**User Input**: (none — presenting completion per Step 9)
+**AI Response**: "Presented completion message with requirements summary. Recommended skipping User Stories (developer/ML tooling feature, no new user-facing functionality or personas — matches this workflow's explicit SKIP criteria) and proceeding to Workflow Planning, with the 'Add User Stories' override option included per the mandatory message format."
+**Context**: Requirements Analysis Step 9. Awaiting explicit user approval before proceeding to Workflow Planning.
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Requirements Approved
+**Timestamp**: 2026-08-17T00:20:00Z
+**User Input**: "Approve"
+**AI Response**: "Requirements approved as-is (User Stories recommendation to skip accepted implicitly -- user did not choose 'Add User Stories'). Proceeding to Workflow Planning."
+**Context**: Requirements Analysis: COMPLETE & APPROVED. User Stories: Skipped (developer/ML tooling, no user-facing functionality). Proceeding to Workflow Planning (ALWAYS EXECUTE).
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Workflow Planning Complete
+**Timestamp**: 2026-08-17T00:30:00Z
+**User Input**: (none -- AI-driven planning per Requirements)
+**AI Response**: "Created `categorization-model-finetuning-execution-plan.md`. Key decision: this feature needs a genuinely new unit -- `model-training/`, architecturally distinct from the 4 existing units (own Python env, no docker-compose service, manual/offline lifecycle) -- so Application Design and Units Generation are both EXECUTE (new Unit 5: Model Training). Per-unit plan: Ingestion Worker Service (existing, FR-CFT-9 prompt change only) gets Functional Design + Code Generation, NFR/Infrastructure Design SKIP (no new tech stack for that unit). Model Training (new) gets all 4 conditional stages EXECUTE, including Infrastructure Design -- found during this analysis that the live Postgres container currently has NO host port published (`docker compose ps` shows only api-service:7878 and frontend:8787 exposed), a real unresolved question for how a host-run script gets read-only DB access, which Infrastructure Design needs to resolve rather than assume. Recommended build sequence: Ingestion Worker Service first, then Model Training, so the evaluation step's 'agreement vs current live model' (FR-CFT-7b) compares against the already-updated live prompt. Risk: Medium."
+**Context**: Workflow Planning Step 9. Awaiting explicit user approval before proceeding to Application Design.
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Workflow Plan Approved
+**Timestamp**: 2026-08-17T00:32:00Z
+**User Input**: "Approve"
+**AI Response**: "Execution plan approved as-is. Proceeding to Application Design."
+**Context**: Workflow Planning: COMPLETE & APPROVED. Proceeding to Application Design (EXECUTE per plan).
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Application Design Complete
+**Timestamp**: 2026-08-17T00:45:00Z
+**User Input**: (none -- no blocking design questions; approved requirements already resolved every open point)
+**AI Response**: "Created `categorization-model-finetuning-application-design-plan.md` documenting 4 design decisions made without needing to block on user Q&A (2-component breakdown, reuse of `transactagent_db` for DB access rather than a new data-access layer, no dedicated component for the two external ML services, evaluate()'s live-model comparison kept read-only/leaf). Updated all 5 mandatory artifacts in place with dated addenda, matching this project's established convention: `components.md` (new Model Training unit -- Dataset Curator + Fine-Tuning Trainer components -- plus a scoped Categorization Engine extension for FR-CFT-9's amount parameter), `component-methods.md` (method signatures for both new components + the `classify`/`classifyBatch` signature change), `services.md` (Model Training's orchestration pattern -- 2 manual CLI scripts, filesystem hand-off, no service loop, explicitly contrasted with the two real services' Run/Job Queue pattern), `component-dependency.md` (dependency matrix rows, communication-pattern bullets, and a new self-contained, width-verified ASCII diagram showing the project's first purely read-only Shared-DB relationship), `application-design.md` (consolidated requirement-to-component traceability table -- all 10 FRs map cleanly, no gaps)."
+**Context**: Application Design Step 12 (Present Completion Message). Awaiting explicit user approval before proceeding to Units Generation.
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Application Design Approved, Blanket Approval Granted
+**Timestamp**: 2026-08-17T00:50:00Z
+**User Input**: "approve and no need to further ask unless there's questions to be answered."
+**AI Response**: "Application Design approved. Blanket approval granted for remaining stage-completion gates on this feature -- proceeding without stopping except for genuine open questions/ambiguities, matching this project's established precedent for the same instruction on prior features (e.g. Configurable Application Settings)."
+**Context**: Application Design: COMPLETE & APPROVED. Blanket approval in effect for the rest of this feature. Proceeding to Units Generation (EXECUTE per plan).
+
+---
+
+## Post-Completion Change: Categorization Model Fine-Tuning — Units Generation Complete
+**Timestamp**: 2026-08-17T01:00:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Added Unit 5: Model Training to `unit-of-work.md` (own directory `model-training/`, deliberately excluded from `docker-compose.yml`, own dependency manifest, no Dockerfile/container per Resolved Decision 9), `unit-of-work-dependency.md` (first read-only unit dependency in the project, own self-contained width-verified ASCII diagram matching this project's established convention for new-kind relationships), and `unit-of-work-story-map.md` (requirement-to-unit mapping since no stories exist for this feature -- all 10 FRs covered, 8 owned outright by Unit 5, 1 touching Unit 3). No blocking decomposition questions -- Application Design had already resolved the unit boundary."
+**Context**: Units Generation: COMPLETE (blanket approval — proceeding directly to CONSTRUCTION PHASE per standing instruction to stop only for genuine questions/ambiguities). Build order per execution plan: Unit 3 (Ingestion Worker Service, scoped change) -> Unit 5 (Model Training, new).
+
+---
+
+## Construction — Ingestion Worker Service Unit: Functional Design Complete (Categorization Model Fine-Tuning)
+**Timestamp**: 2026-08-17T01:10:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Added WR-34 to `business-rules.md`: the categorization prompt (`classify`/`classifyBatch`, via `openrouter_client.py`) now includes `converted_amount_sgd` alongside `description`, threaded through from data the Ingestion Orchestrator already has at that point in the pipeline (Currency Conversion runs earlier in the same file's processing) -- no new DB read. Bank name deliberately excluded per Requirements' Resolved Decision 5. Added a matching addendum to `business-logic-model.md`'s Categorization Engine section showing the updated `classifyBatch` call shape. No domain-entities.md change -- no new field/entity, purely a prompt-content change."
+**Context**: Functional Design complete for the scoped Ingestion Worker Service change. Proceeding to Code Generation (NFR Requirements/NFR Design/Infrastructure Design all SKIP per execution plan -- no new tech stack for this unit).
+
+---
+
+## Construction — Ingestion Worker Service Unit: Code Generation Complete (Categorization Model Fine-Tuning)
+**Timestamp**: 2026-08-17T01:30:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Implemented WR-34 (FR-CFT-9). Real discovery while implementing (corrects an assumption baked into the Functional Design addendum): `converted_amount_sgd` is NOT available when `classify_batch` is called upfront -- currency conversion previously ran per-transaction, later, inside `_persist_transaction`, after the upfront batch classify call. Fixed by restructuring `orchestrator/pipeline.py`'s `_process_run` to resolve conversion for every transaction upfront (same `resolve_converted_amount` call, just moved earlier -- no behavior change, same FX cache reads/writes), passed into both `classify_batch` (for the prompt) and through to `_persist_transaction` (reused, not recomputed). Changed: `classify_batch(db, items: list[tuple[str, Decimal|None]])` (was `list[str]`), `llm_classifier.classify_batch_prompt`/`classify` gain an amount parameter, `openrouter_client.classify_description`/`classify_descriptions_batch` build the amount into the prompt text via a new `_format_amount_sgd` helper (renders `None` as 'unknown', never crashes). Bank name NOT included, per Requirements. Updated tests: `test_categorization_service.py`'s `TestClassifyBatch` (all cases updated for tuple input, +1 new test for the None-amount pass-through), `test_llm_classifier.py` (helper updated, assertions unaffected), `test_openrouter_client.py` (+1 new `TestAmountInPrompt` class, 3 tests), `test_orchestrator_pipeline.py` (1 mock function signature fixed for the extra positional arg). 276/276 unit tests passing (up from 272). `docker compose build ingestion-worker` verified clean."
+**Context**: Code Generation complete for the Ingestion Worker Service unit (this feature). **UNIT: INGESTION WORKER SERVICE — COMPLETE (for this feature)**. Full live redeploy deferred to this feature's Build and Test stage, per established project precedent. Proceeding to Unit 5 (Model Training) Functional Design.
+
+---
+
+## Construction — Model Training Unit: Functional Design Complete (Categorization Model Fine-Tuning)
+**Timestamp**: 2026-08-17T01:45:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Created `domain-entities.md` (TrainingExample, DatasetSplit, CurationSummary, TrainingRunResult -- no new DB entities, in-memory/on-disk shapes only), `business-rules.md` (MTR-1..9: exact eligibility SQL, null-amount exclusion, no-dedup rationale, deterministic split via transaction_id sort, JSONL export format mirroring WR-34's exact live prompt template, LoRA defaults sourced from mlx-tune's own quick-start docs, ClearML task naming), `business-logic-model.md` (full pseudocode for curateDataset/train/evaluate/saveArtifact). One real gap found and resolved (MTR-7, not a requirements-level question -- a technical design correction): no HTTP endpoint exists anywhere in this codebase for on-demand categorization (the existing categorize()/classify() only ever run internally during ingestion) -- Application Design's 'calls the live categorization path' language was imprecise. Resolved: evaluate() independently replicates WR-34's exact prompt template and calls the same oMLX server directly via its own HTTP client, never calling into api-service/ingestion-worker code or requiring a new endpoint -- keeps Model Training a true zero-dependency leaf unit, actually a *cleaner* outcome than the original phrasing implied. Corrected component-dependency.md and components.md in place to reflect this."
+**Context**: Functional Design complete for Unit 5. Proceeding to NFR Requirements (EXECUTE per plan -- brand-new tech stack for this project).
+
+---
+
+## Construction — Model Training Unit: NFR Requirements, NFR Design, Infrastructure Design Complete (Categorization Model Fine-Tuning)
+**Timestamp**: 2026-08-17T02:00:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "NFR Requirements: identified the platform constraint that drives most other decisions -- mlx-tune needs Metal/Apple-Silicon and has no path through Docker on this Mac at all (Docker Desktop's Linux VM has no GPU passthrough), independently confirming Requirements' host-run decision wasn't just a preference. Tech stack: Python 3.12 + uv (matching the other 3 units), mlx-tune, clearml SDK, openai client reused for evaluate()'s oMLX calls (same package ingestion-worker already uses), transactagent-db reused for DB access, pydantic-settings for config. Explicitly rejected a new read-only DB role (unnecessary ceremony for a single-operator local tool) and a split container/host execution model (curate.py could technically run containerized, but that'd fragment what Requirements described as one simple two-script workflow). NFR Design: fail-loud (not WR-4's fail-silent-to-UNSURE pattern -- wrong fit for a manually-run tool), read-only session discipline enforced by a dedicated test rather than a DB permission layer, config reuses the same .env vars directly (not AR-32/WR-33's override-file mechanism, which is docker-compose-specific). Infrastructure Design: the real gap flagged at Workflow Planning -- Postgres has no host port published -- resolved by adding a loopback-only port mapping (127.0.0.1:5433->5432, non-default port to avoid colliding with a developer's own local Postgres) to docker-compose.yml's database service; applied and live-verified (`docker compose up -d database`, confirmed healthy, confirmed reachable via `nc -zv 127.0.0.1 5433`, confirmed the other 4 services stayed healthy/undisturbed by the database container recreation)."
+**Context**: NFR Requirements + NFR Design + Infrastructure Design all complete for Unit 5. Proceeding to Code Generation.
+
+---
+
+## Construction — Model Training Unit: Code Generation Complete (Categorization Model Fine-Tuning)
+**Timestamp**: 2026-08-17T02:45:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Created the full `model-training/` unit per `nfr-design/logical-components.md`'s layout: `config.py`, `repository.py` (MTR-1..4 read-only eligibility query), `prompt.py` (MTR-5, byte-identical WR-34 template), `curate.py`, `omlx_client.py` (MTR-7), `evaluate.py` (MTR-8), `train.py`, plus `pyproject.toml`/`.env.example`/`README.md` and 4 test files (29 tests). Installed for real against a rebuilt Python 3.12.14 (found and fixed a real environment gap: missing `_lzma` -- `xz` wasn't installed when this pyenv Python was originally compiled -- via `brew install xz` + `pyenv install 3.12.14 --force`). Verified every mlx-tune/ClearML API call this unit's code makes against the actually-installed packages' real `inspect.signature()`, not memory -- caught and fixed a real, significant error in the process: mlx-tune's README quick start (and this feature's own earlier Application/Functional Design docs, which trusted it) describes the plain-text `FastLanguageModel`/`SFTTrainer` path, but mlx-tune's own real Gemma-4-specific examples explicitly state 'Gemma 4 models are all VLMs -- use FastVisionModel even for text tasks.' Corrected `train.py` and the relevant design docs to use `FastVisionModel`/`VLMSFTTrainer`/`VLMSFTConfig`/`UnslothVisionDataCollator` and the VLM message-content-list shape. Ran `curate.py` for real against the live production database via the new `127.0.0.1:5433` port -- 1,245 real training examples produced (1,058 train + 187 val), inspected and confirmed correct shape/content, then discarded (no data written anywhere persistent). 29/29 new unit tests passing. Full fine-tuning run NOT executed live this session -- the user's own oMLX server isn't currently running (checked directly, nothing listening on :8000) and a real run is a heavy, multi-GB download + genuine compute cost not appropriate to trigger without the user's awareness. Wrote `categorization-model-finetuning-build-and-test-summary.md` documenting all of this explicitly, including the deferred live smoke test."
+**Context**: Code Generation complete for Unit 5. **UNIT: MODEL TRAINING — COMPLETE (code + tests)**, live end-to-end smoke test deferred pending the user's oMLX server. Also flagged an unrelated, pre-existing repo gap (no `.venv/` rule in `.gitignore`, affecting all 4 Python units, not just this feature) as a separate background task suggestion rather than fixing it inline.
+
+---
+
+## Build and Test — User Decision: Stop Here for Now
+**Timestamp**: 2026-08-17T03:00:00Z
+**User Input**: Asked to choose among "Redeploy ingestion-worker now" / "Run a live fine-tuning smoke test" / "Stop here for now" (multi-select). Answered: "Stop here for now."
+**AI Response**: "Acknowledged. Leaving both units as code-complete + unit-tested, exactly as documented in `categorization-model-finetuning-build-and-test-summary.md`. No redeploy of `ingestion-worker` (still running the pre-feature image — the FR-CFT-9 change is built and tested but not live). No fine-tuning smoke test attempted. `model-training/` is ready to run via its own `README.md` whenever the user starts their oMLX server and wants to. Live stack left exactly as-is otherwise: the `database` container's new loopback port mapping (127.0.0.1:5433) stays applied (a working, tested infra addition, not a work-in-progress change to roll back), all 5 containers confirmed healthy."
+**Context**: Categorization Model Fine-Tuning feature: code + tests COMPLETE for both units (Ingestion Worker Service scoped change, Model Training new unit). Live deployment of the ingestion-worker change and the fine-tuning smoke test both explicitly deferred to the user's own timing, not abandoned. Feature not yet merged/committed to git -- all work sits as uncommitted changes in the main working tree.
+
+---
