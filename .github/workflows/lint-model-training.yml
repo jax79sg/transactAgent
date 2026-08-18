@@ -1,0 +1,31 @@
+name: Model Training
+
+# Lint only, no test job: model-training/ depends on mlx-tune, which requires Apple
+# Silicon/Metal and has no path through a Linux CI runner at all (not even in a
+# container -- there's no GPU passthrough to be had). Its own README documents how
+# to run its tests locally on macOS. Static analysis needs no ML runtime, so it
+# still runs here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: model-training
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv run --with ruff ruff check src tests
