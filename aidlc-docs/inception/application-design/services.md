@@ -27,6 +27,8 @@ updateSetting(name, newValue):
 
 Steps 3-5 are synchronous, direct writes/reads within the same request (same precedent as Recategorization Review/Recurring Payments' approve/reject) — no job queue involved, since nothing here requires the Ingestion Worker Service to do anything *during* the request; it only ever reads the resulting file later, on its own restart.
 
+**Addendum (2026-08-18, Background Process Visibility feature — see `background-process-visibility-application-design-plan.md`)**: The new **Background Activity Component** is a sixth, independent, read-only orchestration point — same shape as Backup Status: a single-method component that only queries the Shared DB (`ingestion_runs`/`recategorization_jobs`), polled frequently by the Frontend (NFR-BPV-1) rather than on-demand like the others. No write path — all writes to those tables happen in the Ingestion Worker Service, as they already do today.
+
 ## Service: Ingestion Worker Service
 
 **Responsibility**: All heavy/slow/external-integration work: Drive access, OCR, LLM-assisted extraction, categorization, FX conversion, and persisting the results. Runs asynchronously relative to any user-facing request (Question 2 = A).

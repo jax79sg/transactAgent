@@ -76,6 +76,12 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `InvalidSettingValueError` (400): a value failing AR-28's type/range or AR-29's cross-field check
 - `UnknownSettingError` (404): a name not on the AR-28 allow-list — indistinguishable whether it's a genuinely-unknown name or one of the 13 excluded secrets (NFR-CAS-2)
 
+## Background Activity (added 2026-08-18 — Background Process Visibility)
+
+- `ActivitySummaryDTO`: `{ current: CurrentActivityDTO | null, recent: RecentActivityEntryDTO[] }` — the sole response shape of `getActivitySummary()`
+- `CurrentActivityDTO`: `{ jobType: 'ingestion_run'|'recategorization_job', startedAt: datetime }` — present only while a job is `running` (AR-35); `null` `current` in the parent means idle (FR-BPV-4)
+- `RecentActivityEntryDTO`: `{ jobType: 'ingestion_run'|'recategorization_job', completedAt: datetime }` — up to 10 entries, most recent first (AR-36); an empty array means no recent activity, not an error
+
 ## Error Shape (all endpoints)
 
 - `ErrorResponse`: `{ error: string, message: string, details?: object }` — consistent shape across all `400`/`401`/`404`/`409` responses so the Frontend has one error-handling code path.

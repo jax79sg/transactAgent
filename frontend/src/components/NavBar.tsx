@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
+import { getActivitySummary } from "../api/backgroundActivity";
 import { getPendingCount } from "../api/recategorization";
 import { getRecurringPaymentsStatus } from "../api/recurringPayments";
+import type { BackgroundJobType } from "../api/types";
 import { useAuth } from "../context/AuthContext";
 
 const LINKS = [
@@ -66,6 +69,73 @@ function RecurringPaymentsBadge() {
   );
 }
 
+// 3s, matching the Ingestion page's own active-run polling cadence (NFR-BPV-1) --
+// far tighter than the 30s/5min cadences of the two count badges above, since this
+// represents "something is happening right now", not a backlog.
+const ACTIVITY_POLL_INTERVAL_MS = 3000;
+
+const JOB_TYPE_LABELS: Record<BackgroundJobType, string> = {
+  ingestion_run: "Ingestion run",
+  recategorization_job: "Recategorization scan",
+};
+
+function ActivityIndicator() {
+  const [isOpen, setIsOpen] = useState(false);
+  const { data } = useQuery({
+    queryKey: ["backgroundActivity", "summary"],
+    queryFn: getActivitySummary,
+    refetchInterval: ACTIVITY_POLL_INTERVAL_MS,
+  });
+
+  const current = data?.current ?? null;
+  const recent = data?.recent ?? [];
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        data-testid="activity-indicator"
+        aria-label={current ? `${JOB_TYPE_LABELS[current.jobType]} in progress` : "Background activity"}
+        onClick={() => setIsOpen((open) => !open)}
+        className="flex items-center gap-2 rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+      >
+        <span
+          data-testid="activity-dot"
+          className={
+            current
+              ? "h-2 w-2 animate-pulse rounded-full bg-emerald-500"
+              : "h-2 w-2 rounded-full bg-slate-300"
+          }
+        />
+        {current && <span>{JOB_TYPE_LABELS[current.jobType]} in progress</span>}
+      </button>
+
+      {isOpen && (
+        <div
+          data-testid="activity-panel"
+          className="absolute right-0 z-10 mt-1 w-72 rounded border border-slate-200 bg-white p-3 shadow-lg"
+        >
+          <div className="mb-2 text-xs font-semibold text-slate-500">Background activity</div>
+          {current && (
+            <div className="mb-2 text-sm text-emerald-700">{JOB_TYPE_LABELS[current.jobType]} in progress</div>
+          )}
+          {recent.length === 0 ? (
+            <div className="text-sm text-slate-400">No recent activity</div>
+          ) : (
+            <ul className="space-y-1">
+              {recent.map((entry, index) => (
+                <li key={index} className="text-sm text-slate-600">
+                  {JOB_TYPE_LABELS[entry.jobType]} completed {new Date(entry.completedAt).toLocaleString()}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function NavBar() {
   const { logout } = useAuth();
 
@@ -87,9 +157,12 @@ export function NavBar() {
           </NavLink>
         ))}
       </div>
-      <button data-testid="logout-button" className="text-sm text-slate-500 hover:text-slate-800" onClick={logout}>
-        Log out
-      </button>
+      <div className="flex items-center gap-4">
+        <ActivityIndicator />
+        <button data-testid="logout-button" className="text-sm text-slate-500 hover:text-slate-800" onClick={logout}>
+          Log out
+        </button>
+      </div>
     </nav>
   );
 }

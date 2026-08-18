@@ -2340,3 +2340,101 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Security dependency remediation for Model Training unit (Unit 5), tracked as a standalone post-completion change independent of the Categorization Model Fine-Tuning feature above. STATUS: COMPLETE. Not yet committed to git.
 
 ---
+
+## Post-Completion Change: Background Process Visibility — Request Received
+**Timestamp**: 2026-08-18T08:37:13Z
+**User Input**: "I would like a new feature where its easy to tell if there's background processes that's running. One Examlpe is when i change category, there's this review of trasnactions and offering suggestions."
+**AI Response**: "Dispatched an Explore agent to survey the real system before drafting questions, rather than assuming. Findings: poll_once() processes 5 distinct job types (ingestion run, recategorization job, backup run, detection scan, embedding batch), strictly one at a time (WR-8/11/19), but only 2 of the 5 (ingestion run, recategorization job -- the user's own example) have a genuine queued/running DB status. The other 3 (BackupRun, DetectionScanRun, per-row embedding_status) are write-once-at-completion by design -- architecturally no way to show 'in progress' without a real schema change, not just new UI. NavBar already has 2 badge patterns (PendingReviewBadge, RecurringPaymentsBadge) but both are backlog counts ('N things await review'), not worker-activity indicators -- confirmed there is no existing way to tell 'a job is being processed right now' as distinct from 'N pending items exist.' Found a directly reusable precedent: app_settings/repository.py's is_ingestion_worker_busy() (a plain EXISTS-OR query over IngestionRun.status='running' OR RecategorizationJob.status='running'), already exposed via GET /app-settings/{name}/restart-guidance and consumed by SettingsPage.tsx -- covers exactly job types #1/#2, not #3-5. Creating background-process-visibility-questions.md before any design work, since real scope questions exist (which of the 5 job types to cover, whether backup/scan/embedding visibility justifies a schema change, where the indicator should live, what it should show)."
+**Context**: Requirements Analysis, Step 2-5 (intent analysis + completeness analysis) for new Post-Completion Change. Request type: New Feature (UI/UX -- background activity visibility). Scope estimate: Multiple Components (frontend NavBar + possibly API Service + possibly Ingestion Worker + possibly Database, depending on scope answers). Complexity: Moderate-to-Complex depending on whether all 5 job types are in scope (2 are cheap to expose today, 3 need real schema changes).
+
+---
+
+## Post-Completion Change: Background Process Visibility — Clarifying Questions Presented
+**Timestamp**: 2026-08-18T08:40:00Z
+**User Input**: (none -- AI-initiated per mandatory Step 6)
+**AI Response**: "Created background-process-visibility-questions.md with 5 questions: (1) scope -- the 2 job types with real in-progress tracking today vs. all 5 (3 need a schema change) vs. phased; (2) placement -- nav bar vs. dedicated panel vs. both; (3) content -- simple on/off vs. which-job-is-running vs. plus a recent-activity log (most relevant for the 3 write-once job types); (4) refresh cadence, citing the existing 3s/30s/5min precedents already in this app; (5) visual style -- reuse the existing amber-pill badge convention vs. something activity-distinct like a spinner."
+**Context**: Requirements Analysis Step 6 (Gate: Await User Answers). Awaiting user answers in `aidlc-docs/inception/requirements/background-process-visibility-questions.md` before Step 7 (Requirements Document generation).
+
+---
+
+## Post-Completion Change: Background Process Visibility — Requirements Document Generated
+**Timestamp**: 2026-08-18T09:00:00Z
+**User Input**: "done" (all 5 answers filled in: Q1=C, Q2=C, Q3=C, Q4=A, Q5=B)
+**AI Response**: "Analyzed answers for contradictions before drafting the requirements document. Found one scope note worth resolving, not a blocking contradiction: Q3's 'recent-activity history' option was originally framed in the question text as most useful for the three write-once job types (backup/detection-scan/embedding-batch), but Q1 explicitly scopes this phase to only the other two (ingestion run, recategorization job). Checked the real schema (`database/src/transactagent_db/models.py`) -- both `IngestionRun` and `RecategorizationJob` already have real `completed_at` timestamps, so a recent-completions history is fully achievable for the in-scope job types without a schema change. Resolved directly in the requirements doc rather than raising a follow-up question, since it doesn't block or contradict any answer. Generated `background-process-visibility-requirements.md`: 7 FRs (FR-BPV-1..7 -- scope limited to the 2 trackable job types; nav bar indicator; detail panel with recent history; idle-state hides the indicator; job identification, never generic; history sourced from existing IngestionRun/RecategorizationJob rows; new API endpoint separate from the existing restart-guidance one) and 5 NFRs (NFR-BPV-1..5 -- few-second polling matching the Ingestion page's own cadence; visually distinct from the amber-pill count badges; minimal payload; reuse of the existing useQuery/refetchInterval pattern; no new database migrations this phase). Confirmed via code research that `is_ingestion_worker_busy()` (`app_settings/repository.py`) and its `GET /app-settings/{name}/restart-guidance` endpoint are real but too narrowly scoped for this feature's needs (job-type identification + history) -- a new endpoint is warranted rather than reusing that one. Updated `aidlc-docs/aidlc-state.md` with a new Post-Completion Change section."
+**Context**: Requirements Analysis Step 7-9 complete. Gate: awaiting user's Approve & Continue / Request Changes decision before proceeding to User Stories assessment.
+
+---
+
+## Post-Completion Change: Background Process Visibility — Requirements Approved
+**Timestamp**: 2026-08-18T09:05:00Z
+**User Input**: "approve and don't have to ask again unless there's questions to be answered."
+**AI Response**: "Acknowledged -- blanket approval granted for remaining stage-completion gates on this feature, consistent with the pattern established on prior features (will still stop for genuine open questions/ambiguities). Proceeding to User Stories assessment."
+**Context**: Requirements Analysis stage COMPLETE & APPROVED. Proceeding to User Stories assessment per mandatory workflow.
+
+---
+
+## Post-Completion Change: Background Process Visibility — User Stories Complete
+**Timestamp**: 2026-08-18T09:10:00Z
+**User Input**: (none -- blanket approval in effect, no genuine open questions to ask)
+**AI Response**: "Assessment (`background-process-visibility-user-stories-assessment.md`): Execute=Yes, matches the 'New User Features' High Priority criterion directly (new always-visible nav bar element + detail panel), consistent with every prior user-facing feature in this project. Story plan (`background-process-visibility-story-generation-plan.md`): no open questions raised -- format/granularity/persona are already fully determined by this project's consistent precedent (Epic-based, INVEST + acceptance criteria, single 'Account Owner' persona reused), so proceeded directly to generation per the user's standing blanket approval for this feature. Generated `background-process-visibility-stories.md`: Epic 11, 3 stories (US-11.1 nav bar indicator with running/idle states and fast refresh; US-11.2 job-type identification, never generic; US-11.3 recent-completions history panel, explicitly no schema change). `personas.md` unchanged -- no new persona. All 7 FRs / 5 NFRs from the requirements doc traced to at least one story."
+**Context**: User Stories stage COMPLETE. Proceeding to Workflow Planning per mandatory workflow (blanket approval carries forward -- will still stop for genuine open questions).
+
+---
+
+## Post-Completion Change: Background Process Visibility — Workflow Planning Complete
+**Timestamp**: 2026-08-18T09:15:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Created `background-process-visibility-execution-plan.md`. Risk: Low (read-only feature, no schema change, no write-path changes). Application Design: EXECUTE (new endpoint's business logic + 2 new frontend components need definition). Units Generation: SKIP (reuses all 4 existing units). Per-unit: only API Service and Frontend SPA affected -- Database and Ingestion Worker Service need zero changes, since the two in-scope job types already write the status/timestamp columns this feature reads. Functional Design: EXECUTE for API Service + Frontend SPA. NFR Requirements/NFR Design/Infrastructure Design: SKIP across the board (no new library, no new infra, reuses the existing useQuery/refetchInterval polling pattern). Code Generation + Build and Test: ALWAYS. Sequence: API Service (endpoint must exist first) -> Frontend SPA (consumes it)."
+**Context**: Workflow Planning stage COMPLETE. Proceeding to Application Design per approved plan (blanket approval carries forward).
+
+---
+
+## Post-Completion Change: Background Process Visibility — Application Design Complete
+**Timestamp**: 2026-08-18T09:25:00Z
+**User Input**: (none -- blanket approval in effect, no genuine open questions)
+**AI Response**: "`background-process-visibility-application-design-plan.md`: no open questions -- this is a read-only-extension pattern this project has used four times before (Backup Status, Recurring Payments status summary, is_ingestion_worker_busy restart guidance, Recategorization Review pending count), same 'API Service never calls Ingestion Worker directly' rule applies unchanged. Updated `components.md` (+Background Activity Component in API Service, +Frontend SPA addendum for the nav indicator/panel), `component-methods.md` (+`getActivitySummary()` -- single endpoint backing both the nav bar indicator and detail panel, `current`/`recent` shape), `services.md` (+orchestration note, sixth independent read-only orchestration point in API Service), `component-dependency.md` (+dependency row + 'no direct call' rule addendum), `application-design.md` (+Epic 11 traceability addendum) in place with dated addenda. No new Database or Ingestion Worker Service involvement -- confirmed both in-scope job types already write everything this feature reads."
+**Context**: Application Design stage COMPLETE. Proceeding to Units Generation (SKIP per approved execution plan -- reuses all 4 existing units) then CONSTRUCTION phase.
+
+---
+
+## Post-Completion Change: Background Process Visibility — API Service + Frontend SPA Functional Design Complete
+**Timestamp**: 2026-08-18T09:35:00Z
+**User Input**: (none -- blanket approval in effect, no genuine open questions)
+**AI Response**: "API Service `business-rules.md` +AR-35..37 (at most one 'current' job reported, defensive most-recent-started tie-break since the single-active-job invariant lives in the worker's poll loop not a cross-table DB constraint; recent history is a fixed 10-item window, not paginated; the completed_at-not-null filter already excludes the running job from its own history, no separate exclusion needed). `domain-entities.md` +`ActivitySummaryDTO`/`CurrentActivityDTO`/`RecentActivityEntryDTO`. `business-logic-model.md` +Background Activity Component section -- two independent read-only queries (current: single running row across both tables; recent: combine-then-sort-then-limit across both tables, not two separate top-10s merged), no write path, no caching (fast polling handles freshness). Frontend `frontend-components.md` +NavBar ActivityIndicator/ActivityPanel section -- pulsing/spinning indicator visually distinct from the amber-pill badges, click-to-open popover (not a new route/page) showing current + recent, one shared useQuery backs both. No Database or Ingestion Worker Service functional design needed -- confirmed no changes required there."
+**Context**: Functional Design stage COMPLETE for both affected units (API Service, Frontend SPA). Proceeding to Code Generation per approved execution plan.
+
+---
+
+## Post-Completion Change: Background Process Visibility — API Service Code Generation Complete
+**Timestamp**: 2026-08-18T09:50:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Created `api-service/src/api_service/background_activity/` package [`__init__.py`, `schemas.py` -- `ActivitySummaryResponse`/`CurrentActivity`/`RecentActivityEntry`, `repository.py` -- `get_current_activity`/`get_recent_activity` implementing AR-35/36/37 combine-then-sort-then-limit across both tables, `service.py` -- `get_activity_summary` orchestration, `router.py` -- `GET /background-activity/summary`, auth-protected]; registered in `main.py`. New tests: `test_background_activity_service.py` (12 repository-level, incl. AR-35's defensive tie-break and AR-37's exclusion-by-construction), `test_api_background_activity.py` (4 endpoint-level, incl. auth-required) -- 14 new tests. Fixed 3 real test-fixture gaps found via actual execution, not assumption [`Transaction` requires `bank_name`/`category_id`/`category_source` NOT NULL -- none obvious from the feature's own scope]. Full suite: 253/253 passing [up from 239]. `ruff check` clean after auto-fixing import ordering. `docker compose build api-service` verified clean."
+**Context**: Code Generation complete for the API Service unit (this feature). **UNIT: API SERVICE — COMPLETE (for this feature)**. Proceeding to Frontend SPA Code Generation.
+
+---
+
+## Post-Completion Change: Background Process Visibility — Frontend SPA Code Generation Complete
+**Timestamp**: 2026-08-18T10:05:00Z
+**User Input**: (none -- blanket approval in effect)
+**AI Response**: "Real design gap found and fixed while implementing (not just coding, a Functional Design correction): `frontend-components.md`'s original wording said the idle-state indicator 'renders nothing', copying the two count-badges' hide-at-zero convention too literally -- but that would remove the only affordance for opening the history panel (US-11.3), which needs to stay reachable regardless of whether anything is running. Corrected in place: `ActivityIndicator` always renders as a clickable dot; only its visual weight changes (muted/static when idle, pulsing + labeled when running) -- matches FR-BPV-4's actual wording ('hidden/**unobtrusive**', not 'hidden entirely'). Implemented: `api/types.ts` +`ActivitySummaryResponse`/`CurrentActivity`/`RecentActivityEntry`/`BackgroundJobType`; new `api/backgroundActivity.ts`; `NavBar.tsx` +`ActivityIndicator` component [3s poll matching the Ingestion page's own cadence, click-to-open popover panel, current job label + recent history list, one shared useQuery backs both indicator and panel] wired in next to the logout button. `NavBar.test.tsx` +4 new tests [idle muted state, running state shows specific job label not generic, panel opens on click even when idle, empty-history message] plus default `getActivitySummary` mocks added to the two pre-existing describe blocks so they're unaffected by the new always-on query. Full suite: 99/99 passing [up from 95, ran inside a node:20-alpine container, no local Node]. `eslint`, `tsc -b`, `vite build`, and `docker compose build frontend` all clean."
+**Context**: Code Generation complete for the Frontend SPA unit (this feature). **UNIT: FRONTEND SPA — COMPLETE (for this feature)**. **ALL 2 AFFECTED UNITS COMPLETE — proceeding to Build and Test.**
+
+---
+
+## Build and Test Stage — Background Process Visibility
+**Timestamp**: 2026-08-18T10:20:00Z
+**Build Status**: Success (`docker compose build api-service frontend` both clean)
+**Test Status**: Pass — 253/253 API Service, 99/99 Frontend, zero regressions (18 new tests total)
+**AI Response**: "Redeployed both changed services against the real live stack (`docker compose up -d api-service frontend`), both healthy. Live-verified `GET /background-activity/summary` with a minted JWT against the real database -- caught a genuinely live real-time example while doing so: a real recategorization_job was actually `running` at the moment of the check, with 10 real prior completions in `recent`. Confirmed the deployed frontend bundle contains the new markup via grep against the container's served output. Performed real browser-based visual verification (JWT injected into sessionStorage, never a login form) -- confirmed the green pulsing 'Recategorization scan in progress' indicator renders correctly, visually distinct from the two amber count badges, and that the click-to-open panel shows the live current job + recent history matching the API response exactly. Test session token cleared afterward. `transactagent-worker` was already in a pre-existing 'unhealthy' Docker healthcheck state before this change (confirmed actively processing successfully via its logs -- unrelated, not investigated, out of scope). No migrations, no schema changes, real user data untouched throughout."
+**Files Generated**: `background-process-visibility-build-and-test-summary.md`
+**Context**: Build and Test COMPLETE for Background Process Visibility. Feature ready for final review.
+
+---
+
+## Post-Completion Change: Background Process Visibility — Build and Test Approved
+**Timestamp**: 2026-08-18T10:25:00Z
+**User Input**: "approve"
+**AI Response**: "Acknowledged. Build and Test stage approved. Operations phase is a placeholder per this project's convention (deployment is docker-compose up, already covered in Construction) -- both changed services are already live and healthy. Feature complete."
+**Context**: Background Process Visibility feature COMPLETE end-to-end (Requirements Analysis -> User Stories -> Workflow Planning -> Application Design -> Construction [API Service + Frontend SPA] -> Build and Test), all stages approved.
+
+---

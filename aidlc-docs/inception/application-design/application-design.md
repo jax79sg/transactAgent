@@ -160,3 +160,15 @@ No user stories this round (developer/ML tooling — see `categorization-model-f
 | FR-CFT-10 | Model Training unit as a whole (two standalone CLI entry points — see `services.md`) |
 
 **Result (Categorization Model Fine-Tuning)**: Complete — no gaps. All 10 functional requirements map to either the two new Model Training components or a scoped extension of the existing Categorization Engine. Two genuinely new architectural elements: (1) the Model Training unit itself — no docker-compose service, no persistent process, its own isolated ML dependency set (NFR-CFT-1); (2) the project's first purely **read-only** consumer of the Shared DB — every prior addendum above described a writer/reader pair between the two existing services, this is the first one-directional relationship. Two new external dependencies, both isolated to this one unit: HuggingFace Hub (base model download) and ClearML SaaS (run tracking).
+
+### Addendum (2026-08-18): Background Process Visibility
+
+See `background-process-visibility-application-design-plan.md`. Traced to Epic 11's stories.
+
+| Story | Component(s) |
+|---|---|
+| US-11.1 | Background Activity Component (new, `getActivitySummary`), Frontend SPA (new nav bar indicator, fast poll) |
+| US-11.2 | Background Activity Component (job-type identification in `current`) |
+| US-11.3 | Background Activity Component (`recent` history list), Frontend SPA (detail panel) |
+
+**Result (Background Process Visibility)**: Complete — no gaps, no new speculative components. All 3 stories map to one new, narrowly-scoped API Service component and the existing Frontend SPA convention (one component, no new component for the indicator/panel). No Database or Ingestion Worker Service changes — the two in-scope job types (ingestion runs, recategorization jobs) already write everything this feature reads. Scope deliberately excludes the other 3 job types (backup runs, detection scans, embedding batches) per FR-BPV-1 — they have no real in-progress DB status today, and adding one is out of scope for this phase.

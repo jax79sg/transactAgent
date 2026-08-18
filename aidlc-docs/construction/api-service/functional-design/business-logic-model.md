@@ -75,3 +75,11 @@ Technology-agnostic business logic for each of Unit 2's 5 components. Builds on 
 - **Add**: insert with `active=true, is_reserved=false`; rejects (`400`) if the name already exists (BR-4 surfaced cleanly rather than a raw DB error).
 - **Rename**: updates `name`; rejects renaming a `is_reserved=true` row (BR-5, application-enforced).
 - **Remove**: sets `active=false` (BR-6, soft delete) rather than a hard `DELETE`; before doing so, counts transactions referencing this category and rejects (`409`, Question 4 = A count-only) if count > 0; also rejects removing the `is_reserved=true` `UNSURE` row entirely (BR-5).
+
+## Background Activity Component: Activity Summary Logic (added 2026-08-18 — Background Process Visibility)
+
+- **Get activity summary** (US-11.1/11.2/11.3): two independent read-only queries, combined into one `ActivitySummaryDTO`:
+  1. **Current**: `SELECT` the single `ingestion_runs`/`recategorization_jobs` row (across both tables) with `status = 'running'`, ordered by `started_at`/`created_at DESC LIMIT 1` (AR-35's defensive tie-break) — `null` if neither table has one.
+  2. **Recent**: `SELECT` the 10 most-recently-completed rows across both tables (`completed_at IS NOT NULL ORDER BY completed_at DESC LIMIT 10`, AR-36) — a `UNION`-style combine-then-sort-then-limit, not two separate top-10s merged (so, e.g., 10 ingestion runs completed after the last recategorization job correctly crowds it out, rather than always reserving slots per type).
+- **No write path**: same "deliberately dumb, read-only" shape as Backup Status and Recurring Payments' status summary — this component only ever reads what the Ingestion Worker's Ingestion Orchestrator / Categorization Engine already wrote via their existing `status`/`completed_at` transitions. No new writes anywhere in this feature.
+- **No caching**: each call re-queries live, matching every other polling-backed endpoint in this codebase (`PendingReviewBadge`, `RecurringPaymentsBadge`) — NFR-BPV-1's fast cadence is achieved by polling frequently, not by adding a cache layer for a query this cheap (two small indexed lookups).

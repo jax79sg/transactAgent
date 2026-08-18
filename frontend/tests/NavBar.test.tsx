@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as backgroundActivityApi from "../src/api/backgroundActivity";
 import * as recategorizationApi from "../src/api/recategorization";
 import * as recurringPaymentsApi from "../src/api/recurringPayments";
 import { NavBar } from "../src/components/NavBar";
@@ -10,8 +12,10 @@ import { AuthProvider } from "../src/context/AuthContext";
 
 vi.mock("../src/api/recategorization");
 vi.mock("../src/api/recurringPayments");
+vi.mock("../src/api/backgroundActivity");
 
 const NO_ATTENTION_NEEDED = { dueSoonCount: 0, overdueCount: 0, pendingMatchCount: 0, newSuggestionCount: 0 };
+const NO_ACTIVITY = { current: null, recent: [] };
 
 function renderNavBar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -29,6 +33,7 @@ function renderNavBar() {
 describe("NavBar pending review badge", () => {
   beforeEach(() => {
     vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue(NO_ATTENTION_NEEDED);
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
   });
 
   afterEach(() => {
@@ -65,6 +70,7 @@ describe("NavBar pending review badge", () => {
 describe("NavBar recurring payments badge", () => {
   beforeEach(() => {
     vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 0 });
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
   });
 
   afterEach(() => {
@@ -102,5 +108,71 @@ describe("NavBar recurring payments badge", () => {
       expect(recurringPaymentsApi.getRecurringPaymentsStatus).toHaveBeenCalled();
     });
     expect(screen.queryByTestId("recurring-payments-badge")).not.toBeInTheDocument();
+  });
+});
+
+describe("NavBar activity indicator", () => {
+  beforeEach(() => {
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 0 });
+    vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue(NO_ATTENTION_NEEDED);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows a muted dot and no label when idle", async () => {
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
+    renderNavBar();
+
+    await waitFor(() => {
+      expect(backgroundActivityApi.getActivitySummary).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId("activity-indicator")).toBeInTheDocument();
+    expect(screen.queryByText(/in progress/)).not.toBeInTheDocument();
+  });
+
+  it("shows which job is running, not a generic label", async () => {
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue({
+      current: { jobType: "recategorization_job", startedAt: "2026-08-18T09:00:00Z" },
+      recent: [],
+    });
+    renderNavBar();
+
+    await waitFor(() => {
+      expect(screen.getByText("Recategorization scan in progress")).toBeInTheDocument();
+    });
+  });
+
+  it("opens a panel with recent activity on click, even when idle", async () => {
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue({
+      current: null,
+      recent: [{ jobType: "ingestion_run", completedAt: "2026-08-18T08:00:00Z" }],
+    });
+    const user = userEvent.setup();
+    renderNavBar();
+
+    await waitFor(() => {
+      expect(backgroundActivityApi.getActivitySummary).toHaveBeenCalled();
+    });
+    expect(screen.queryByTestId("activity-panel")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("activity-indicator"));
+
+    expect(screen.getByTestId("activity-panel")).toBeInTheDocument();
+    expect(screen.getByText(/Ingestion run completed/)).toBeInTheDocument();
+  });
+
+  it("shows a no-recent-activity message when there's nothing to show", async () => {
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
+    const user = userEvent.setup();
+    renderNavBar();
+
+    await waitFor(() => {
+      expect(backgroundActivityApi.getActivitySummary).toHaveBeenCalled();
+    });
+    await user.click(screen.getByTestId("activity-indicator"));
+
+    expect(screen.getByText("No recent activity")).toBeInTheDocument();
   });
 });
