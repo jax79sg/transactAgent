@@ -76,6 +76,10 @@ High-level method signatures per component. Types are conceptual (language-agnos
   - `listSettingHistory() -> SettingChangeDTO[]` — every persisted `SettingChange` row, most recent first (FR-CAS-9, US-10.4).
   - `isIngestionWorkerBusy() -> bool` — internal helper backing `getRestartGuidance`; a read-only Shared DB query for any `ingestion_runs`/`recategorization_jobs` row with `status = 'running'` (Key Design Resolution 2) — no call to the Ingestion Worker Service itself, no new table.
 
+### Background Activity Component
+*Addendum (2026-08-18, Background Process Visibility feature — see `background-process-visibility-application-design-plan.md`)*
+- `getActivitySummary() -> {current: CurrentActivity | null, recent: RecentActivityEntry[]}` — single endpoint backing both the nav bar indicator and the detail panel (FR-BPV-7). `current` is `null` when idle (FR-BPV-4); when set, it identifies the job type (`ingestion_run` | `recategorization_job`, FR-BPV-5) and its `startedAt`. `recent` is a bounded, most-recent-first list of completed ingestion runs and recategorization jobs (job type, `completedAt`) — exact bound (count/window) is a Functional Design decision (FR-BPV-3/6). Read-only — a purpose-built sibling to `isIngestionWorkerBusy()` above, not a reuse of it, since this needs job-type identification and history that helper doesn't provide.
+
 ---
 
 ## Ingestion Worker Service

@@ -384,3 +384,20 @@ export interface SettingChangeDTO {
   newValue: string;
   changedAt: string;
 }
+
+export type BackgroundJobType = "ingestion_run" | "recategorization_job";
+
+export interface CurrentActivity {
+  jobType: BackgroundJobType;
+  startedAt: string;
+}
+
+export interface RecentActivityEntry {
+  jobType: BackgroundJobType;
+  completedAt: string;
+}
+
+export interface ActivitySummaryResponse {
+  current: CurrentActivity | null;
+  recent: RecentActivityEntry[];
+}

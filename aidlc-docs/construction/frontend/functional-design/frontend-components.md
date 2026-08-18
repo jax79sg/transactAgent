@@ -139,3 +139,15 @@ App
 
 - A badge on the **Dashboard** nav link (US-8.7), same visual pattern as `PendingReviewBadge` on Review — visible only when `overdueCount + pendingMatchCount + newSuggestionCount > 0` (`dueSoonCount` is informational, not counted — nothing has gone wrong yet).
 - **API**: `GET /recurring-payments/status`
+
+## NavBar: ActivityIndicator + ActivityPanel (Addendum 2026-08-18 — Background Process Visibility)
+
+- **ActivityIndicator**: a new element in `NavBar.tsx`, separate from and visually distinct from `PendingReviewBadge`/`RecurringPaymentsBadge` per NFR-BPV-2 — a small pulsing/spinning dot, not an amber count-pill, since this represents "something is happening right now" rather than a backlog count. Polls `GET /background-activity/summary` on a fast interval (a few seconds, matching the Ingestion page's own active-run polling cadence per NFR-BPV-1 — looser than that page's per-run 3s poll is not required since this is ambient, but far tighter than the 30s/5min cadences of the two count badges).
+- **Correction (2026-08-18, found during this same Functional Design pass)**: the original wording below said the idle state "renders nothing," copying the two count-badges' hide-at-zero convention too literally — but that would remove the only affordance for opening `ActivityPanel`'s history (US-11.3), which must stay reachable regardless of whether anything is currently running. Resolved: `ActivityIndicator` is always rendered as a clickable element (so history is always one click away); only its *visual weight* changes between states, per FR-BPV-4's actual wording ("hidden/**unobtrusive**", not "hidden entirely").
+- **Two states, driven by `ActivitySummaryDTO.current`** (AR-35):
+  - `current === null` (idle): renders as a small, muted/static dot — low visual weight, not competing for attention with the two count badges, but still present and clickable (FR-BPV-4).
+  - `current !== null` (running): the same dot switches to pulsing/animated and gains a label from `current.jobType` (US-11.2) — "Ingestion run in progress" / "Recategorization scan in progress", never a generic "busy" label.
+- **ActivityPanel**: a small popover/dropdown anchored to `ActivityIndicator` (click to open/close, same pattern as any existing dropdown in this UI — no new route/page), showing the current entry (if any) at the top and the `recent` list below it (job type + completion time, most recent first, US-11.3). Reuses the same `ActivitySummaryDTO` the indicator's own polling query already has (one `useQuery` call backs both the always-visible indicator and the on-demand panel content — no second network request when the panel opens).
+- **Empty recent list**: shows a brief "No recent activity" message rather than an empty-looking blank area, per US-11.3's edge case.
+- **Visible on every page** (US-11.1) — lives in `NavBar.tsx` itself, not per-page, same placement precedent as the two existing badges.
+- **API**: `GET /background-activity/summary`

@@ -418,3 +418,39 @@ Tracked separately (base project + feature status above unchanged). Request type
 - [x] Build and Test — Complete (2026-08-18; 29/29 unit tests passing before and after the upgrade; `pip-audit` before: 14 known vulnerabilities across clearml+pyjwt [+1 unrelated pytest finding]; after: 0 for clearml/pyjwt, only the pre-existing unrelated pytest finding remains. Only `model-training/pyproject.toml` and `model-training/uv.lock` changed.)
 
 **STATUS: COMPLETE** (clearml 1.18.0→2.1.11, pyjwt 2.9.0→2.13.0, no train.py code changes, 29/29 tests passing, pip-audit clean for clearml/pyjwt)
+
+---
+
+## Post-Completion Change: Background Process Visibility
+
+Tracked separately (base project + all prior post-completion changes above unchanged/COMPLETE).
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-18; `aidlc-docs/inception/requirements/background-process-visibility-requirements.md`; 7 FRs, 5 NFRs; 1 round of 5 questions, all answered — scope limited to the 2 job types [ingestion runs, recategorization jobs] with real in-progress DB tracking today [Q1=C, phased — backup/detection-scan/embedding-batch deferred, would need a schema change]; both nav bar indicator + detail panel [Q2=C]; shows which job is running plus recent-completions history [Q3=C]; fast few-second polling [Q4=A]; visually distinct from the existing amber-pill count badges, e.g. spinner/pulsing [Q5=B]. One scope note resolved without a follow-up question: Q3's history option was framed around the 3 deferred job types, but both in-scope types already have real `completed_at` timestamps, so history is achievable for them within this phase.)
+
+- [x] User Stories — Complete & Approved (2026-08-18; `background-process-visibility-user-stories-assessment.md` [Execute=Yes]; `background-process-visibility-story-generation-plan.md` [no open questions -- fully determined by established precedent]; `background-process-visibility-stories.md` generated -- Epic 11, 3 stories [US-11.1..11.3] covering FR-BPV-1..7/NFR-BPV-1..5; `personas.md` unchanged). **Blanket approval in effect for remaining stage-completion gates on this feature.**
+
+- [x] Workflow Planning — Complete & Approved (2026-08-18; `background-process-visibility-execution-plan.md`; Application Design EXECUTE, Units Generation SKIP; per-unit Functional Design EXECUTE for API Service + Frontend SPA only [Database/Ingestion Worker Service need no changes], NFR Requirements/NFR Design/Infrastructure Design SKIP across the board, Code Generation + Build and Test ALWAYS; sequence API Service → Frontend SPA; Risk: Low)
+
+- [x] Application Design — Complete & Approved (2026-08-18; blanket approval; `background-process-visibility-application-design-plan.md`; updated `components.md`, `component-methods.md`, `services.md`, `component-dependency.md`, `application-design.md` in place with dated addenda; new Background Activity Component [API Service] -- `getActivitySummary()` single endpoint, read-only against `ingestion_runs`/`recategorization_jobs`; Frontend SPA addendum for the nav indicator + detail panel; no Database/Ingestion Worker Service changes)
+- [x] Units Generation — Skipped (2026-08-18; reuses all 4 existing units, per approved execution plan)
+
+## INCEPTION PHASE (this change): COMPLETE
+
+### 🟢 CONSTRUCTION PHASE (this change, per-unit loop)
+Build order: API Service → Frontend SPA (Database, Ingestion Worker Service unaffected)
+- [ ] Construction — pending
+  - [x] API Service — Functional Design: Complete (2026-08-18; blanket approval; `business-rules.md` AR-35..37, `domain-entities.md` +`ActivitySummaryDTO`/`CurrentActivityDTO`/`RecentActivityEntryDTO`, `business-logic-model.md` +Background Activity Component section)
+  - [x] Frontend SPA — Functional Design: Complete (2026-08-18; blanket approval; `frontend-components.md` +NavBar ActivityIndicator/ActivityPanel addendum -- pulsing indicator + click-to-open popover, no new route)
+  - [x] API Service — Code Generation: Complete (2026-08-18; blanket approval; new `background_activity/` package [schemas.py, repository.py, service.py, router.py], 1 endpoint `GET /background-activity/summary`; `main.py` router registration; 14 new tests, 253/253 unit tests passing [up from 239]; `docker compose build api-service` verified clean)
+
+**UNIT: API SERVICE — COMPLETE (for this feature)**
+  - [x] Frontend SPA — Code Generation: Complete (2026-08-18; blanket approval; found+fixed a real Functional Design gap during implementation -- idle-state indicator corrected from "renders nothing" to "always clickable, low visual weight", since history [US-11.3] must stay reachable regardless of running state; `types.ts` +4 DTOs, new `api/backgroundActivity.ts`, `NavBar.tsx` +`ActivityIndicator` [3s poll, click-to-open panel]; `NavBar.test.tsx` +4 new tests; 99/99 frontend tests passing [up from 95]; clean `eslint`+`tsc -b`+`vite build`+`docker compose build frontend`)
+
+**UNIT: FRONTEND SPA — COMPLETE (for this feature)**
+**ALL 2 AFFECTED UNITS COMPLETE — proceeding to Build and Test**
+
+## CONSTRUCTION PHASE (Background Process Visibility): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-18; `background-process-visibility-build-and-test-summary.md`; both affected services rebuilt + redeployed against the real live stack, both healthy; live-verified `GET /background-activity/summary` with a minted JWT -- caught a genuinely real running recategorization_job at check time; real browser-based visual verification confirmed the pulsing indicator + click-to-open panel render correctly against live data; deployed frontend bundle confirmed containing new markup; 18 new tests, zero regressions [253/253 API Service, 99/99 Frontend]; no migrations, no schema changes)
+
+**Background Process Visibility: COMPLETE** — build and test approved 2026-08-18; both changed services (API Service, Frontend SPA) live and healthy on `main`'s working tree, not yet committed to git.
