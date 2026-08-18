@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "transactagent-db",
     "mlx-tune>=0.6,<1.0",
-    "clearml>=1.16,<2.0",
+    "clearml>=2.0,<3.0",
     "openai>=1.30,<2.0",
     "pydantic>=2.6,<3.0",
     "pydantic-settings>=2.2,<3.0",

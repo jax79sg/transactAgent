@@ -413,7 +413,7 @@ wheels = [
 
 [[package]]
 name = "clearml"
-version = "1.18.0"
+version = "2.1.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -433,7 +433,7 @@ dependencies = [
     { name = "urllib3" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/da/5ab6744cf177cf1256c72e2436a48eba1d1b612d5aab0f7e6266d957c59b/clearml-1.18.0-py2.py3-none-any.whl", hash = "sha256:fe53ffcfdb0799150ad5ae1ca95bdbd568e570cbde2e35a65474e36606a899d0", size = 1174933, upload-time = "2025-03-09T17:03:06.894Z" },
+    { url = "https://files.pythonhosted.org/packages/42/d8/f1170567cef2819893fddb5477497cec713ba92045427ac446014dc29ac8/clearml-2.1.11-py2.py3-none-any.whl", hash = "sha256:97e68dec54c1d638aba3e61afa3c3e0a5bd581872308ad9bfb01eb8dfafff642", size = 1403449, upload-time = "2026-08-07T07:43:27.036Z" },
 ]
 
 [[package]]
@@ -1228,7 +1228,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "clearml", specifier = ">=1.16,<2.0" },
+    { name = "clearml", specifier = ">=2.0,<3.0" },
     { name = "mlx-tune", specifier = ">=0.6,<1.0" },
     { name = "openai", specifier = ">=1.30,<2.0" },
     { name = "pydantic", specifier = ">=2.6,<3.0" },
@@ -1980,11 +1980,11 @@ wheels = [
 
 [[package]]
 name = "pyjwt"
-version = "2.9.0"
+version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fb/68/ce067f09fca4abeca8771fe667d89cc347d1e99da3e093112ac329c6020e/pyjwt-2.9.0.tar.gz", hash = "sha256:7e1e5b56cc735432a7369cbfa0efe50fa113ebecdc04ae6922deba8b84582d0c", size = 78825, upload-time = "2024-08-01T15:01:08.445Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/84/0fdf9b18ba31d69877bd39c9cd6052b47f3761e9910c15de788e519f079f/PyJWT-2.9.0-py3-none-any.whl", hash = "sha256:3b02fb0f44517787776cf48f2ae25d8e14f300e6d7545a4315cee571a415e850", size = 22344, upload-time = "2024-08-01T15:01:06.481Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
 ]
 
 [[package]]
