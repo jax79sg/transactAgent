@@ -132,11 +132,11 @@ function DisagreementTable() {
           </tr>
         </thead>
         <tbody>
-          {items.map((disagreement) => (
+          {items.map((disagreement, index) => (
             <tr
               key={disagreement.id}
               data-testid={`disagreement-row-${disagreement.id}`}
-              className="border-b border-slate-100"
+              className={`border-b border-slate-100 ${index % 2 === 1 ? "bg-slate-100" : "bg-white"}`}
             >
               <td>{disagreement.candidateTransaction.transactionDate}</td>
               <td>{disagreement.candidateTransaction.description}</td>
@@ -336,11 +336,11 @@ export function ReviewPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((proposal) => (
+              {items.map((proposal, index) => (
                 <tr
                   key={proposal.id}
                   data-testid={`review-row-${proposal.id}`}
-                  className="border-b border-slate-100"
+                  className={`border-b border-slate-100 ${index % 2 === 1 ? "bg-slate-100" : "bg-white"}`}
                 >
                   <td>
                     <input
