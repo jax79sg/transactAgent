@@ -1,6 +1,13 @@
 # Bank Transaction Insights
 
-[![CI](https://github.com/jax79sg/transactAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/ci.yml)
+[![Database](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml)
+[![API Service](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml)
+[![Ingestion Worker](https://github.com/jax79sg/transactAgent/actions/workflows/test-ingestion-worker.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-ingestion-worker.yml)
+[![Frontend](https://github.com/jax79sg/transactAgent/actions/workflows/test-frontend.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-frontend.yml)
+[![Model Training](https://github.com/jax79sg/transactAgent/actions/workflows/lint-model-training.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/lint-model-training.yml)
+[![Docker Build](https://github.com/jax79sg/transactAgent/actions/workflows/docker-build.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/docker-build.yml)
+[![Secrets Scan](https://github.com/jax79sg/transactAgent/actions/workflows/secrets-scan.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/secrets-scan.yml)
+[![Dependency Scan](https://github.com/jax79sg/transactAgent/actions/workflows/dependency-scan.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/dependency-scan.yml)
 
 A self-hosted, single-user web app that pulls your bank statement PDFs from a private Google Drive folder, extracts transactions with an LLM, auto-categorizes them (learning from your corrections over time), and gives you a filterable transaction table plus financial dashboards. Fully containerized — one `docker-compose up` runs the whole thing on your own machine.
 
