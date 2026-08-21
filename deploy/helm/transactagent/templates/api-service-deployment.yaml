@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-service
+  namespace: {{ .Values.namespace }}
+spec:
+  # No `replicas:` field here -- omitted deliberately so the HPA (api-service-hpa.yaml)
+  # owns replica count from the moment it's created, rather than fighting Helm over it
+  # on every upgrade.
+  selector:
+    matchLabels:
+      app: api-service
+  template:
+    metadata:
+      labels:
+        app: api-service
+    spec:
+      containers:
+        - name: api-service
+          image: "{{ .Values.image.registry }}/transactagent-api-service:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: { name: transactagent-config }
+            - secretRef: { name: transactagent-secrets }
+          env:
+            - name: DB_HOST
+              value: database
+            - name: DB_PORT
+              value: "5432"
+            - name: QDRANT_HOST
+              value: vector-db
+            - name: QDRANT_PORT
+              value: "6333"
+          resources:
+            {{- toYaml .Values.apiService.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10

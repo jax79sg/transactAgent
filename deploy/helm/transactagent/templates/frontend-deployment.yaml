@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespace }}
+spec:
+  # No `replicas:` field -- owned by the HPA (frontend-hpa.yaml), same reasoning as
+  # api-service-deployment.yaml.
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: "{{ .Values.image.registry }}/transactagent-frontend:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          env:
+            # Resolves the frontend's runtime API-URL derivation problem identified in
+            # Requirements (k8s-deployment-requirements.md's "Key Design Resolution"):
+            # the frontend's default same-host-port logic doesn't work behind a single
+            # Ingress, so this is set explicitly via the existing config.js override
+            # mechanism (frontend/src/config.ts), no frontend code change needed.
+            - name: API_BASE_URL
+              value: "https://{{ .Values.ingress.host }}/api"
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
