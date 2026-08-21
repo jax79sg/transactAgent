@@ -19,6 +19,11 @@ image:
 ingress:
   # Adjust once ingress-nginx's Service is actually running and OrbStack has assigned
   # it a real *.orb.local hostname -- this is a starting-point default, not observed.
+  # No separate "scheme" value: the same host is legitimately reachable as both
+  # OrbStack's auto-upgraded HTTPS (the host machine) and plain HTTP (another device
+  # on the network via a hosts-file entry, no cert trust) -- see configmap.yaml's
+  # FRONTEND_ORIGIN and frontend-deployment.yaml's API_BASE_PATH, which both handle
+  # this by matching whatever scheme actually loaded the page rather than assuming one.
   host: transactagent.k8s.orb.local
   className: nginx
 

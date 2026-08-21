@@ -24,10 +24,14 @@ spec:
             # Resolves the frontend's runtime API-URL derivation problem identified in
             # Requirements (k8s-deployment-requirements.md's "Key Design Resolution"):
             # the frontend's default same-host-port logic doesn't work behind a single
-            # Ingress, so this is set explicitly via the existing config.js override
-            # mechanism (frontend/src/config.ts), no frontend code change needed.
-            - name: API_BASE_URL
-              value: "https://{{ .Values.ingress.host }}/api"
+            # Ingress. API_BASE_PATH (not API_BASE_URL) is deliberately scheme/host-less
+            # -- config.ts combines it with whatever origin the page was actually
+            # loaded through, so this works correctly whether reached via OrbStack's
+            # auto-upgraded HTTPS (the host machine) or plain HTTP (another device on
+            # the network, via a hosts-file entry -- see values.yaml's ingress.scheme
+            # comment for why a single fixed scheme can't satisfy both).
+            - name: API_BASE_PATH
+              value: /api
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           readinessProbe:
