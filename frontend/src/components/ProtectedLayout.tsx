@@ -11,9 +11,9 @@ export function ProtectedLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <NavBar />
-      <main className="mx-auto max-w-6xl px-6 py-6">
+      <main className="mx-auto max-w-6xl px-6 py-6 dark:text-slate-100">
         <Outlet />
       </main>
     </div>

@@ -477,4 +477,24 @@ Tracked separately (base project + all prior post-completion changes above uncha
 
 - [x] Build and Test — Complete (2026-08-19; `recategorization-scope-narrowing-build-and-test-summary.md`; redeployed against the real live stack, healthy; live-verified the actual deployed function against placeholder rows inside a rolled-back DB transaction [zero data committed, no real correction triggered] -- confirmed an exact-match already-categorized candidate now gets zero proposal at all [previously always PENDING even at score 100], and the surviving UNSURE bucket's auto-apply behavior is genuinely unchanged; existing historical pending proposals from the old scope confirmed untouched)
 
-**Recategorization Scope Narrowing: COMPLETE** — build and test approved 2026-08-19; ingestion-worker live and healthy on `main`'s working tree, not yet committed to git.
+**Recategorization Scope Narrowing: COMPLETE** — build and test approved 2026-08-19; ingestion-worker live and healthy on `main`'s working tree, committed 2026-08-21 (`df19a24`).
+
+---
+
+## Post-Completion Change: Dark Mode (GitHub Issue #1)
+
+Tracked separately (base project + all prior post-completion changes above unchanged/COMPLETE). Source: GitHub issue #1 ("Need a dark mode"). Frontend SPA only — no Database/Ingestion Worker Service/API Service changes.
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-21; `dark-mode-requirements.md`; 8 FRs, 6 NFRs; 1 round of 6 questions, all answered, no contradictions — default to OS preference with manual NavBar-toggle override [Q1=C/Q2=A], `localStorage` persistence [Q3=A], entire app including Chart.js charts in scope [Q4=A], polished/accessible design pass rather than a mechanical color swap [Q5=B], no palette constraints [Q6=A])
+- [x] User Stories — Complete & Approved (2026-08-21; `dark-mode-user-stories-assessment.md` [Execute=Yes]; `dark-mode-story-generation-plan.md` approved [no open questions -- fully determined by established precedent]; `dark-mode-stories.md` generated -- Epic 12, 4 stories [US-12.1..12.4] covering FR-DM-1..8/NFR-DM-1..6; `personas.md` unchanged)
+- [x] Workflow Planning — Complete & Approved (2026-08-21; `dark-mode-execution-plan.md`; Application Design SKIP [no new component/service], Units Generation SKIP [existing Frontend SPA unit reused], per-unit Functional Design/NFR Requirements/NFR Design/Infrastructure Design all SKIP [pure presentation change, no business logic/tech-stack/infra change], Code Generation + Build and Test ALWAYS; single unit affected -- Frontend SPA only; Risk: Low-Medium)
+
+## INCEPTION PHASE (this change): COMPLETE
+
+### 🟢 CONSTRUCTION PHASE (this change, per-unit loop)
+Frontend SPA only — Database, Ingestion Worker Service, API Service unaffected
+- [ ] Construction — pending
+  - [x] Frontend SPA — Code Generation: Complete & Approved (2026-08-21; `frontend-dark-mode-code-generation-plan.md`, all 11 steps; new `ThemeContext.tsx`/`chartTheme.ts`/`ThemeContext.test.tsx`; `tailwind.config.js`/`index.html`/`main.tsx`/`NavBar.tsx`/`ProtectedLayout.tsx`/`ErrorBoundary.tsx`/all 7 pages/`chartColors.ts` modified; 110/110 unit tests passing [up from 99]; `tsc -b`+`eslint`+`vite build` all clean; live-verified LoginPage in both modes via a temporary dev-server container against the real running api-service; authenticated-page click-through deferred -- no real credentials used against live production data, noted honestly per `dark-mode-summary.md`)
+
+**UNIT: FRONTEND SPA — COMPLETE (for this feature)**
+**ALL UNITS COMPLETE (for this feature — only the Frontend SPA unit was affected) — proceeding to Build and Test**

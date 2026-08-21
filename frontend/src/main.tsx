@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ThemeProvider } from "./context/ThemeContext";
 import "./lib/chartSetup";
 import "./index.css";
 
@@ -17,9 +18,11 @@ if (!rootElement) throw new Error("Root element #root not found");
 createRoot(rootElement).render(
   <StrictMode>
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
 );

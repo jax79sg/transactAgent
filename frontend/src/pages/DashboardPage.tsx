@@ -17,7 +17,9 @@ import {
   rejectMatch,
 } from "../api/recurringPayments";
 import type { BulkImportRow, DashboardFilterState, RecurringPaymentFrequency, RecurringPaymentStatus } from "../api/types";
+import { useTheme } from "../context/ThemeContext";
 import { CATEGORICAL_PALETTE, OTHER_LABEL, barMarkStyle, buildCategoricalSeries, lineMarkStyle } from "../lib/chartColors";
+import { getChartTheme } from "../lib/chartTheme";
 
 function defaultDateRange(): DashboardFilterState {
   const today = new Date();
@@ -31,7 +33,7 @@ function defaultDateRange(): DashboardFilterState {
 function DisclosureBanner({ approximateCount, excludedCount }: { approximateCount: number; excludedCount: number }) {
   if (approximateCount === 0 && excludedCount === 0) return null;
   return (
-    <p className="mb-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800">
+    <p className="mb-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
       {approximateCount > 0 && `${approximateCount} transaction(s) use an approximate exchange rate. `}
       {excludedCount > 0 && `${excludedCount} transaction(s) excluded (no exchange rate available).`}
     </p>
@@ -53,7 +55,7 @@ function DateRangeFilter({
           type="date"
           value={filter.dateFrom}
           onChange={(e) => onChange({ ...filter, dateFrom: e.target.value })}
-          className="rounded border border-slate-300 px-2 py-1"
+          className="rounded border border-slate-300 px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         />
       </label>
       <label className="flex items-center gap-2">
@@ -62,7 +64,7 @@ function DateRangeFilter({
           type="date"
           value={filter.dateTo}
           onChange={(e) => onChange({ ...filter, dateTo: e.target.value })}
-          className="rounded border border-slate-300 px-2 py-1"
+          className="rounded border border-slate-300 px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
         />
       </label>
     </div>
@@ -78,6 +80,7 @@ function monthBounds(month: string): { dateFrom: string; dateTo: string } {
 
 function CategoryTrendsTab({ filter }: { filter: DashboardFilterState }) {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const { data, isPending } = useQuery({
     queryKey: ["dashboards", "category-trends", filter],
     queryFn: () => getCategoryTrends(filter),
@@ -102,6 +105,7 @@ function CategoryTrendsTab({ filter }: { filter: DashboardFilterState }) {
       <Bar
         data={{ labels: months, datasets }}
         options={{
+          ...getChartTheme<"bar">(theme).options,
           onClick: (_evt, elements) => {
             if (elements.length === 0) return;
             const { datasetIndex, index } = elements[0];
@@ -117,6 +121,7 @@ function CategoryTrendsTab({ filter }: { filter: DashboardFilterState }) {
 }
 
 function CashFlowTab({ filter }: { filter: DashboardFilterState }) {
+  const { theme } = useTheme();
   const { data, isPending } = useQuery({
     queryKey: ["dashboards", "cash-flow", filter],
     queryFn: () => getCashFlow(filter),
@@ -125,6 +130,8 @@ function CashFlowTab({ filter }: { filter: DashboardFilterState }) {
   if (isPending) return <p>Loading...</p>;
   if (!data) return null;
 
+  const chartTheme = getChartTheme<"line">(theme);
+
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
@@ -132,11 +139,24 @@ function CashFlowTab({ filter }: { filter: DashboardFilterState }) {
         data={{
           labels: data.series.map((p) => p.month),
           datasets: [
-            { label: "Income", data: data.series.map((p) => Number(p.incomeSgd)), ...lineMarkStyle(CATEGORICAL_PALETTE[0]) },
-            { label: "Expenses", data: data.series.map((p) => Number(p.expenseSgd)), ...lineMarkStyle(CATEGORICAL_PALETTE[1]) },
-            { label: "Net", data: data.series.map((p) => Number(p.netSgd)), ...lineMarkStyle(CATEGORICAL_PALETTE[2]) },
+            {
+              label: "Income",
+              data: data.series.map((p) => Number(p.incomeSgd)),
+              ...lineMarkStyle(CATEGORICAL_PALETTE[0], chartTheme.surfaceColor),
+            },
+            {
+              label: "Expenses",
+              data: data.series.map((p) => Number(p.expenseSgd)),
+              ...lineMarkStyle(CATEGORICAL_PALETTE[1], chartTheme.surfaceColor),
+            },
+            {
+              label: "Net",
+              data: data.series.map((p) => Number(p.netSgd)),
+              ...lineMarkStyle(CATEGORICAL_PALETTE[2], chartTheme.surfaceColor),
+            },
           ],
         }}
+        options={chartTheme.options}
       />
     </div>
   );
@@ -144,6 +164,7 @@ function CashFlowTab({ filter }: { filter: DashboardFilterState }) {
 
 function BankBreakdownTab({ filter }: { filter: DashboardFilterState }) {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const { data, isPending } = useQuery({
     queryKey: ["dashboards", "bank-breakdown", filter],
     queryFn: () => getBankBreakdown(filter),
@@ -168,6 +189,7 @@ function BankBreakdownTab({ filter }: { filter: DashboardFilterState }) {
       <Bar
         data={{ labels: months, datasets }}
         options={{
+          ...getChartTheme<"bar">(theme).options,
           onClick: (_evt, elements) => {
             if (elements.length === 0) return;
             const { datasetIndex, index } = elements[0];
@@ -190,10 +212,10 @@ const STATUS_LABELS: Record<RecurringPaymentStatus, string> = {
 };
 
 const STATUS_STYLES: Record<RecurringPaymentStatus, string> = {
-  due_soon: "bg-amber-100 text-amber-800",
-  overdue: "bg-red-100 text-red-800",
-  pending_review: "bg-blue-100 text-blue-800",
-  paid: "bg-green-100 text-green-800",
+  due_soon: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  overdue: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  pending_review: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
+  paid: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
 };
 
 function StatusBadge({ status }: { status: RecurringPaymentStatus }) {
@@ -283,13 +305,13 @@ function RecurringPaymentsTab() {
       <section className="mb-6">
         <h2 className="mb-2 font-medium">Recurring Payments</h2>
         {(payments?.length ?? 0) === 0 ? (
-          <p data-testid="recurring-payments-empty-state" className="text-sm text-slate-500">
+          <p data-testid="recurring-payments-empty-state" className="text-sm text-slate-500 dark:text-slate-400">
             No recurring payments yet.
           </p>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500">
+              <tr className="text-left text-slate-500 dark:text-slate-400">
                 <th>Name</th>
                 <th>Amount</th>
                 <th>Due</th>
@@ -299,7 +321,11 @@ function RecurringPaymentsTab() {
             </thead>
             <tbody>
               {payments!.map((payment) => (
-                <tr key={payment.id} data-testid={`recurring-payment-row-${payment.id}`} className="border-b border-slate-100">
+                <tr
+                  key={payment.id}
+                  data-testid={`recurring-payment-row-${payment.id}`}
+                  className="border-b border-slate-100 dark:border-slate-800"
+                >
                   <td>{payment.name}</td>
                   <td>{payment.expectedAmount}</td>
                   <td>
@@ -333,20 +359,20 @@ function RecurringPaymentsTab() {
             placeholder="Name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="rounded border px-2 py-1"
+            className="rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <input
             data-testid="new-recurring-payment-amount"
             placeholder="Amount"
             value={newAmount}
             onChange={(e) => setNewAmount(e.target.value)}
-            className="w-24 rounded border px-2 py-1"
+            className="w-24 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <select
             data-testid="new-recurring-payment-frequency"
             value={newFrequency}
             onChange={(e) => setNewFrequency(e.target.value as RecurringPaymentFrequency)}
-            className="rounded border px-2 py-1"
+            className="rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           >
             <option value="monthly">Monthly</option>
             <option value="annual">Annual</option>
@@ -357,7 +383,7 @@ function RecurringPaymentsTab() {
               placeholder="Due month"
               value={newDueMonth}
               onChange={(e) => setNewDueMonth(e.target.value)}
-              className="w-24 rounded border px-2 py-1"
+              className="w-24 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           )}
           <input
@@ -365,20 +391,24 @@ function RecurringPaymentsTab() {
             placeholder="Due day"
             value={newDueDay}
             onChange={(e) => setNewDueDay(e.target.value)}
-            className="w-24 rounded border px-2 py-1"
+            className="w-24 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
-          <button type="submit" data-testid="add-recurring-payment-button" className="rounded bg-slate-900 px-3 py-1 text-white">
+          <button
+            type="submit"
+            data-testid="add-recurring-payment-button"
+            className="rounded bg-slate-900 px-3 py-1 text-white dark:bg-slate-100 dark:text-slate-900"
+          >
             Add
           </button>
         </form>
         {createMutation.isError && (
-          <p data-testid="add-recurring-payment-error" className="mt-1 text-xs text-red-600">
+          <p data-testid="add-recurring-payment-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
             Couldn't add that recurring payment -- check the values and try again.
           </p>
         )}
 
         <div className="mt-4">
-          <label className="mb-1 block text-xs text-slate-500">
+          <label className="mb-1 block text-xs text-slate-500 dark:text-slate-400">
             Bulk import (one per line: Name, Amount, Frequency, DueDay -- or DueMonth, DueDay for annual)
           </label>
           <textarea
@@ -386,18 +416,18 @@ function RecurringPaymentsTab() {
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
             rows={3}
-            className="w-full rounded border px-2 py-1 text-sm"
+            className="w-full rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <button
             data-testid="bulk-import-button"
             onClick={() => bulkImportMutation.mutate(parseBulkImportText(bulkText))}
             disabled={bulkText.trim().length === 0}
-            className="mt-1 rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-50"
+            className="mt-1 rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
           >
             Import
           </button>
           {bulkResult && (
-            <p data-testid="bulk-import-result" className="mt-1 text-xs text-slate-600">
+            <p data-testid="bulk-import-result" className="mt-1 text-xs text-slate-600 dark:text-slate-300">
               Added {bulkResult.createdCount}. {bulkResult.failed.length > 0 && `${bulkResult.failed.length} row(s) failed.`}
             </p>
           )}
@@ -407,20 +437,32 @@ function RecurringPaymentsTab() {
       <section className="mb-6">
         <h2 className="mb-2 font-medium">Pending Matches</h2>
         {(matches?.length ?? 0) === 0 ? (
-          <p data-testid="pending-matches-empty-state" className="text-sm text-slate-500">
+          <p data-testid="pending-matches-empty-state" className="text-sm text-slate-500 dark:text-slate-400">
             Nothing waiting for review.
           </p>
         ) : (
           <ul className="text-sm">
             {matches!.map((match) => (
-              <li key={match.id} data-testid={`pending-match-row-${match.id}`} className="flex items-center gap-3 border-b border-slate-100 py-1">
+              <li
+                key={match.id}
+                data-testid={`pending-match-row-${match.id}`}
+                className="flex items-center gap-3 border-b border-slate-100 py-1 dark:border-slate-800"
+              >
                 <span className="flex-1">
                   {match.recurringPayment.name} — {match.transaction.description} ({match.amountAtMatch})
                 </span>
-                <button data-testid={`approve-match-${match.id}`} onClick={() => approveMutation.mutate(match.id)} className="text-slate-900 underline">
+                <button
+                  data-testid={`approve-match-${match.id}`}
+                  onClick={() => approveMutation.mutate(match.id)}
+                  className="text-slate-900 underline dark:text-slate-100"
+                >
                   Approve
                 </button>
-                <button data-testid={`reject-match-${match.id}`} onClick={() => rejectMutation.mutate(match.id)} className="text-slate-500 underline">
+                <button
+                  data-testid={`reject-match-${match.id}`}
+                  onClick={() => rejectMutation.mutate(match.id)}
+                  className="text-slate-500 underline dark:text-slate-400"
+                >
                   Reject
                 </button>
               </li>
@@ -432,27 +474,31 @@ function RecurringPaymentsTab() {
       <section>
         <h2 className="mb-2 font-medium">Detected Recurring Charges</h2>
         {(suggestions?.length ?? 0) === 0 ? (
-          <p data-testid="suggestions-empty-state" className="text-sm text-slate-500">
+          <p data-testid="suggestions-empty-state" className="text-sm text-slate-500 dark:text-slate-400">
             Nothing new detected.
           </p>
         ) : (
           <ul className="text-sm">
             {suggestions!.map((suggestion) => (
-              <li key={suggestion.id} data-testid={`suggestion-row-${suggestion.id}`} className="flex items-center gap-3 border-b border-slate-100 py-1">
+              <li
+                key={suggestion.id}
+                data-testid={`suggestion-row-${suggestion.id}`}
+                className="flex items-center gap-3 border-b border-slate-100 py-1 dark:border-slate-800"
+              >
                 <span className="flex-1">
                   {suggestion.descriptionPattern} — {suggestion.suggestedAmount} ({suggestion.occurrenceCount}x)
                 </span>
                 <button
                   data-testid={`add-suggestion-${suggestion.id}`}
                   onClick={() => addSuggestionMutation.mutate(suggestion.id)}
-                  className="text-slate-900 underline"
+                  className="text-slate-900 underline dark:text-slate-100"
                 >
                   Add
                 </button>
                 <button
                   data-testid={`dismiss-suggestion-${suggestion.id}`}
                   onClick={() => dismissSuggestionMutation.mutate(suggestion.id)}
-                  className="text-slate-500 underline"
+                  className="text-slate-500 underline dark:text-slate-400"
                 >
                   Dismiss
                 </button>
@@ -474,7 +520,7 @@ export function DashboardPage() {
       <h1 className="mb-4 text-xl font-semibold">Dashboard</h1>
       <DateRangeFilter filter={dashboardFilter} onChange={setFilter} />
       <Tabs.Root defaultValue="category-trends">
-        <Tabs.List className="mb-4 flex gap-4 border-b border-slate-200">
+        <Tabs.List className="mb-4 flex gap-4 border-b border-slate-200 dark:border-slate-700">
           <Tabs.Trigger value="category-trends" className="px-2 py-2 data-[state=active]:font-semibold">
             Category Trends
           </Tabs.Trigger>

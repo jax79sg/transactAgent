@@ -89,8 +89,8 @@ function CategorySelect({
         data-testid={`category-cell-${transaction.id}`}
         className={
           transaction.categorySource === "unsure"
-            ? "rounded bg-amber-100 px-2 py-1 text-amber-800"
-            : "rounded px-2 py-1 hover:bg-slate-100"
+            ? "rounded bg-amber-100 px-2 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            : "rounded px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
         }
         onClick={() => {
           setEditing(true);
@@ -113,11 +113,17 @@ function CategorySelect({
       onValueChange={(categoryId) => mutation.mutate(categoryId)}
       onOpenChange={(open) => !open && setEditing(false)}
     >
-      <Select.Trigger data-testid={`category-select-${transaction.id}`} className="rounded border px-2 py-1">
+      <Select.Trigger
+        data-testid={`category-select-${transaction.id}`}
+        className="rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+      >
         <Select.Value placeholder={transaction.category.name} />
       </Select.Trigger>
       <Select.Portal>
-        <Select.Content className="max-h-80 rounded border bg-white shadow-lg" position="popper">
+        <Select.Content
+          className="max-h-80 rounded border bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800"
+          position="popper"
+        >
           {/* Radix's own viewport already scrolls internally (overflow-y: auto), but
               with no visible affordance a list this long (50+ categories, alphabetical
               after the used ones) just looks like it ends at the screen edge on
@@ -126,17 +132,21 @@ function CategorySelect({
               fold with nothing hinting more existed. These buttons are Radix's built-in
               fix: a visible chevron at each edge, shown only when there's more to
               scroll that way, that also auto-scrolls on hover. */}
-          <Select.ScrollUpButton className="flex items-center justify-center bg-white py-1 text-slate-500">
+          <Select.ScrollUpButton className="flex items-center justify-center bg-white py-1 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             ▲
           </Select.ScrollUpButton>
           <Select.Viewport>
             {activeCategories.map((c) => (
-              <Select.Item key={c.id} value={c.id} className="cursor-pointer px-3 py-1 hover:bg-slate-100">
+              <Select.Item
+                key={c.id}
+                value={c.id}
+                className="cursor-pointer px-3 py-1 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-700"
+              >
                 <Select.ItemText>{c.name}</Select.ItemText>
               </Select.Item>
             ))}
           </Select.Viewport>
-          <Select.ScrollDownButton className="flex items-center justify-center bg-white py-1 text-slate-500">
+          <Select.ScrollDownButton className="flex items-center justify-center bg-white py-1 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
             ▼
           </Select.ScrollDownButton>
         </Select.Content>
@@ -158,7 +168,7 @@ function EmbeddingStatusBadge({ status }: { status: TransactionDTO["embeddingSta
       title={completed ? "Embedding: computed" : "Embedding: pending"}
       aria-label={completed ? "Embedding computed" : "Embedding pending"}
       className={`ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${
-        completed ? "bg-emerald-400" : "bg-slate-300"
+        completed ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-600"
       }`}
     />
   );
@@ -176,7 +186,9 @@ function TransactionRow({
   return (
     <tr
       data-testid={`transaction-row-${txn.id}`}
-      className={`border-b border-slate-100 ${index % 2 === 1 ? "bg-slate-100" : "bg-white"}`}
+      className={`border-b border-slate-100 dark:border-slate-800 ${
+        index % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-white dark:bg-slate-900"
+      }`}
     >
       <td className="py-2">{txn.transactionDate}</td>
       <td>
@@ -196,7 +208,7 @@ function TransactionRow({
         <Link
           to={askAiLinkFor(txn)}
           data-testid={`ask-ai-link-${txn.id}`}
-          className="text-xs text-slate-500 hover:text-slate-800 hover:underline"
+          className="text-xs text-slate-500 hover:text-slate-800 hover:underline dark:text-slate-400 dark:hover:text-slate-200"
         >
           Ask AI
         </Link>
@@ -207,11 +219,14 @@ function TransactionRow({
 
 function GroupHeaderRow({ group }: { group: GroupSummary }) {
   return (
-    <tr data-testid={`group-header-${group.groupKey}`} className="border-b border-slate-200 bg-slate-50">
+    <tr
+      data-testid={`group-header-${group.groupKey}`}
+      className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
+    >
       <td colSpan={8} className="py-2 font-medium">
         <div className="flex items-center justify-between">
           <span>{group.groupLabel}</span>
-          <span className="font-normal text-slate-500">
+          <span className="font-normal text-slate-500 dark:text-slate-400">
             {group.transactionCount} txn{group.transactionCount === 1 ? "" : "s"} &middot; Out{" "}
             {group.subtotalOutFlowSgd} &middot; In {group.subtotalInFlowSgd}
           </span>
@@ -266,7 +281,7 @@ export function TransactionsPage() {
         <input
           data-testid="text-search-input"
           placeholder="Search description..."
-          className="rounded border border-slate-300 px-3 py-1 text-sm"
+          className="rounded border border-slate-300 px-3 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           value={filter.textSearch ?? ""}
           onChange={(e) => updateFilter({ textSearch: e.target.value || undefined })}
         />
@@ -274,8 +289,8 @@ export function TransactionsPage() {
           data-testid="unsure-filter-toggle"
           className={
             filter.categorySource === "unsure"
-              ? "rounded bg-amber-500 px-3 py-1 text-sm text-white"
-              : "rounded border border-slate-300 px-3 py-1 text-sm"
+              ? "rounded bg-amber-500 px-3 py-1 text-sm text-white dark:bg-amber-600"
+              : "rounded border border-slate-300 px-3 py-1 text-sm dark:border-slate-600 dark:text-slate-300"
           }
           onClick={toggleUnsureFilter}
         >
@@ -283,7 +298,7 @@ export function TransactionsPage() {
         </button>
         <select
           data-testid="bank-filter-select"
-          className="rounded border border-slate-300 px-2 py-1 text-sm"
+          className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           value={filter.bank ?? ""}
           onChange={(e) => updateFilter({ bank: e.target.value || undefined })}
           onFocus={() => void refetchBanks()}
@@ -297,7 +312,7 @@ export function TransactionsPage() {
         </select>
         <select
           data-testid="category-filter-select"
-          className="rounded border border-slate-300 px-2 py-1 text-sm"
+          className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           value={filter.category ?? ""}
           onChange={(e) => updateFilter({ category: e.target.value || undefined })}
           onFocus={() => void refetchCategories()}
@@ -313,7 +328,7 @@ export function TransactionsPage() {
         </select>
         <select
           data-testid="group-by-select"
-          className="rounded border border-slate-300 px-2 py-1 text-sm"
+          className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           value={filter.groupBy ?? ""}
           onChange={(e) => updateFilter({ groupBy: (e.target.value || undefined) as TransactionFilterState["groupBy"] })}
         >
@@ -325,7 +340,7 @@ export function TransactionsPage() {
         </select>
         <button
           data-testid="export-csv-button"
-          className="ml-auto rounded border border-slate-300 px-3 py-1 text-sm"
+          className="ml-auto rounded border border-slate-300 px-3 py-1 text-sm dark:border-slate-600 dark:text-slate-300"
           onClick={handleExport}
         >
           Export CSV
@@ -337,7 +352,7 @@ export function TransactionsPage() {
       {data && (
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-left text-slate-500">
+            <tr className="border-b border-slate-200 text-left text-slate-500 dark:border-slate-700 dark:text-slate-400">
               <th className="py-2">Date</th>
               <th>Description</th>
               <th>Out-flow</th>
@@ -369,14 +384,16 @@ export function TransactionsPage() {
         </table>
       )}
 
-      {data && data.items.length === 0 && <p className="text-slate-500">No matching transactions.</p>}
+      {data && data.items.length === 0 && (
+        <p className="text-slate-500 dark:text-slate-400">No matching transactions.</p>
+      )}
 
       {data && (
         <div className="mt-4 flex items-center gap-3 text-sm">
           <button
             disabled={(filter.page ?? 1) <= 1}
             onClick={() => updateFilter({ page: (filter.page ?? 1) - 1 })}
-            className="rounded border px-2 py-1 disabled:opacity-40"
+            className="rounded border px-2 py-1 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
           >
             Previous
           </button>
@@ -386,7 +403,7 @@ export function TransactionsPage() {
           <button
             disabled={data.page * data.pageSize >= data.totalCount}
             onClick={() => updateFilter({ page: (filter.page ?? 1) + 1 })}
-            className="rounded border px-2 py-1 disabled:opacity-40"
+            className="rounded border px-2 py-1 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
           >
             Next
           </button>

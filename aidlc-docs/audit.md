@@ -2544,3 +2544,117 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Recategorization Scope Narrowing feature COMPLETE end-to-end (Requirements Analysis -> User Stories [skipped] -> Workflow Planning -> Construction [Ingestion Worker Service only] -> Build and Test), all stages approved.
 
 ---
+
+## Post-Completion Change: Dark Mode (GitHub Issue #1)
+**Timestamp**: 2026-08-21T00:00:00Z
+**User Input**: "Process top issue on Github and perform fix or feature add."
+**AI Response**: "Found `gh issue list` returns exactly one open issue: #1 'Need a dark mode' (enhancement), body: 'The current theme is not pleasant for my group of users. Please create a dark mode.' Found uncommitted, already-completed work from a prior session (Recategorization Scope Narrowing) sitting in the working tree -- asked the user how to handle it before starting new work; user chose to commit it first. Committed as `df19a24`. Proceeding to Requirements Analysis for the Dark Mode feature (Frontend SPA, brownfield, existing reverse-engineering artifacts loaded)."
+**Context**: Starting a new Post-Completion Change tracked separately from base project (COMPLETE) and all prior post-completion changes (COMPLETE). Source: GitHub issue #1.
+
+---
+
+## Requirements Analysis — Dark Mode (Questions Presented)
+**Timestamp**: 2026-08-21T00:05:00Z
+**User Input**: (none — inspected `frontend/tailwind.config.js`, `frontend/src/index.css`, `package.json` Radix deps, `src/pages`/`src/components`/`src/context` structure to ground the questions)
+**AI Response**: "Created `dark-mode-questions.md` with 6 questions covering toggle behavior (manual/OS-following/both), toggle placement, cross-session persistence, app scope (incl. Chart.js), visual-quality bar, and palette constraints. Presented to user, awaiting answers."
+**Context**: Requirements Analysis, Step 6 (Generate Clarifying Questions) for Dark Mode.
+
+---
+
+## Requirements Analysis — Dark Mode (Questions Answered)
+**Timestamp**: 2026-08-21T00:10:00Z
+**User Input**: "done" (answers filled directly in `dark-mode-questions.md`: Q1=C, Q2=A, Q3=A, Q4=A, Q5=B, Q6=A)
+**AI Response**: "Read and validated all 6 answers -- all present, no contradictions detected (default-to-OS-with-manual-override + localStorage persistence + full-app scope incl. charts + polished-pass quality bar are mutually consistent). Generated `dark-mode-requirements.md` (8 FRs, 6 NFRs) incorporating the answers verbatim in an Answers table."
+**Context**: Requirements Analysis Step 7 (Generate Requirements Document) complete for Dark Mode. Awaiting user approval before proceeding to User Stories/Workflow Planning.
+
+---
+
+## Requirements Analysis — Dark Mode — Approved
+**Timestamp**: 2026-08-21T00:15:00Z
+**User Input**: "Approve."
+**AI Response**: "Acknowledged. Requirements Analysis approved for Dark Mode. Proceeding to User Stories assessment (new user-facing feature spanning the whole app -- likely Execute=Yes per the intelligent assessment criteria)."
+**Context**: Requirements Analysis stage COMPLETE & APPROVED for Dark Mode. Proceeding to User Stories.
+
+---
+
+## User Stories — Dark Mode — Plan Presented
+**Timestamp**: 2026-08-21T00:20:00Z
+**User Input**: (none)
+**AI Response**: "Created `dark-mode-user-stories-assessment.md` (Execute=Yes -- meets 'New User Features' and 'User Experience Changes' High Priority criteria) and `dark-mode-story-generation-plan.md` (Epic-based, no new persona, no open questions since requirements.md's Q&A round already resolved every real ambiguity). Presenting plan for approval before generation."
+**AI Response (approval prompt)**: "Story generation plan ready for Dark Mode -- Epic-based breakdown, reusing the existing Account Owner persona, no new questions needed. Approve to proceed to generation, or request changes to the plan?"
+**Context**: User Stories Part 1 (Planning), Step 13 gate -- awaiting explicit plan approval before Part 2 (Generation).
+
+---
+
+## User Stories — Dark Mode — Plan Approved
+**Timestamp**: 2026-08-21T00:25:00Z
+**User Input**: "Approve"
+**AI Response**: "Acknowledged. Proceeding to User Stories generation (Part 2) for Dark Mode."
+**Context**: Story generation plan APPROVED. Proceeding to Part 2 (Generation).
+
+---
+
+## User Stories — Dark Mode — Generation Complete
+**Timestamp**: 2026-08-21T00:30:00Z
+**User Input**: (none)
+**AI Response**: "Generated `dark-mode-stories.md` -- Epic 12, 4 stories (US-12.1..12.4), Given/When/Then acceptance criteria + edge cases, all mapped to FR-DM-1..8/NFR-DM-1..6. `personas.md` unchanged, single existing Account Owner persona reused. All INVEST criteria checklist items marked complete in the story generation plan."
+**Context**: User Stories Part 2 (Generation) complete for Dark Mode. Awaiting user approval before proceeding to Workflow Planning.
+
+---
+
+## User Stories — Dark Mode — Approved
+**Timestamp**: 2026-08-21T00:35:00Z
+**User Input**: "Approve"
+**AI Response**: "Acknowledged. User Stories stage approved for Dark Mode. Proceeding to Workflow Planning."
+**Context**: User Stories stage COMPLETE & APPROVED for Dark Mode. Proceeding to Workflow Planning.
+
+---
+
+## Workflow Planning — Dark Mode
+**Timestamp**: 2026-08-21T00:40:00Z
+**User Input**: (none)
+**AI Response**: "Created `dark-mode-execution-plan.md`. Single unit affected: Frontend SPA only. Application Design SKIP (no new component/service/method signature -- theme toggle is client-side UI state, matches Recategorization Scope Narrowing / Similarity-Matching Normalization precedent), Units Generation SKIP (existing unit reused). Per-unit Functional Design/NFR Requirements/NFR Design/Infrastructure Design all SKIP (no business rules/data model, no new tech stack, no infra change). Code Generation + Build and Test ALWAYS. Risk: Low-Medium (no backend/data risk, but broad file-touch surface across all 7 pages + charts)."
+**AI Prompt**: "Ready to proceed with this plan?"
+**Context**: Workflow Planning -- awaiting explicit plan approval before proceeding to Code Generation for the Frontend SPA unit.
+
+---
+
+## Workflow Planning — Dark Mode — Approved
+**Timestamp**: 2026-08-21T00:45:00Z
+**User Input**: "Approve"
+**AI Response**: "Acknowledged. Workflow Planning approved for Dark Mode. Proceeding to Code Generation (Part 1 - Planning) for the Frontend SPA unit."
+**Context**: Workflow Planning stage COMPLETE & APPROVED. Proceeding to Construction: Code Generation.
+
+---
+
+## Code Generation — Frontend SPA (Dark Mode) — Plan Presented
+**Timestamp**: 2026-08-21T00:50:00Z
+**User Input**: (none — inspected `frontend/tailwind.config.js`, `index.html`, `main.tsx`, `App.tsx`, `AuthContext.tsx`, `NavBar.tsx`, `ProtectedLayout.tsx`, `ErrorBoundary.tsx`, `DashboardPage.tsx`'s chart usage, `chartColors.ts`, `tests/NavBar.test.tsx`, `tests/setup.ts`, and ran a color-utility-class census across `src/` [~130 slate/white occurrences] to ground the plan)
+**AI Response**: "Created `frontend-dark-mode-code-generation-plan.md`, 11 numbered steps: Tailwind `darkMode:'class'` strategy, FOUC-prevention inline script in `index.html`, new `ThemeContext` (OS-preference default + manual override precedence + localStorage persistence + cross-tab sync via storage event), wiring into `main.tsx`, NavBar toggle, shell components (ProtectedLayout/ErrorBoundary), a `dark:` styling pass across all 7 pages, Chart.js dark theming (new `chartTheme.ts` helper + `lineMarkStyle` surface-color parameterization), 2 new/modified test files, and a documentation summary. Presenting for approval."
+**Context**: Code Generation Part 1 (Planning) for Frontend SPA (Dark Mode) -- awaiting explicit plan approval before Part 2 (Generation).
+
+---
+
+## Code Generation — Frontend SPA (Dark Mode) — Plan Approved
+**Timestamp**: 2026-08-21T00:55:00Z
+**User Input**: "Approve"
+**AI Response**: "Acknowledged. Proceeding to Code Generation Part 2 (Generation) for Frontend SPA (Dark Mode), executing the 11-step plan in sequence."
+**Context**: Code Generation plan APPROVED. Proceeding to Part 2 (Generation).
+
+---
+
+## Code Generation — Frontend SPA (Dark Mode) — Generation Complete
+**Timestamp**: 2026-08-21T01:30:00Z
+**User Input**: (none)
+**AI Response**: "Executed all 11 plan steps. Created `ThemeContext.tsx` (OS-default + manual override + localStorage persistence + cross-tab sync, with a defensive mount-time class application found necessary during test-writing since index.html's FOUC script doesn't run in jsdom), `chartTheme.ts` (theme-aware Chart.js chrome), `ThemeContext.test.tsx` (8 tests). Modified `tailwind.config.js`, `index.html`, `main.tsx`, `NavBar.tsx` (+ToggleTheme control), `ProtectedLayout.tsx`, `ErrorBoundary.tsx`, all 7 pages (~130 dark: variant additions across existing slate/white/status-color utilities, careful to only add dark: variants rather than touch any existing light-mode class per NFR-DM-5), `chartColors.ts` (lineMarkStyle surface-color parameter), `NavBar.test.tsx` (+3 toggle tests), `DashboardPage.test.tsx` (+ThemeProvider wrapper, now required since DashboardPage calls useTheme() for chart theming), `tests/setup.ts` (+matchMedia polyfill, jsdom doesn't implement it). Verification: `tsc -b` clean, `eslint .` clean (0 errors), `vitest run` 110/110 passing (up from 99), `vite build` clean. Live visual verification via a temporary `node:20-alpine` dev-server container against the real running api-service (port 7878): LoginPage confirmed rendering correctly in dark mode [OS-preference default, enabled/disabled button states, error-message legibility] and in light mode [pixel-equivalent to pre-feature, confirming NFR-DM-5]; authenticated-page click-through not attempted -- no real user credentials available, and this is live production data [6000+ real transactions], so login was not brute-forced or bypassed. Authenticated-page dark-mode correctness relies on the code review + the full passing unit test suite instead, noted honestly rather than silently claimed as visually verified."
+**Context**: Code Generation Part 2 (Generation) complete for Frontend SPA (Dark Mode). Awaiting user approval before proceeding to Build and Test.
+
+---
+
+## Code Generation — Frontend SPA (Dark Mode) — Approved
+**Timestamp**: 2026-08-21T01:35:00Z
+**User Input**: "continue."
+**AI Response**: "Acknowledged. Code Generation approved for Frontend SPA (Dark Mode) -- only affected unit. Proceeding to Build and Test."
+**Context**: Code Generation stage COMPLETE & APPROVED. All units for this feature done (Frontend SPA only). Proceeding to Build and Test.
+
+---

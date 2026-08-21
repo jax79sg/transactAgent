@@ -26,9 +26,9 @@ function DriveConnectionCard() {
   }
 
   return (
-    <div className="rounded border border-slate-200 p-4">
+    <div className="rounded border border-slate-200 p-4 dark:border-slate-700">
       <h2 className="mb-2 font-medium">Google Drive</h2>
-      <p className="mb-3 text-sm text-slate-600">
+      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
         {status?.connected ? "Connected" : "Not connected"}
       </p>
       {/* Always shown, not just when disconnected: the only way to re-grant consent
@@ -37,7 +37,11 @@ function DriveConnectionCard() {
           grant otherwise leaves no way back into the flow at all. Caught live: a
           previously-connected credential silently kept returning 403s for the new
           write calls with no UI path to fix it (see aidlc-docs/audit.md 2026-08-08). */}
-      <button data-testid="connect-drive-button" className="rounded bg-slate-900 px-4 py-2 text-white" onClick={handleConnect}>
+      <button
+        data-testid="connect-drive-button"
+        className="rounded bg-slate-900 px-4 py-2 text-white dark:bg-slate-100 dark:text-slate-900"
+        onClick={handleConnect}
+      >
         {status?.connected ? "Reconnect Google Drive" : "Connect Google Drive"}
       </button>
     </div>
@@ -75,35 +79,42 @@ function CategoryRow({ category }: { category: CategoryDTO }) {
   });
 
   return (
-    <li className="flex items-center gap-3 border-b border-slate-100 py-2">
+    <li className="flex items-center gap-3 border-b border-slate-100 py-2 dark:border-slate-800">
       {renaming ? (
         <input
-          className="rounded border px-2 py-1"
+          className="rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => renameMutation.mutate()}
           autoFocus
         />
       ) : (
-        <span className={category.active ? "" : "text-slate-400 line-through"}>{category.name}</span>
+        <span className={category.active ? "" : "text-slate-400 line-through dark:text-slate-500"}>
+          {category.name}
+        </span>
       )}
-      {!category.active && <span className="text-xs text-slate-400">(inactive)</span>}
-      {category.isReserved && <span className="text-xs text-slate-400">(reserved)</span>}
+      {!category.active && <span className="text-xs text-slate-400 dark:text-slate-500">(inactive)</span>}
+      {category.isReserved && <span className="text-xs text-slate-400 dark:text-slate-500">(reserved)</span>}
       {!category.isReserved && (
         <div className="ml-auto flex gap-2 text-sm">
-          <button onClick={() => setRenaming(true)} className="text-slate-500 hover:text-slate-800">
+          <button
+            onClick={() => setRenaming(true)}
+            className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          >
             Rename
           </button>
           <Dialog.Root open={confirmingDelete} onOpenChange={setConfirmingDelete}>
             <Dialog.Trigger asChild>
-              <button className="text-red-500 hover:text-red-700">Remove</button>
+              <button className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                Remove
+              </button>
             </Dialog.Trigger>
             <Dialog.Portal>
               <Dialog.Overlay className="fixed inset-0 bg-black/30" />
-              <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white p-4 shadow-lg">
+              <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white p-4 shadow-lg dark:bg-slate-800 dark:text-slate-100">
                 <Dialog.Title>Remove "{category.name}"?</Dialog.Title>
                 {blockedCount !== null && (
-                  <p className="mt-2 text-sm text-red-600">
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">
                     Cannot remove: {blockedCount} transactions still use this category.
                   </p>
                 )}
@@ -139,7 +150,7 @@ function CategoryManagement() {
   });
 
   return (
-    <div className="rounded border border-slate-200 p-4">
+    <div className="rounded border border-slate-200 p-4 dark:border-slate-700">
       <h2 className="mb-2 font-medium">Categories</h2>
       <ul className="max-h-80 overflow-y-auto pr-1">{categories?.map((c) => <CategoryRow key={c.id} category={c} />)}</ul>
       <form
@@ -151,12 +162,15 @@ function CategoryManagement() {
       >
         <input
           data-testid="new-category-input"
-          className="rounded border px-2 py-1 text-sm"
+          className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           placeholder="New category name"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
         />
-        <button type="submit" className="rounded bg-slate-900 px-3 py-1 text-sm text-white">
+        <button
+          type="submit"
+          className="rounded bg-slate-900 px-3 py-1 text-sm text-white dark:bg-slate-100 dark:text-slate-900"
+        >
           Add
         </button>
       </form>
@@ -208,7 +222,7 @@ function RestartTargetLine({ settingName, target: initialTarget }: { settingName
 
   if (target.workerBusy === true) {
     return (
-      <li className="text-amber-700">
+      <li className="text-amber-700 dark:text-amber-400">
         {target.owningService}: worker is currently processing — wait for it to finish before restarting.
       </li>
     );
@@ -216,7 +230,13 @@ function RestartTargetLine({ settingName, target: initialTarget }: { settingName
 
   return (
     <li>
-      {target.owningService}: <code data-testid="restart-command" className="rounded bg-slate-100 px-1 py-0.5">{target.restartCommand}</code>
+      {target.owningService}:{" "}
+      <code
+        data-testid="restart-command"
+        className="rounded bg-slate-100 px-1 py-0.5 dark:bg-slate-800 dark:text-slate-100"
+      >
+        {target.restartCommand}
+      </code>
     </li>
   );
 }
@@ -250,18 +270,18 @@ function SettingConfirmDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/30" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white p-4 shadow-lg">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-white p-4 shadow-lg dark:bg-slate-800 dark:text-slate-100">
           <Dialog.Title>Change "{setting.name}"?</Dialog.Title>
           <p className="mt-2 text-sm">
             From <code>{setting.value}</code> to <code>{newValue}</code>.
           </p>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
             {setting.owningServices.join(" and ")} will need restarting to pick up this change.
           </p>
           <div className="mt-4 flex justify-end gap-2">
             <button onClick={() => onOpenChange(false)}>Cancel</button>
             <button
-              className="rounded bg-slate-900 px-3 py-1 text-white disabled:opacity-50"
+              className="rounded bg-slate-900 px-3 py-1 text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
               onClick={onConfirm}
               disabled={pending}
               data-testid="confirm-setting-change"
@@ -303,22 +323,33 @@ function SettingRow({ setting }: { setting: SettingDTO }) {
   });
 
   return (
-    <li className="border-b border-slate-100 py-2" data-testid={`setting-row-${setting.name}`}>
+    <li className="border-b border-slate-100 py-2 dark:border-slate-800" data-testid={`setting-row-${setting.name}`}>
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <span className="font-mono text-sm">{setting.name}</span>
-          {setting.isOverridden && <span className="ml-2 text-xs text-slate-400">(customized)</span>}
+          {setting.isOverridden && (
+            <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">(customized)</span>
+          )}
           {/* Sourced from the API's own SettingDTO.description (catalog.py), which
               mirrors .env.example's per-setting explanatory comments -- not
               hardcoded here, so it can never drift from the real reasoning. */}
-          <p className={`mt-1 text-xs ${setting.classification === "advanced" ? "text-amber-700" : "text-slate-500"}`}>
+          <p
+            className={`mt-1 text-xs ${
+              setting.classification === "advanced"
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-slate-500 dark:text-slate-400"
+            }`}
+          >
             {setting.description}
           </p>
         </div>
         {!editing && (
           <>
-            <span className="text-sm text-slate-600">{setting.value}</span>
-            <button onClick={() => setEditing(true)} className="text-slate-500 hover:text-slate-800">
+            <span className="text-sm text-slate-600 dark:text-slate-300">{setting.value}</span>
+            <button
+              onClick={() => setEditing(true)}
+              className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+            >
               Edit
             </button>
           </>
@@ -333,23 +364,32 @@ function SettingRow({ setting }: { setting: SettingDTO }) {
           }}
         >
           <input
-            className="rounded border px-2 py-1 text-sm"
+            className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             value={draftValue}
             onChange={(e) => setDraftValue(e.target.value)}
             data-testid={`setting-input-${setting.name}`}
           />
-          <span className="text-xs text-slate-400">{formatSettingType(setting)}</span>
-          <button type="submit" className="rounded bg-slate-900 px-2 py-1 text-xs text-white">
+          <span className="text-xs text-slate-400 dark:text-slate-500">{formatSettingType(setting)}</span>
+          <button
+            type="submit"
+            className="rounded bg-slate-900 px-2 py-1 text-xs text-white dark:bg-slate-100 dark:text-slate-900"
+          >
             Save
           </button>
-          <button type="button" onClick={() => setEditing(false)} className="text-xs text-slate-500">
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-xs text-slate-500 dark:text-slate-400"
+          >
             Cancel
           </button>
         </form>
       )}
-      {validationError && <p className="mt-1 text-sm text-red-600">{validationError}</p>}
+      {validationError && (
+        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationError}</p>
+      )}
       {result && (
-        <div className="mt-2 rounded bg-slate-50 p-2">
+        <div className="mt-2 rounded bg-slate-50 p-2 dark:bg-slate-800">
           <p className="text-sm">Saved.</p>
           <RestartGuidanceList settingName={setting.name} targets={result.restartGuidance} />
         </div>
@@ -375,7 +415,7 @@ function SettingHistoryList() {
   });
 
   return (
-    <div className="rounded border border-slate-200 p-4">
+    <div className="rounded border border-slate-200 p-4 dark:border-slate-700">
       <button
         onClick={() => setExpanded((e) => !e)}
         className="font-medium"
@@ -385,11 +425,12 @@ function SettingHistoryList() {
       </button>
       {expanded && (
         <ul className="mt-3 max-h-60 space-y-1 overflow-y-auto text-sm">
-          {history?.length === 0 && <li className="text-slate-400">No changes yet.</li>}
+          {history?.length === 0 && <li className="text-slate-400 dark:text-slate-500">No changes yet.</li>}
           {history?.map((entry) => (
             <li key={entry.id}>
               <span className="font-mono">{entry.settingName}</span>: {entry.previousValue ?? "(default)"} →{" "}
-              {entry.newValue} <span className="text-xs text-slate-400">({entry.changedAt})</span>
+              {entry.newValue}{" "}
+              <span className="text-xs text-slate-400 dark:text-slate-500">({entry.changedAt})</span>
             </li>
           ))}
         </ul>
@@ -425,7 +466,11 @@ function ApplicationSettingsSection() {
         return (
           <div
             key={category}
-            className={`rounded border p-4 ${hasAdvanced ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}
+            className={`rounded border p-4 ${
+              hasAdvanced
+                ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950"
+                : "border-slate-200 dark:border-slate-700"
+            }`}
             data-testid={`setting-category-${category}`}
           >
             <h3 className="mb-2 text-sm font-semibold">{category}</h3>

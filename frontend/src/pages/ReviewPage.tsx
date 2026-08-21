@@ -29,17 +29,21 @@ function BackupStatusPanel() {
 
   let content: ReactNode;
   if (!data || data.outcome === null) {
-    content = <p data-testid="backup-status-none" className="text-sm text-slate-500">No backups yet.</p>;
+    content = (
+      <p data-testid="backup-status-none" className="text-sm text-slate-500 dark:text-slate-400">
+        No backups yet.
+      </p>
+    );
   } else if (data.outcome === "success") {
     content = (
-      <p data-testid="backup-status-success" className="text-sm text-slate-600">
+      <p data-testid="backup-status-success" className="text-sm text-slate-600 dark:text-slate-300">
         Last backup succeeded at {new Date(data.lastRunAt as string).toLocaleString()}
         {data.transactionCount !== null && ` (${data.transactionCount} transactions)`}.
       </p>
     );
   } else if (data.failureCategory === "drive_connectivity") {
     content = (
-      <p data-testid="backup-status-failed-drive" className="text-sm text-amber-600">
+      <p data-testid="backup-status-failed-drive" className="text-sm text-amber-600 dark:text-amber-400">
         Backup failed -- Google Drive isn't connected.{" "}
         <Link to="/settings" className="underline">
           Reconnect Google Drive
@@ -49,14 +53,14 @@ function BackupStatusPanel() {
     );
   } else {
     content = (
-      <p data-testid="backup-status-failed-other" className="text-sm text-amber-600">
+      <p data-testid="backup-status-failed-other" className="text-sm text-amber-600 dark:text-amber-400">
         Last backup failed.
       </p>
     );
   }
 
   return (
-    <div data-testid="backup-status-panel" className="mb-6 rounded border border-slate-200 p-4">
+    <div data-testid="backup-status-panel" className="mb-6 rounded border border-slate-200 p-4 dark:border-slate-700">
       <h2 className="mb-2 font-medium">Backup Status</h2>
       {content}
     </div>
@@ -110,20 +114,20 @@ function DisagreementTable() {
   return (
     <div className="mb-6" data-testid="disagreement-section">
       <h2 className="mb-2 font-medium">Category Disagreements</h2>
-      <p className="mb-2 text-sm text-slate-500">
+      <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
         Similarity matching and the LLM classifier suggested different categories for these transactions -- pick
         one.
       </p>
 
       {singleActionError && (
-        <p data-testid="disagreement-single-action-error" className="mb-3 text-sm text-amber-600">
+        <p data-testid="disagreement-single-action-error" className="mb-3 text-sm text-amber-600 dark:text-amber-400">
           {singleActionError}
         </p>
       )}
 
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-slate-500">
+          <tr className="text-left text-slate-500 dark:text-slate-400">
             <th>Date</th>
             <th>Description</th>
             <th>Amount</th>
@@ -136,7 +140,9 @@ function DisagreementTable() {
             <tr
               key={disagreement.id}
               data-testid={`disagreement-row-${disagreement.id}`}
-              className={`border-b border-slate-100 ${index % 2 === 1 ? "bg-slate-100" : "bg-white"}`}
+              className={`border-b border-slate-100 dark:border-slate-800 ${
+                index % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-white dark:bg-slate-900"
+              }`}
             >
               <td>{disagreement.candidateTransaction.transactionDate}</td>
               <td>{disagreement.candidateTransaction.description}</td>
@@ -151,7 +157,7 @@ function DisagreementTable() {
                       chosenCategoryId: disagreement.similarityCategory.id,
                     })
                   }
-                  className="mr-2 text-slate-900 underline"
+                  className="mr-2 text-slate-900 underline dark:text-slate-100"
                 >
                   Use {disagreement.similarityCategory.name}
                 </button>
@@ -163,14 +169,14 @@ function DisagreementTable() {
                       chosenCategoryId: disagreement.llmCategory.id,
                     })
                   }
-                  className="mr-2 text-slate-900 underline"
+                  className="mr-2 text-slate-900 underline dark:text-slate-100"
                 >
                   Use {disagreement.llmCategory.name}
                 </button>
                 <button
                   data-testid={`disagreement-reject-${disagreement.id}`}
                   onClick={() => rejectMutation.mutate(disagreement.id)}
-                  className="text-slate-500 underline"
+                  className="text-slate-500 underline dark:text-slate-400"
                 >
                   Reject
                 </button>
@@ -271,7 +277,7 @@ export function ReviewPage() {
   const totalCount = data?.totalCount ?? 0;
   const hasNextPage = page * PAGE_SIZE < totalCount;
 
-  if (isPending) return <p className="text-sm text-slate-500">Loading...</p>;
+  if (isPending) return <p className="text-sm text-slate-500 dark:text-slate-400">Loading...</p>;
 
   return (
     <div>
@@ -282,13 +288,13 @@ export function ReviewPage() {
       <DisagreementTable />
 
       {singleActionError && (
-        <p data-testid="review-single-action-error" className="mb-3 text-sm text-amber-600">
+        <p data-testid="review-single-action-error" className="mb-3 text-sm text-amber-600 dark:text-amber-400">
           {singleActionError}
         </p>
       )}
 
       {items.length === 0 ? (
-        <p data-testid="review-empty-state" className="text-sm text-slate-500">
+        <p data-testid="review-empty-state" className="text-sm text-slate-500 dark:text-slate-400">
           No proposals waiting for review.
         </p>
       ) : (
@@ -307,7 +313,7 @@ export function ReviewPage() {
               data-testid="review-bulk-approve"
               disabled={selected.size === 0 || bulkApproveMutation.isPending}
               onClick={() => bulkApproveMutation.mutate(Array.from(selected))}
-              className="rounded bg-slate-900 px-3 py-1 text-sm text-white disabled:opacity-50"
+              className="rounded bg-slate-900 px-3 py-1 text-sm text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
             >
               Approve selected
             </button>
@@ -315,7 +321,7 @@ export function ReviewPage() {
               data-testid="review-bulk-reject"
               disabled={selected.size === 0 || bulkRejectMutation.isPending}
               onClick={() => bulkRejectMutation.mutate(Array.from(selected))}
-              className="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-50"
+              className="rounded border border-slate-300 px-3 py-1 text-sm disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
             >
               Reject selected
             </button>
@@ -323,7 +329,7 @@ export function ReviewPage() {
 
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500">
+              <tr className="text-left text-slate-500 dark:text-slate-400">
                 <th></th>
                 <th>Date</th>
                 <th>Description</th>
@@ -340,7 +346,9 @@ export function ReviewPage() {
                 <tr
                   key={proposal.id}
                   data-testid={`review-row-${proposal.id}`}
-                  className={`border-b border-slate-100 ${index % 2 === 1 ? "bg-slate-100" : "bg-white"}`}
+                  className={`border-b border-slate-100 dark:border-slate-800 ${
+                    index % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-white dark:bg-slate-900"
+                  }`}
                 >
                   <td>
                     <input
@@ -361,19 +369,22 @@ export function ReviewPage() {
                     <button
                       data-testid={`review-approve-${proposal.id}`}
                       onClick={() => approveMutation.mutate(proposal.id)}
-                      className="mr-2 text-slate-900 underline"
+                      className="mr-2 text-slate-900 underline dark:text-slate-100"
                     >
                       Approve
                     </button>
                     <button
                       data-testid={`review-reject-${proposal.id}`}
                       onClick={() => rejectMutation.mutate(proposal.id)}
-                      className="text-slate-500 underline"
+                      className="text-slate-500 underline dark:text-slate-400"
                     >
                       Reject
                     </button>
                     {failedIds.has(proposal.id) && (
-                      <p data-testid={`review-failed-${proposal.id}`} className="text-xs text-amber-600">
+                      <p
+                        data-testid={`review-failed-${proposal.id}`}
+                        className="text-xs text-amber-600 dark:text-amber-400"
+                      >
                         Couldn't process -- it may have already been resolved.
                       </p>
                     )}

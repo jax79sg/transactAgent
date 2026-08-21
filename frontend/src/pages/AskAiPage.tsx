@@ -55,7 +55,7 @@ export function AskAiPage() {
   return (
     <div className="max-w-2xl">
       <h1 className="mb-1 text-xl font-semibold">Ask AI</h1>
-      <p className="mb-4 text-sm text-slate-500">
+      <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
         Ask a question about your transactions in plain language. The answer is grounded in your own
         transaction data — not general financial advice.
       </p>
@@ -63,7 +63,7 @@ export function AskAiPage() {
       <form onSubmit={handleSubmit} className="space-y-3">
         <textarea
           data-testid="ask-ai-question-input"
-          className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           rows={3}
           placeholder='e.g. "Is the $33,000 outflow on 15 Jan likely a transfer to my credit account?"'
           value={question}
@@ -79,7 +79,7 @@ export function AskAiPage() {
               value={dateFrom}
               disabled={useAllTransactions}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40"
+              className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
           <label className="flex items-center gap-2">
@@ -90,7 +90,7 @@ export function AskAiPage() {
               value={dateTo}
               disabled={useAllTransactions}
               onChange={(e) => setDateTo(e.target.value)}
-              className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40"
+              className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
           <label className="flex items-center gap-2">
@@ -108,22 +108,28 @@ export function AskAiPage() {
           type="submit"
           data-testid="ask-ai-submit"
           disabled={!question.trim() || mutation.isPending}
-          className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
         >
           {mutation.isPending ? "Thinking..." : "Ask"}
         </button>
       </form>
 
       {mutation.isError && (
-        <p data-testid="ask-ai-error" className="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          data-testid="ask-ai-error"
+          className="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300"
+        >
           {errorMessage(mutation.error)}
         </p>
       )}
 
       {mutation.isSuccess && (
-        <div data-testid="ask-ai-answer" className="mt-4 rounded border border-slate-200 p-4 text-sm">
+        <div
+          data-testid="ask-ai-answer"
+          className="mt-4 rounded border border-slate-200 p-4 text-sm dark:border-slate-700"
+        >
           <p className="whitespace-pre-wrap">{mutation.data.answer}</p>
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             Based on {mutation.data.transactionsConsidered} transaction
             {mutation.data.transactionsConsidered === 1 ? "" : "s"}
             {mutation.data.truncated ? " (some older matches were left out to keep the request a reasonable size)" : ""}.

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as dashboardsApi from "../src/api/dashboards";
 import * as recurringPaymentsApi from "../src/api/recurringPayments";
 import type { DetectionSuggestionDTO, RecurringPaymentDTO, RecurringPaymentMatchDTO } from "../src/api/types";
+import { ThemeProvider } from "../src/context/ThemeContext";
 import { DashboardPage } from "../src/pages/DashboardPage";
 
 vi.mock("../src/api/dashboards");
@@ -72,9 +73,11 @@ function renderDashboard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <DashboardPage />
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }

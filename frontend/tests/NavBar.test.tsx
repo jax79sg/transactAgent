@@ -9,6 +9,7 @@ import * as recategorizationApi from "../src/api/recategorization";
 import * as recurringPaymentsApi from "../src/api/recurringPayments";
 import { NavBar } from "../src/components/NavBar";
 import { AuthProvider } from "../src/context/AuthContext";
+import { ThemeProvider } from "../src/context/ThemeContext";
 
 vi.mock("../src/api/recategorization");
 vi.mock("../src/api/recurringPayments");
@@ -21,11 +22,13 @@ function renderNavBar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <AuthProvider>
-          <NavBar />
-        </AuthProvider>
-      </MemoryRouter>
+      <ThemeProvider>
+        <MemoryRouter>
+          <AuthProvider>
+            <NavBar />
+          </AuthProvider>
+        </MemoryRouter>
+      </ThemeProvider>
     </QueryClientProvider>,
   );
 }
@@ -174,5 +177,53 @@ describe("NavBar activity indicator", () => {
     await user.click(screen.getByTestId("activity-indicator"));
 
     expect(screen.getByText("No recent activity")).toBeInTheDocument();
+  });
+});
+
+describe("NavBar theme toggle", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.classList.remove("dark");
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 0 });
+    vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue(NO_ATTENTION_NEEDED);
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders and shows the current mode (light by default in tests)", () => {
+    renderNavBar();
+
+    expect(screen.getByTestId("theme-toggle")).toBeInTheDocument();
+    expect(screen.getByTestId("theme-toggle-label")).toHaveTextContent("Light");
+  });
+
+  it("switches mode and updates the document's dark class when clicked", async () => {
+    const user = userEvent.setup();
+    renderNavBar();
+
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+
+    await user.click(screen.getByTestId("theme-toggle"));
+
+    expect(screen.getByTestId("theme-toggle-label")).toHaveTextContent("Dark");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+
+    await user.click(screen.getByTestId("theme-toggle"));
+
+    expect(screen.getByTestId("theme-toggle-label")).toHaveTextContent("Light");
+    expect(document.documentElement.classList.contains("dark")).toBe(false);
+  });
+
+  it("leaves the existing badges/activity indicator working alongside the toggle", async () => {
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 2 });
+    renderNavBar();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pending-review-badge")).toHaveTextContent("2");
+    });
+    expect(screen.getByTestId("theme-toggle")).toBeInTheDocument();
   });
 });

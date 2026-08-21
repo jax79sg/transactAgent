@@ -56,7 +56,7 @@ export function RunLiveLogs({ runId, isActive }: { runId: string; isActive: bool
   }, [lines]);
 
   if (lines.length === 0) {
-    return <p className="mt-2 text-xs text-slate-500">No log output yet.</p>;
+    return <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">No log output yet.</p>;
   }
 
   return (
@@ -81,12 +81,12 @@ function RunFiles({ runId }: { runId: string }) {
     queryFn: () => listRunFiles(runId),
   });
 
-  if (isPending) return <p className="text-sm text-slate-500">Loading files...</p>;
+  if (isPending) return <p className="text-sm text-slate-500 dark:text-slate-400">Loading files...</p>;
 
   return (
     <table className="mt-2 w-full text-xs">
       <thead>
-        <tr className="text-left text-slate-500">
+        <tr className="text-left text-slate-500 dark:text-slate-400">
           <th>File</th>
           <th>Outcome</th>
           <th>Reason</th>
@@ -161,13 +161,13 @@ export function IngestionPage() {
         data-testid="trigger-run-button"
         disabled={isRunActive || triggerMutation.isPending}
         onClick={() => triggerMutation.mutate()}
-        className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
+        className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
       >
         {isRunActive ? "Run in progress..." : "Run Ingestion"}
       </button>
 
       {activeRun && (
-        <div className="mt-4 rounded border border-slate-200 p-4 text-sm">
+        <div className="mt-4 rounded border border-slate-200 p-4 text-sm dark:border-slate-700">
           <div className="flex items-center justify-between">
             <p className="font-medium">
               Run status: {isCancelling ? "Cancelling... (stops after the current file)" : activeRun.status}
@@ -177,7 +177,7 @@ export function IngestionPage() {
                 data-testid="cancel-run-button"
                 disabled={isCancelling || cancelMutation.isPending}
                 onClick={() => cancelMutation.mutate(activeRun.runId)}
-                className="rounded border border-slate-300 px-3 py-1 text-xs disabled:opacity-50"
+                className="rounded border border-slate-300 px-3 py-1 text-xs disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
               >
                 {isCancelling ? "Cancelling..." : "Cancel"}
               </button>
@@ -194,7 +194,7 @@ export function IngestionPage() {
       <h2 className="mb-2 mt-8 text-lg font-medium">Run History</h2>
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-slate-500">
+          <tr className="text-left text-slate-500 dark:text-slate-400">
             <th>Started</th>
             <th>Status</th>
             <th>Found</th>
@@ -209,7 +209,7 @@ export function IngestionPage() {
               <tr
                 key={run.runId}
                 data-testid={`run-history-row-${run.runId}`}
-                className="cursor-pointer border-b border-slate-100"
+                className="cursor-pointer border-b border-slate-100 dark:border-slate-800"
                 onClick={() => setExpandedRunId(expandedRunId === run.runId ? null : run.runId)}
               >
                 <td>{run.startedAt}</td>
