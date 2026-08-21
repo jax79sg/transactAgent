@@ -498,3 +498,39 @@ Frontend SPA only — Database, Ingestion Worker Service, API Service unaffected
 
 **UNIT: FRONTEND SPA — COMPLETE (for this feature)**
 **ALL UNITS COMPLETE (for this feature — only the Frontend SPA unit was affected) — proceeding to Build and Test**
+
+## CONSTRUCTION PHASE (Dark Mode): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-21; `dark-mode-build-and-test-summary.md`; `docker compose build/up frontend` rebuilt and redeployed twice against the real live stack [second pass on explicit user retry request, identical cached image, confirmed healthy again]; deployed bundle confirmed via `curl` to contain the FOUC script and toggle markup; live browser verification of LoginPage in both color-scheme states against the real deployed container on `:8787`; 110/110 unit tests passing, `tsc -b`/`eslint`/`vite build` all clean; authenticated-page click-through deliberately not attempted -- no real credentials available against live production data)
+
+**Dark Mode (Epic 12): COMPLETE** — committed `c0f3af8` directly to `main` and pushed to `origin/main` per explicit user instruction ("commit, merge and push"). GitHub issue #1 closed.
+
+## FEATURE STATUS: COMPLETE — Dark Mode (Epic 12, GitHub Issue #1)
+
+---
+
+## Post-Completion Change: Kubernetes Deployment Support (GitHub Issue #2)
+
+Tracked separately (base project + all prior post-completion changes above unchanged/COMPLETE). Source: GitHub issue #2 ("Support for deployment into K8S" — "Make this a scalable deployment on K8S please."). Working on git branch `2-k8s-deployment` (created off `main` before any code changes, per the new `.claude/skills/git-issue-workflow/SKILL.md` this project adopted after user feedback on the Dark Mode feature's git handling).
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-21; `k8s-deployment-requirements.md`; 13 FRs, 6 NFRs, Complex/Comprehensive depth; 1 round of 9 questions + 1 round of 4 clarifications, all answered, no unresolved contradictions — Helm chart deploying all 5 services, provider-agnostic manifests targeting the user's OrbStack cluster, HPA on api-service/frontend only [ingestion-worker/database/vector-db hard-constrained to 1 replica -- ingestion-worker's poll loop isn't concurrency-safe], secrets via External Secrets Operator + persistent-mode HashiCorp Vault [both cluster-shared prerequisites outside the chart], secret population via a one-time helper script reading `.env`, Ingress via OrbStack's automatic `*.orb.local` HTTPS, docker-compose kept for local dev, model-training/oMLX unchanged/out of scope, nothing installed live on the real cluster this session per explicit user instruction)
+
+- [x] User Stories — Skipped (2026-08-21; pure infrastructure/deployment change, no new user-facing functionality or workflow -- matches Categorization Model Fine-Tuning / ClearML-PyJWT Upgrade precedent)
+- [x] Workflow Planning — Complete & Approved (2026-08-21; `k8s-deployment-execution-plan.md`; Application Design SKIP, Units Generation SKIP; NFR Requirements + NFR Design + Infrastructure Design EXECUTE [cross-cutting, tracked under new `aidlc-docs/construction/k8s-deployment/` rather than one existing unit's folder]; Code Generation + Build and Test ALWAYS [Build and Test scope-limited to `helm lint`/`helm template` per NFR-K8S-3, no live cluster changes]; Risk: Medium-High)
+
+## INCEPTION PHASE (this change): COMPLETE
+
+### 🟢 CONSTRUCTION PHASE (this change, cross-cutting)
+- [ ] Construction — pending
+  - [x] NFR Requirements: Complete & Approved (2026-08-21; `k8s-deployment-nfr-requirements-plan.md`, 2 questions [HPA min1/max3/80%CPU; no existing Ingress controller confirmed live via read-only `kubectl` check, so ingress-nginx setup material included]; `nfr-requirements.md` + `tech-stack-decisions.md` generated -- StatefulSet for database/vector-db, Deployment for api-service/frontend/ingestion-worker [replicas hardcoded, not values-exposed], ESO+Vault [Kubernetes auth method, Raft single-node persistent mode, standard 5/3 unseal], ingress-nginx + OrbStack `*.orb.local`-style hostname, `/api` path routing resolving the frontend API-URL design note, resource requests/limits table, PVC sizing)
+  - [x] NFR Design: Complete & Approved (2026-08-21; `nfr-design-patterns.md` + `logical-components.md` -- probe-driven self-healing, deliberate PDB omission, least-privilege Vault policy, NetworkPolicy hardening for database/vector-db, dedicated `transactagent` namespace; full object inventory: 2 StatefulSets, 3 Deployments, 2 HPAs, ExternalSecret/ConfigMap, Ingress, 2 NetworkPolicies)
+  - [x] Infrastructure Design: Complete & Approved (2026-08-21; `infrastructure-design.md` + `deployment-architecture.md`; explicit out-of-scope list [monitoring stack, CI/CD, multi-env promotion -- none requested]; concrete chart file tree under `deploy/helm/transactagent/` + `deploy/helm/prerequisites/` + `deploy/scripts/`; `values.yaml` schema outline; 4-namespace topology diagram with traffic flow and secret flow both walked through step-by-step)
+  - [x] Code Generation: Complete & Approved (2026-08-21; `k8s-deployment-code-generation-plan.md`, all 13 steps; full Helm chart [18 templates] + prerequisites + populate-vault-secrets.sh; found+fixed a real bug during generation [Ingress /api path needed rewrite-target to strip the prefix, or every API call would 404]; used StatefulSet volumeClaimTemplates instead of standalone PVCs [design-sketch deviation, simpler/more idiomatic]; `helm lint` clean, `helm template` renders 18 valid docs, `kubectl apply --dry-run=client` against the real OrbStack cluster validates 16/18 resources clean [2 ExternalSecret/SecretStore CRD resources correctly fail, ESO not installed yet -- expected]; replica-safety constraint structurally re-verified via a nonsense override attempt)
+
+**CONSTRUCTION: COMPLETE (for this feature, cross-cutting -- not tied to one unit)**
+
+- [x] Build and Test — Complete (2026-08-21; `k8s-deployment-build-and-test-summary.md`; `helm lint --strict` clean, `shellcheck` clean on the population script, 16/18 resources validated via real-cluster `kubectl apply --dry-run=client` [zero mutation], 2 correctly-expected ExternalSecret/SecretStore CRD failures documented as expected not defects; replica-safety + values-propagation re-verified structurally; explicit checklist documented for what real end-to-end verification would still require, owned by the user per their choice not to install anything live this session)
+
+## CONSTRUCTION PHASE (K8s Deployment): COMPLETE
+
+## FEATURE STATUS: COMPLETE — Kubernetes Deployment Support (GitHub Issue #2)
