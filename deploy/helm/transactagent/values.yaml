@@ -5,9 +5,14 @@
 namespace: transactagent
 
 image:
-  # No default registry -- FR-K8S-13 puts image build/push out of this feature's scope.
-  # Fill in wherever your pre-built images actually live, e.g. "ghcr.io/yourname".
-  registry: "CHANGEME-set-your-image-registry"
+  # Empty by default -- on OrbStack specifically, images built locally via `docker
+  # build`/`docker compose build` (e.g. transactagent-api-service:latest) are already
+  # visible to the cluster with no registry and no push needed, since OrbStack shares
+  # its Docker image store directly with its Kubernetes cluster. Set this to a real
+  # registry (e.g. "ghcr.io/yourname") only if deploying somewhere that can't see your
+  # local Docker images -- FR-K8S-13 puts building/pushing images out of this feature's
+  # scope either way.
+  registry: ""
   tag: "latest"
   pullPolicy: IfNotPresent
 

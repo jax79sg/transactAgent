@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: api-service
-          image: "{{ .Values.image.registry }}/transactagent-api-service:{{ .Values.image.tag }}"
+          image: "{{ if .Values.image.registry }}{{ .Values.image.registry }}/{{ end }}transactagent-api-service:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 8000

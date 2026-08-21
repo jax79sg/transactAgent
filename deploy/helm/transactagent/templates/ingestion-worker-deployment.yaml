@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: ingestion-worker
-          image: "{{ .Values.image.registry }}/transactagent-ingestion-worker:{{ .Values.image.tag }}"
+          image: "{{ if .Values.image.registry }}{{ .Values.image.registry }}/{{ end }}transactagent-ingestion-worker:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           envFrom:
             - configMapRef: { name: transactagent-config }

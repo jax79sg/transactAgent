@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: "{{ .Values.image.registry }}/transactagent-frontend:{{ .Values.image.tag }}"
+          image: "{{ if .Values.image.registry }}{{ .Values.image.registry }}/{{ end }}transactagent-frontend:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 80
