@@ -533,4 +533,18 @@ Tracked separately (base project + all prior post-completion changes above uncha
 
 ## CONSTRUCTION PHASE (K8s Deployment): COMPLETE
 
-## FEATURE STATUS: COMPLETE — Kubernetes Deployment Support (GitHub Issue #2)
+## Post-Build-and-Test: Live End-to-End Verification (user-initiated, 2026-08-21)
+
+Superseding NFR-K8S-3's original "no live changes this session" scope, per explicit user request to actually test the deployment. Installed all 3 prerequisites (ingress-nginx, Vault persistent/Raft, ESO) live on the user's real OrbStack cluster, initialized/unsealed Vault, populated real secrets, `helm install`ed the app chart. Found and fixed 4 real bugs live:
+1. `image.registry` empty-string produced a broken image reference — fixed (`83666a6`)
+2. ExternalSecret/SecretStore used a non-served API version + an invalid cross-namespace ServiceAccount ref for a namespaced SecretStore — fixed to `v1` + `ClusterSecretStore` (`dd2fc42`)
+3. **Migration `0001`/`0007` fresh-database drift** — a pre-existing, previously-flagged-never-fixed bug (unrelated to K8s) that blocked the database from bootstrapping at all from empty; root-caused, fixed, and rigorously verified (byte-for-byte schema match against real production) on a separate branch/PR — see `fix/migration-0001-fresh-db-drift`, PR #4
+4. Frontend's `buildUrl()` silently dropped `apiBaseUrl`'s path component for a path-prefixed API URL (only ever triggered by this K8s Ingress's own `/api` routing design) — fixed (`09ab498`)
+
+**Live-verified end-to-end via a real browser**: login page renders correctly over real OrbStack HTTPS at `https://transactagent.k8s.orb.local/`; a real login attempt correctly reaches `api-service` through the Ingress and returns a genuine 401 ("Invalid username or password") — full browser→Ingress→api-service→Postgres round trip proven working, not just chart-rendering validation.
+
+Two PRs open, neither merged (per `git-issue-workflow` — functional verification is not merge approval):
+- PR #3 — Kubernetes Deployment Support (`2-k8s-deployment` → `main`)
+- PR #4 — Migration fresh-database drift fix (`fix/migration-0001-fresh-db-drift` → `main`), a prerequisite for PR #3's database to actually bootstrap from scratch
+
+## FEATURE STATUS: LIVE-VERIFIED, AWAITING MERGE — Kubernetes Deployment Support (GitHub Issue #2)
