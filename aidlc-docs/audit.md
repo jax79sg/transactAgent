@@ -2847,3 +2847,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Feature COMPLETE. Proceeding to commit/push/PR per the new workflow, not a direct commit to main.
 
 ---
+
+## K8s Deployment — Committed, Pushed, PR Opened (not merged)
+**Timestamp**: 2026-08-21T07:50:00Z
+**User Input**: (none)
+**AI Response**: "Created 4 logically-scoped commits on `2-k8s-deployment` (workflow skill + requirements/planning; NFR+infrastructure design; the Helm chart/prerequisites/script itself with 'Closes #2'; build-and-test summary + final tracking). Pushed the branch to origin (not main). Opened https://github.com/jax79sg/transactAgent/pull/3 via `gh pr create`, referencing issue #2 with a closing keyword so it auto-closes on merge. Did NOT merge -- per the git-issue-workflow skill, functional approval (the user's 'Approve' on Build and Test) is not merge approval; waiting for an explicit merge instruction."
+**Context**: PR #3 open, awaiting user review/merge decision. This is the first feature in this repo built end-to-end under the new branch+PR workflow.
+
+---
