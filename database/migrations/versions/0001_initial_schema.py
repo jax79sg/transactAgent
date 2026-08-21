@@ -46,6 +46,27 @@ def upgrade() -> None:
     initial_tables = [t for name, t in Base.metadata.tables.items() if name in _INITIAL_TABLE_NAMES]
     Base.metadata.create_all(bind=bind, tables=initial_tables, checkfirst=True)
 
+    # The filtering above (_INITIAL_TABLE_NAMES) only solves half of the drift problem:
+    # it stops 0001 from creating *tables* that were only introduced by a later
+    # migration, but Base.metadata.tables still reflects each of these 8 tables' full,
+    # CURRENT column set -- including columns added to an already-initial table by a
+    # later migration's own op.add_column(). On every real deployment so far this went
+    # unnoticed because the database was created back when 0001 was still accurate and
+    # evolved incrementally from there; it only surfaces when migrating a genuinely
+    # fresh database from scratch (found via a real Kubernetes deployment attempt,
+    # 2026-08-21 -- `alembic upgrade head` against an empty database failed at 0005
+    # with "column cancel_requested_at already exists", since create_all() above had
+    # already created it as part of the CURRENT ingestion_runs model). Each of the 3
+    # columns below is added by its own later migration (0005/0009/0011) -- drop them
+    # here so those migrations' own op.add_column() calls remain the single source of
+    # truth for how/when each one is actually added, and the full chain is reproducible
+    # from empty. (No matching DROP TYPE needed: 0009's embedding_status enum type is
+    # created with checkfirst=True, so a type that already exists from create_all()
+    # above is a safe no-op there; the other two columns aren't enum-typed at all.)
+    op.drop_column("ingestion_runs", "cancel_requested_at")  # actually added by 0005
+    op.drop_column("transactions", "embedding_status")  # actually added by 0009
+    op.drop_column("transactions", "llm_suggested_category_id")  # actually added by 0011
+
     # BR-10: at most one ingestion_runs row may have status 'queued' or 'running' at a
     # time. Expressed as a Postgres partial unique index on a constant expression (all
     # qualifying rows index to the same value "true", so a second one collides) — not
