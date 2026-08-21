@@ -100,21 +100,6 @@ def get_transaction(db: Session, transaction_id: UUID) -> Transaction | None:
     return db.get(Transaction, transaction_id)
 
 
-def find_categorized_transactions_excluding(
-    db: Session, exclude_transaction_id: UUID, exclude_category_id: UUID
-) -> list[Transaction]:
-    """WR-9/WR-10 (Epic 6): candidates for the broadened, always-pending bucket --
-    already-categorized transactions, excluding the source transaction itself (BR-15)
-    and any transaction already at the category being proposed (a no-op match)."""
-    stmt = (
-        select(Transaction)
-        .where(Transaction.category_source != CategorySource.UNSURE)
-        .where(Transaction.id != exclude_transaction_id)
-        .where(Transaction.category_id != exclude_category_id)
-    )
-    return list(db.scalars(stmt))
-
-
 def record_proposal(
     db: Session,
     *,

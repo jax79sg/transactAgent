@@ -2438,3 +2438,109 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Background Process Visibility feature COMPLETE end-to-end (Requirements Analysis -> User Stories -> Workflow Planning -> Application Design -> Construction [API Service + Frontend SPA] -> Build and Test), all stages approved.
 
 ---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Request Received
+**Timestamp**: 2026-08-19T09:00:00Z
+**User Input**: "For recategorisation, do not recategorise those that have been categorised. Limit it to those that's UNSURE or OTHERS. This is because the recategorisation matching is very low in accuracy."
+**AI Response**: "Dispatched an Explore agent to establish the real current behavior before scoping any change. Findings: the retroactive recategorization scan (`recategorize_unsure_from_precedent`, `ingestion-worker/src/ingestion_worker/categorization/service.py`) currently scans two candidate buckets -- Bucket A: UNSURE transactions (can auto-apply above threshold, else PENDING proposal); Bucket B: every OTHER transaction in the DB regardless of category_source (manual/similarity/llm), excluding only the source transaction's own row and exact-category-match no-ops -- Bucket B matches always become PENDING proposals (WR-10), never auto-applied, but are still created and shown for review. 'Others' is confirmed to be a real, plain, user-editable seeded category (`database/src/transactagent_db/seed_categories.py`, `USER_SUPPLIED_CATEGORIES`) -- not a reserved/special category like UNSURE, and not an existing `CategorySource` enum value. The user's request is to eliminate Bucket B's broad 'every categorized transaction' scan and replace it with just transactions currently sitting in the 'Others' category, alongside the existing UNSURE bucket -- narrowing the noisy low-accuracy matching surface. Real open design questions exist (how to identify the 'Others' category robustly since it's a renamable user category, not a reserved one; whether Others-bucket matches should keep WR-10's always-pending-never-auto-apply behavior or something else; what happens to already-existing pending Bucket-B proposals under the old scope) -- creating a clarifying questions file before any design work."
+**Context**: Requirements Analysis, Step 2-5 (intent analysis). Request type: Enhancement (narrowing existing business logic due to a real accuracy problem the user observed). Scope estimate: Single Component (Ingestion Worker Service's Categorization Engine only -- no schema change expected, Frontend's existing sourceBucket display already handles this without new UI). Complexity: Moderate (touches established business rules WR-9/WR-10 from a prior feature).
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Clarifying Questions Presented
+**Timestamp**: 2026-08-19T09:05:00Z
+**User Input**: (none -- AI-initiated per mandatory Step 6)
+**AI Response**: "Created recategorization-scope-narrowing-questions.md with 4 questions: (1) how to robustly identify the 'Others' category given it's a plain, renamable user category with no reserved flag -- exact name, case-insensitive name, or a new configurable setting; (2) whether Others-bucket matches should keep WR-10's always-pending-never-auto-apply safeguard or be treated like the UNSURE bucket's auto-apply-above-threshold behavior; (3) what happens to already-existing PENDING proposals created under the old, broader scope -- leave for manual review vs. auto-clear; (4) scope-boundary confirmation that this only touches the retroactive recategorization re-scan, not the separate new-transaction ingestion-time categorization logic."
+**Context**: Requirements Analysis Step 6 (Gate: Await User Answers). Awaiting user answers in `aidlc-docs/inception/requirements/recategorization-scope-narrowing-questions.md` before Step 7 (Requirements Document generation).
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Requirements Document Generated
+**Timestamp**: 2026-08-19T09:10:00Z
+**User Input**: "done" (Q1=D "Don't use others. Just UNSURE will do.", Q2=C "Don't use Others. See Q1.", Q3=A leave existing proposals as-is, Q4=A scope confirmed to retroactive re-scan only)
+**AI Response**: "Answers substantially simplified the design -- the user rejected the 'Others' category bucket idea entirely (Q1/Q2), meaning there is no replacement bucket at all: the retroactive recategorization scan narrows from two candidate buckets (UNSURE + every-other-categorized-transaction) down to just one (UNSURE). No contradictions found, no follow-up questions needed -- all 4 answers are internally consistent and decisive. Generated `recategorization-scope-narrowing-requirements.md`: 4 FRs (FR-RSN-1..4 -- remove the low-accuracy bucket entirely, no change to the surviving UNSURE bucket's existing auto-apply behavior, leave already-existing pending proposals from the old scope untouched, scope confined to the retroactive re-scan only, not ingestion-time categorization) and 3 NFRs (no schema change -- the CATEGORIZED enum value stays for historical-row validity even though nothing new will produce it; no new configuration; dead-code cleanup of the now-unused repository query and service branch, per this project's convention of deleting genuinely-unused code rather than leaving it unreachable)."
+**Context**: Requirements Analysis Step 7-9 complete. Gate: awaiting user's Approve & Continue / Request Changes decision.
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Requirements Approved
+**Timestamp**: 2026-08-19T09:12:00Z
+**User Input**: "approve"
+**AI Response**: "Acknowledged. Requirements Analysis stage COMPLETE & APPROVED. Proceeding to User Stories assessment."
+**Context**: Proceeding to User Stories assessment per mandatory workflow.
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — User Stories Assessed: Skip
+**Timestamp**: 2026-08-19T09:13:00Z
+**User Input**: (none -- mandatory assessment step)
+**AI Response**: "Assessment: Skip. This is a pure backend accuracy fix narrowing an existing candidate-scan's internal logic -- no new user-facing feature, no change to any UI, no new persona, no new acceptance-testable workflow (the Review page's existing 'Already categorized'/'Unsure' proposal display and approve/reject flow are completely unchanged; only which transactions ever get scanned as candidates changes). Matches this project's established precedent for skipping User Stories on backend-only changes (Similarity-Matching Normalization, Matching Precision Refinement's algorithm work) -- distinct from user-facing features which always execute User Stories."
+**Context**: User Stories stage SKIPPED. Proceeding to Workflow Planning.
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Workflow Planning Complete
+**Timestamp**: 2026-08-19T09:15:00Z
+**User Input**: (none)
+**AI Response**: "Created `recategorization-scope-narrowing-execution-plan.md`. Risk: Low (removes a code path entirely, smaller surface area after than before). Application Design: SKIP (no new component/method signature, narrows an existing method's internal logic only). Units Generation: SKIP. Only Ingestion Worker Service affected -- Database/API Service/Frontend SPA untouched. Functional Design: EXECUTE (revises established WR-9/WR-10 in place, needs a documented revision note). NFR Requirements/NFR Design/Infrastructure Design: SKIP across the board. Code Generation + Build and Test: ALWAYS."
+**Context**: Workflow Planning stage COMPLETE. Awaiting user approval before proceeding to Ingestion Worker Service Functional Design.
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Workflow Planning Approved
+**Timestamp**: 2026-08-19T09:17:00Z
+**User Input**: "Approve"
+**AI Response**: "Acknowledged. Proceeding to Ingestion Worker Service Functional Design."
+**Context**: Proceeding to Construction phase.
+
+---
+
+## Construction — Ingestion Worker Service: Functional Design Complete (Recategorization Scope Narrowing)
+**Timestamp**: 2026-08-19T09:20:00Z
+**User Input**: (none)
+**AI Response**: "Revised WR-9/WR-10 in `business-rules.md` in place with dated revision notes rather than deleting them (historical CATEGORIZED-bucket proposals still exist and are explicitly left unreviewed per FR-RSN-3 -- the old rule text still correctly describes them). WR-9: the already-categorized bucket it added is removed entirely, not replaced -- retroactive re-scan reverts to UNSURE-only, exactly WR-5's original single-bucket scope. WR-10: marked moot going forward (its bucket no longer exists) but kept, since it still accurately describes existing historical rows."
+**Context**: Functional Design complete for Ingestion Worker Service (this change). Gate: awaiting user's Request Changes / Continue to Next Stage decision before Code Generation.
+
+---
+
+## Construction — Ingestion Worker Service: Functional Design Approved (Recategorization Scope Narrowing)
+**Timestamp**: 2026-08-19T09:22:00Z
+**User Input**: "Continue"
+**AI Response**: "Acknowledged. Proceeding to Code Generation."
+**Context**: Proceeding to Code Generation for Ingestion Worker Service (this change).
+
+---
+
+## Construction — Ingestion Worker Service: Code Generation Complete (Recategorization Scope Narrowing)
+**Timestamp**: 2026-08-19T09:30:00Z
+**User Input**: (none)
+**AI Response**: "Removed the Bucket B loop from `categorization/service.py`'s `recategorize_unsure_from_precedent` (was: a second for-loop over `find_categorized_transactions_excluding`, always recording PENDING proposals with `source_bucket=CATEGORIZED`) and updated the function's docstring to describe the UNSURE-only scope. Deleted the now-fully-unused `find_categorized_transactions_excluding` repository query from `categorization/repository.py` (confirmed zero other call sites first). Test changes: replaced `test_categorized_bucket_match_is_always_pending_even_at_high_score` with `test_already_categorized_transaction_is_never_scanned` (asserts NO proposal at all now, not just non-auto-applied); deleted `test_candidate_already_at_proposed_category_is_skipped` and `test_source_transaction_is_never_proposed_against_itself` -- both exercised protections that only existed inside the now-deleted Bucket B query (the UNSURE-only bucket structurally can't contain the source transaction or an already-correctly-categorized one, so these scenarios are no longer reachable, not just differently-handled). 274/274 unit tests passing (down from 276 -- net of 3 removed/1 added). `ruff check` clean. `docker compose build ingestion-worker` verified clean."
+**Context**: Code Generation complete for the Ingestion Worker Service unit (this change). Gate: awaiting user's Request Changes / Continue to Next Stage decision before Build and Test.
+
+---
+
+## Construction — Ingestion Worker Service: Code Generation Approved (Recategorization Scope Narrowing)
+**Timestamp**: 2026-08-19T09:35:00Z
+**User Input**: "Continue"
+**AI Response**: "Acknowledged. Proceeding to Build and Test."
+**Context**: Proceeding to Build and Test.
+
+---
+
+## Build and Test Stage — Recategorization Scope Narrowing
+**Timestamp**: 2026-08-19T09:45:00Z
+**Build Status**: Success (`docker compose build ingestion-worker` clean)
+**Test Status**: Pass — 274/274 unit tests, zero regressions
+**AI Response**: "Redeployed ingestion-worker against the real live stack, healthy. Live-verified the actual deployed code rather than just unit tests: ran the real `recategorize_unsure_from_precedent` function inside the live container against 3 placeholder rows (marked `__rsn_live_verify__`, inside one DB transaction, rolled back at the end -- zero data committed, never touched real user data, no real correction triggered). Confirmed an exact-match (score 100) already-categorized candidate now gets zero proposal at all (previously would have been a PENDING/CATEGORIZED proposal even at that score, per the now-removed WR-10), while an identical UNSURE candidate still correctly auto-applies exactly as before -- proving the removal is precisely scoped to the intended bucket with no collateral change to the surviving one. Existing historical CATEGORIZED-bucket pending proposals confirmed untouched, per FR-RSN-3."
+**Files Generated**: `recategorization-scope-narrowing-build-and-test-summary.md`
+**Context**: Build and Test COMPLETE for Recategorization Scope Narrowing. Feature ready for final review.
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing — Build and Test Approved
+**Timestamp**: 2026-08-19T09:50:00Z
+**User Input**: "approve"
+**AI Response**: "Acknowledged. Build and Test stage approved. Operations phase is a placeholder per this project's convention -- ingestion-worker is already redeployed and healthy. Feature complete."
+**Context**: Recategorization Scope Narrowing feature COMPLETE end-to-end (Requirements Analysis -> User Stories [skipped] -> Workflow Planning -> Construction [Ingestion Worker Service only] -> Build and Test), all stages approved.
+
+---

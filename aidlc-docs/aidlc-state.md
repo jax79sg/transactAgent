@@ -454,3 +454,27 @@ Build order: API Service → Frontend SPA (Database, Ingestion Worker Service un
 - [x] Build and Test — Complete (2026-08-18; `background-process-visibility-build-and-test-summary.md`; both affected services rebuilt + redeployed against the real live stack, both healthy; live-verified `GET /background-activity/summary` with a minted JWT -- caught a genuinely real running recategorization_job at check time; real browser-based visual verification confirmed the pulsing indicator + click-to-open panel render correctly against live data; deployed frontend bundle confirmed containing new markup; 18 new tests, zero regressions [253/253 API Service, 99/99 Frontend]; no migrations, no schema changes)
 
 **Background Process Visibility: COMPLETE** — build and test approved 2026-08-18; both changed services (API Service, Frontend SPA) live and healthy on `main`'s working tree, not yet committed to git.
+
+---
+
+## Post-Completion Change: Recategorization Scope Narrowing
+
+Tracked separately (base project + all prior post-completion changes above unchanged/COMPLETE).
+
+- [x] Requirements Analysis — Complete & Approved (2026-08-19; `recategorization-scope-narrowing-requirements.md`; 4 FRs, 3 NFRs; 1 round of 4 questions, all answered -- user rejected the originally-proposed "Others" category bucket entirely [Q1=D/Q2=C], simplifying scope to UNSURE-only, a straight reversion of WR-9's original broadening; existing pending proposals from the old scope left untouched [Q3=A]; scope confirmed limited to the retroactive re-scan only, not ingestion-time categorization [Q4=A])
+- [x] User Stories — Skipped (2026-08-19; pure backend accuracy fix narrowing an existing candidate-scan's internal logic, no new user-facing workflow, no UI change -- matches precedent of prior backend-only algorithm changes)
+- [x] Workflow Planning — Complete & Approved (2026-08-19; `recategorization-scope-narrowing-execution-plan.md`; Application Design SKIP [no new component/method signature], Units Generation SKIP; single unit affected -- Ingestion Worker Service only; Functional Design EXECUTE, NFR Requirements/NFR Design/Infrastructure Design SKIP, Code Generation + Build and Test ALWAYS; Risk: Low)
+
+## INCEPTION PHASE (this change): COMPLETE
+
+### 🟢 CONSTRUCTION PHASE (this change, per-unit loop)
+- [x] Ingestion Worker Service — Functional Design: Complete & Approved (2026-08-19; `business-rules.md` WR-9 revised in place -- already-categorized bucket removed entirely, reverting to WR-5's original UNSURE-only scope; WR-10 marked moot but kept, since historical CATEGORIZED-bucket proposals still exist and are left unreviewed)
+- [x] Ingestion Worker Service — Code Generation: Complete & Approved (2026-08-19; `categorization/service.py`'s Bucket B loop removed from `recategorize_unsure_from_precedent`; `categorization/repository.py`'s now-fully-unused `find_categorized_transactions_excluding` deleted; tests updated -- 1 replaced [asserts no proposal at all, not just non-auto-applied], 2 removed [exercised protections only reachable inside the deleted query]; 274/274 unit tests passing [down from 276, net of removals/additions]; `docker compose build ingestion-worker` verified clean)
+
+**UNIT: INGESTION WORKER SERVICE — COMPLETE (for this change)**
+
+## CONSTRUCTION PHASE (Recategorization Scope Narrowing): COMPLETE
+
+- [x] Build and Test — Complete (2026-08-19; `recategorization-scope-narrowing-build-and-test-summary.md`; redeployed against the real live stack, healthy; live-verified the actual deployed function against placeholder rows inside a rolled-back DB transaction [zero data committed, no real correction triggered] -- confirmed an exact-match already-categorized candidate now gets zero proposal at all [previously always PENDING even at score 100], and the surviving UNSURE bucket's auto-apply behavior is genuinely unchanged; existing historical pending proposals from the old scope confirmed untouched)
+
+**Recategorization Scope Narrowing: COMPLETE** — build and test approved 2026-08-19; ingestion-worker live and healthy on `main`'s working tree, not yet committed to git.

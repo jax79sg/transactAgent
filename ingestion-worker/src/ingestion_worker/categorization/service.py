@@ -248,19 +248,16 @@ def categorize(db: Session, description: str, amount: Decimal, llm_category: str
 
 
 def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transaction_id: UUID) -> list[UUID]:
-    """FR-5.4 / WR-5, broadened by WR-9/WR-10 (Epic 6): similarity-only re-scan (no LLM
-    call) of two candidate buckets against the newly-corrected transaction.
+    """FR-5.4 / WR-5: similarity-only re-scan (no LLM call) of UNSURE transactions
+    against the newly-corrected transaction (WR-9 revised 2026-08-19, Recategorization
+    Scope Narrowing -- the already-categorized bucket WR-9 originally added back in
+    Epic 6 has been removed entirely; see business-rules.md's revision note).
 
-    UNSURE bucket (unchanged target set from WR-5): a match at/above the new, higher
-    `recategorization_auto_apply_threshold` is applied directly, exactly as before
+    A match at/above `recategorization_auto_apply_threshold` is applied directly
     (category_source='similarity', not 'manual' -- see business-logic-model.md note,
     preserves 'manual' as meaning a direct human edit on that exact row); a match
     at/above the existing similarity_threshold but below the auto-apply threshold
     becomes a pending RecategorizationProposal instead.
-
-    Already-categorized bucket (new, WR-9): any match at/above similarity_threshold
-    becomes a pending proposal -- this bucket never auto-applies, regardless of score
-    (WR-10), since it would silently overwrite an existing categorization decision.
 
     Returns only the auto-applied transaction IDs -- this is what
     RecategorizationJob.updated_transaction_count has always meant; pending-proposal
@@ -361,22 +358,6 @@ def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transac
                 source_bucket=RecategorizationProposalSourceBucket.UNSURE,
                 status=RecategorizationProposalStatus.PENDING,
             )
-
-    for candidate_txn in repository.find_categorized_transactions_excluding(
-        db, exclude_transaction_id=source_transaction.id, exclude_category_id=proposed_category.id
-    ):
-        match = _find_match(candidate_txn)
-        if match is None:
-            continue
-        repository.record_proposal(
-            db,
-            job_id=job_id,
-            candidate_transaction_id=candidate_txn.id,
-            proposed_category_id=proposed_category.id,
-            match_score=match.score,
-            source_bucket=RecategorizationProposalSourceBucket.CATEGORIZED,
-            status=RecategorizationProposalStatus.PENDING,
-        )
 
     db.flush()
     return auto_applied_ids

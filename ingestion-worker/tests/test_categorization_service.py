@@ -217,16 +217,16 @@ class TestRecategorizeUnsureFromPrecedent:
         assert proposal.proposed_category_id == household.id
         assert proposal.resolved_at is None
 
-    def test_categorized_bucket_match_is_always_pending_even_at_high_score(self, db_session):
-        """WR-10: a match against an already-categorized transaction never
-        auto-applies, no matter how high the score is."""
+    def test_already_categorized_transaction_is_never_scanned(self, db_session):
+        """WR-9 revised (2026-08-19, Recategorization Scope Narrowing): the
+        already-categorized bucket is removed entirely -- an already-categorized
+        transaction gets no proposal at all, not even a pending one, regardless of
+        how well it matches (exact description match here, score 100)."""
         household = _make_category(db_session, "Household")
         groceries = _make_category(db_session, "Groceries")
 
         corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
         job = self._make_job(db_session, corrected.id)
-        # Exact description match (score 100) -- would auto-apply if this were the
-        # UNSURE bucket, but this candidate already has a category (Groceries).
         already_categorized = _make_transaction(
             db_session, "IKEA FURNITURE STORE", groceries, CategorySource.SIMILARITY
         )
@@ -242,42 +242,6 @@ class TestRecategorizeUnsureFromPrecedent:
             select(RecategorizationProposal).where(
                 RecategorizationProposal.candidate_transaction_id == already_categorized.id
             )
-        ).one()
-        assert proposal.status == RecategorizationProposalStatus.PENDING
-        assert proposal.source_bucket == RecategorizationProposalSourceBucket.CATEGORIZED
-
-    def test_candidate_already_at_proposed_category_is_skipped(self, db_session):
-        """WR-10: a candidate already assigned the exact category being proposed is
-        skipped entirely -- not a proposal, since applying it would be a no-op."""
-        household = _make_category(db_session, "Household")
-
-        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
-        job = self._make_job(db_session, corrected.id)
-        already_household = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.SIMILARITY)
-
-        recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
-
-        proposal = db_session.scalars(
-            select(RecategorizationProposal).where(
-                RecategorizationProposal.candidate_transaction_id == already_household.id
-            )
-        ).first()
-        assert proposal is None
-
-    def test_source_transaction_is_never_proposed_against_itself(self, db_session):
-        """BR-15 (Unit 1): the corrected transaction can't be its own candidate --
-        explicitly excluded by ID in find_categorized_transactions_excluding, not just
-        incidentally skipped by the same-category check (it's also excluded by ID even
-        when, as here, it's already at the exact category being proposed -- both
-        filters would independently prevent it, but this asserts the outcome either way)."""
-        household = _make_category(db_session, "Household")
-        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
-        job = self._make_job(db_session, corrected.id)
-
-        recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
-
-        proposal = db_session.scalars(
-            select(RecategorizationProposal).where(RecategorizationProposal.candidate_transaction_id == corrected.id)
         ).first()
         assert proposal is None
 
