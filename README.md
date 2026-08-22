@@ -121,6 +121,24 @@ docker compose down -v     # also wipe the database volume — full reset
 
 Data persists in `./data/postgres` (bind-mounted, gitignored) between `docker compose up`/`down` cycles.
 
+## Kubernetes Deployment (Alternative)
+
+`docker-compose` above remains the recommended path for local development and stays
+fully supported and unchanged — Kubernetes is an additional deployment option, not a
+replacement.
+
+A provider-agnostic Helm chart deploys all 5 services with HPA on the stateless
+services, secrets via External Secrets Operator + HashiCorp Vault, and an Ingress —
+see [`deploy/helm/transactagent/README.md`](deploy/helm/transactagent/README.md) for
+the full walkthrough (prerequisites → secrets → install → create your login →
+multi-device access). Live-verified end-to-end on a local [OrbStack](https://orbstack.dev/)
+cluster, including a real login round-trip through the Ingress.
+
+**Before deploying against a genuinely empty database**, see that guide's callout
+about a pre-existing migration bug (PR #4) that must be merged first — otherwise the
+app crash-loops on startup against a fresh database. Not Kubernetes-specific; it was
+simply never exercised until a truly fresh database (a new PVC) hit it.
+
 ## Configuration Reference
 
 See `.env.example` for the full list with inline explanations. A few worth knowing about:
@@ -165,7 +183,8 @@ database/            Unit 1 — schema, migrations (SQLAlchemy + Alembic), no ru
 api-service/          Unit 2 — FastAPI REST API
 ingestion-worker/       Unit 3 — background worker (Drive, extraction, categorization, FX)
 frontend/                Unit 4 — React SPA
-docker-compose.yml         Orchestrates all 4 services
-.env.example                Full configuration reference
-aidlc-docs/                   Design docs, requirements, decision history, audit trail
+docker-compose.yml         Orchestrates all 4 services (recommended for local dev)
+deploy/                      Kubernetes Helm chart, cluster prerequisites, deploy scripts
+.env.example                   Full configuration reference
+aidlc-docs/                      Design docs, requirements, decision history, audit trail
 ```

@@ -11,6 +11,15 @@ once per cluster, documented separately in [`../prerequisites/`](../prerequisite
 `docker-compose.yml` at the repo root is unaffected by this chart and remains the
 recommended path for local development.
 
+> **⚠️ Before deploying against a genuinely empty database**: `0001_initial_schema.py`
+> and `0007_recurring_payments.py` have a real, pre-existing migration bug (found live
+> during this feature's own testing, unrelated to Kubernetes itself) that makes the
+> full migration chain fail on a truly fresh database — exactly what a new PVC gives
+> you. The fix is on branch `fix/migration-0001-fresh-db-drift` (PR #4) — merge that
+> before installing this chart against an empty database, or `api-service`/
+> `ingestion-worker` will crash-loop on startup. Not needed if your database already
+> has data (e.g. restored from an existing deployment).
+
 ## Deploy Order
 
 1. **Install the prerequisites** (ingress-nginx, Vault, External Secrets Operator) —
@@ -26,13 +35,17 @@ recommended path for local development.
    it writes exactly the 6 keys this chart's `ExternalSecret` expects
    (`values.yaml`'s `externalSecrets.secretKeys`).
 
-3. **Build and push images** wherever `values.yaml`'s `image.registry` will point
-   (out of scope for this chart — FR-K8S-13 — use your own build/push process; a plain
-   `docker build` from each unit's existing `Dockerfile` works, same as
-   `docker-compose build` does today).
+3. **Build images**: `docker compose build` (or `docker build` per unit) works as-is —
+   image build/push is out of scope for this chart (FR-K8S-13). `values.yaml`'s
+   `image.registry` defaults to empty, meaning "use whatever's already in the local
+   Docker image store" — this just works on OrbStack, since it shares its Docker image
+   store directly with its Kubernetes cluster, no push needed. Set `image.registry`
+   explicitly (e.g. `ghcr.io/yourname`) only if deploying somewhere that can't see your
+   local images.
 
-4. **Set `values.yaml`'s `image.registry`** (and adjust `ingress.host` once
-   ingress-nginx's Service is actually running and you know its real assigned hostname).
+4. **Adjust `values.yaml`'s `ingress.host`** once ingress-nginx's Service is actually
+   running and you know its real assigned hostname (the default is a starting point,
+   not observed).
 
 5. **Install the chart**:
    ```bash
@@ -90,7 +103,7 @@ caching quirk of OrbStack's proxy layer.
 | Key | Default | Notes |
 |---|---|---|
 | `namespace` | `transactagent` | All app resources live here. |
-| `image.registry` | *(placeholder — must be set)* | Where your pre-built images live. |
+| `image.registry` | `""` (empty) | Empty means "use local images as-is" (works on OrbStack, no push needed). Set to a real registry only if deploying elsewhere. |
 | `image.tag` | `latest` | |
 | `ingress.host` | `transactagent.k8s.orb.local` | Adjust once ingress-nginx assigns a real hostname. |
 | `ingress.className` | `nginx` | |
@@ -99,7 +112,7 @@ caching quirk of OrbStack's proxy layer.
 | `frontend.replicas.min` / `.max` | `1` / `3` | HPA bounds. |
 | `database.storage.size` | `5Gi` | PVC size, cluster's default StorageClass. |
 | `vectorDb.storage.size` | `2Gi` | PVC size, cluster's default StorageClass. |
-| `externalSecrets.secretStoreName` | `vault-backend` | Must match the `SecretStore` created by the prerequisites. |
+| `externalSecrets.secretStoreName` | `vault-backend` | Must match the `ClusterSecretStore` name from the prerequisites. |
 | `externalSecrets.vaultServer` | `http://vault.vault.svc.cluster.local:8200` | In-cluster Vault address. |
 | `env.*` | (see `values.yaml`) | ~44 non-secret tunables, one-to-one with `.env.example` at the repo root. |
 

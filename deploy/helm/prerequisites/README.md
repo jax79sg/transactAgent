@@ -90,9 +90,16 @@ vault write auth/kubernetes/role/transactagent \
   ttl=1h
 ```
 
-This is what `transactagent`'s `SecretStore` (`deploy/helm/transactagent/templates/externalsecret.yaml`)
-references as `auth.kubernetes.role: transactagent` — the chart's `SecretStore` and
-this Vault-side role name must match (both default to `transactagent`).
+This is what `transactagent`'s `ClusterSecretStore` (`deploy/helm/transactagent/templates/externalsecret.yaml`)
+references as `auth.kubernetes.role: transactagent` — the chart's `ClusterSecretStore`
+and this Vault-side role name must match (both default to `transactagent`).
+
+Note it's a `ClusterSecretStore`, not a namespaced `SecretStore` — found live: a
+namespaced `SecretStore`'s admission webhook rejects a `serviceAccountRef` outside
+its own namespace, but ESO's ServiceAccount lives in the `external-secrets`
+namespace, not `transactagent`. The real isolation still comes from the Vault policy
+above (`secret/data/transactagent` only), not from the Kubernetes object's own
+namespace scope.
 
 ## 3. External Secrets Operator
 
