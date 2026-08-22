@@ -43,11 +43,32 @@ recommended path for local development.
    explicitly (e.g. `ghcr.io/yourname`) only if deploying somewhere that can't see your
    local images.
 
-4. **Adjust `values.yaml`'s `ingress.host`** once ingress-nginx's Service is actually
-   running and you know its real assigned hostname (the default is a starting point,
-   not observed).
+4. **Adjust `values.yaml`'s `ingress.host`** to `transactagent.<your-lan-ip>.sslip.io`,
+   replacing `192.168.50.113` with your own machine's LAN IP (find it with
+   `ipconfig getifaddr en0` or similar). This can't be a `*.orb.local` host — see the
+   comment on `ingress.host` in `values.yaml` for why (Google's OAuth redirect-URI
+   validator rejects it outright, which breaks Google Drive Connect). A static
+   IP/DHCP reservation is strongly recommended: the IP is baked into this hostname,
+   the TLS cert (next step), and the Google Cloud Console redirect URI — all three
+   need to be redone if it changes.
 
-5. **Install the chart**:
+5. **Generate the self-signed TLS cert** the Ingress needs (Google requires
+   `https://` redirect URIs, but doesn't require the cert be CA-trusted — see
+   `values.yaml`'s `ingress.tls` comment):
+   ```bash
+   ../scripts/generate-selfsigned-cert.sh transactagent.192.168.50.113.sslip.io 192.168.50.113
+   ```
+   Browsers will show an untrusted-cert warning on first visit from every device —
+   that's expected; click through (or import the generated cert as a trusted CA once
+   to remove it).
+
+6. **Register the redirect URI in Google Cloud Console**: under your OAuth 2.0
+   Client's "Authorized redirect URIs", add
+   `https://transactagent.192.168.50.113.sslip.io/api/drive/callback` (matching
+   whatever host you set in step 4). Without this, Google Drive Connect fails with a
+   400 error — see issue #5.
+
+7. **Install the chart**:
    ```bash
    helm install transactagent ./deploy/helm/transactagent \
      --namespace transactagent --create-namespace
@@ -56,14 +77,15 @@ recommended path for local development.
    `--create-namespace` flag is only needed if you install before that template runs,
    which normally isn't the case; harmless either way.)
 
-6. **Verify**:
+8. **Verify**:
    ```bash
    kubectl -n transactagent get pods
    kubectl -n transactagent get externalsecret transactagent-secrets   # should show SYNCED
    ```
-   Then visit `https://<ingress.host>/` in a browser.
+   Then visit `https://<ingress.host>/` in a browser (expect a self-signed-cert
+   warning — click through).
 
-7. **Create your login** (this app has no self-registration):
+9. **Create your login** (this app has no self-registration):
    ```bash
    ../scripts/create-k8s-user.sh
    ```
@@ -74,29 +96,38 @@ recommended path for local development.
    `kubectl exec` command-line argument (which would otherwise land in the cluster's
    own audit log) — see the script's own header comment for the full explanation.
 
+10. **Seed default categories** — required before running ingestion, not just
+    recommended: `Category` rows (including the reserved `UNSURE` row every
+    transaction falls back to) are seeded by a standalone script, the same one
+    `README.md`'s docker-compose setup runs manually — they are **not** created by
+    any Alembic migration, and the Settings UI's "add category" can't create the
+    reserved `UNSURE` row either. Skipping this step makes every ingested
+    transaction crash the run (`AttributeError: 'NoneType' object has no attribute
+    'id'` in `pipeline.py`'s `_persist_transaction`, found live — see issue #5's
+    branch history) on a genuinely fresh database like a new PVC gives you:
+    ```bash
+    kubectl -n transactagent exec deploy/api-service -- python3 -m transactagent_db.seed_categories
+    ```
+
 ## Multi-Device Access
 
-The default `ingress.host` (`transactagent.k8s.orb.local`) resolves automatically,
-with trusted HTTPS, **only on the machine OrbStack itself runs on** — that DNS/TLS
-magic is host-local, not something another device on your network can use. To reach
-the app from another device:
+The default `ingress.host` is a sslip.io "magic IP" domain
+(`transactagent.<your-lan-ip>.sslip.io`), which resolves via ordinary public DNS
+straight to that IP — no hosts-file entry needed on any device. Any device that can
+route to that LAN IP (i.e. on the same network) can reach the app at
+`https://transactagent.<your-lan-ip>.sslip.io/` directly, using the same
+self-signed cert and the same `https://` scheme every time (each device will show
+its own untrusted-cert warning on first visit — expected, click through).
 
-1. Add a hosts-file entry on that device pointing the same hostname at this Mac's
-   LAN IP (find it with `ipconfig getifaddr en0` or similar), e.g.:
-   ```
-   192.168.1.50 transactagent.k8s.orb.local
-   ```
-2. Access it over **plain `http://`**, not `https://` — the other device has no way
-   to trust OrbStack's local-only certificate. This works correctly without any
-   further configuration: the frontend derives its API calls from whatever
-   scheme/host actually loaded the page (see `frontend/src/config.ts`'s
-   `apiBasePath` handling), rather than assuming a fixed one.
+This replaces an earlier approach (hosts-file entry + plain `http://`, used when
+`ingress.host` was a `*.orb.local` domain) — no longer needed, since sslip.io
+resolves the same real hostname everywhere rather than relying on OrbStack's
+host-machine-only DNS/HTTPS magic.
 
-**Note on caching**: OrbStack's own proxy for `*.orb.local` domains caches responses
-by exact URL. After a rebuild/redeploy, a page you'd already loaded may keep showing
-old content until you hard-refresh or add a cache-busting query string (e.g.
-`?cb=1`) — the deployment itself has already updated; this is purely a client-facing
-caching quirk of OrbStack's proxy layer.
+**Note on caching**: this note applied specifically to OrbStack's proxy for
+`*.orb.local` domains, which no longer applies now that `ingress.host` is a
+sslip.io domain. If you still see stale content after a rebuild/redeploy, a plain
+browser hard-refresh should be sufficient.
 
 ## Values Reference
 
@@ -105,8 +136,10 @@ caching quirk of OrbStack's proxy layer.
 | `namespace` | `transactagent` | All app resources live here. |
 | `image.registry` | `""` (empty) | Empty means "use local images as-is" (works on OrbStack, no push needed). Set to a real registry only if deploying elsewhere. |
 | `image.tag` | `latest` | |
-| `ingress.host` | `transactagent.k8s.orb.local` | Adjust once ingress-nginx assigns a real hostname. |
+| `ingress.host` | `transactagent.192.168.50.113.sslip.io` | Replace the IP with your own LAN IP. Must resolve to a public-suffix domain (Google OAuth requirement) — can't be `*.orb.local`. |
 | `ingress.className` | `nginx` | |
+| `ingress.tls.enabled` | `true` | Self-signed cert — see `ingress.tls`'s comment in `values.yaml` for why. |
+| `ingress.tls.secretName` | `transactagent-tls` | Created by `../scripts/generate-selfsigned-cert.sh`, not by this chart. |
 | `apiService.replicas.min` / `.max` | `1` / `3` | HPA bounds. |
 | `apiService.hpa.targetCPUUtilizationPercentage` | `80` | |
 | `frontend.replicas.min` / `.max` | `1` / `3` | HPA bounds. |

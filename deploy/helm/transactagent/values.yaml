@@ -17,15 +17,29 @@ image:
   pullPolicy: IfNotPresent
 
 ingress:
-  # Adjust once ingress-nginx's Service is actually running and OrbStack has assigned
-  # it a real *.orb.local hostname -- this is a starting-point default, not observed.
-  # No separate "scheme" value: the same host is legitimately reachable as both
-  # OrbStack's auto-upgraded HTTPS (the host machine) and plain HTTP (another device
-  # on the network via a hosts-file entry, no cert trust) -- see configmap.yaml's
-  # FRONTEND_ORIGIN and frontend-deployment.yaml's API_BASE_PATH, which both handle
-  # this by matching whatever scheme actually loaded the page rather than assuming one.
-  host: transactagent.k8s.orb.local
+  # A *.orb.local host (the original default) cannot be used here: Google's OAuth
+  # redirect-URI validator rejects any non-public-TLD domain outright ("Invalid
+  # redirect: must use a domain that is a valid Top private domain"), which breaks
+  # Google Drive Connect (issue #5) with no way to register around it. sslip.io is
+  # a public wildcard-DNS service -- transactagent.<ip>.sslip.io resolves straight
+  # to <ip>, a real public-suffix domain Google accepts, no DNS records to manage.
+  # Replace 192.168.50.113 with your own machine's LAN IP; a static IP/DHCP
+  # reservation is recommended since the IP is baked into this hostname, the TLS
+  # cert (see ingress.tls below), and the redirect URI registered in Google Cloud
+  # Console -- if the IP changes, all three need to be redone.
+  host: transactagent.192.168.50.113.sslip.io
   className: nginx
+  tls:
+    # Google requires the redirect URI to be https:// but only validates that the
+    # domain is a real public suffix, not that the cert is CA-trusted -- so a
+    # self-signed cert satisfies Google while needing no public port-forwarding
+    # (Let's Encrypt HTTP-01) or DNS zone access (DNS-01, not possible against
+    # sslip.io's zone). Cost: browsers show an untrusted-cert warning on first
+    # visit from every device -- expected, click through (or import the cert as a
+    # trusted CA once to remove it). Generate the secret this references with
+    # ../scripts/generate-selfsigned-cert.sh before installing this chart.
+    enabled: true
+    secretName: transactagent-tls
 
 # -- Per-service resource sizing (NFR-K8S-4) -- starting points for a single-user
 # workload, not measured production benchmarks. Adjust freely.
