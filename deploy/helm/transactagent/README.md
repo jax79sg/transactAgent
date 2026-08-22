@@ -96,6 +96,19 @@ recommended path for local development.
    `kubectl exec` command-line argument (which would otherwise land in the cluster's
    own audit log) — see the script's own header comment for the full explanation.
 
+10. **Seed default categories** — required before running ingestion, not just
+    recommended: `Category` rows (including the reserved `UNSURE` row every
+    transaction falls back to) are seeded by a standalone script, the same one
+    `README.md`'s docker-compose setup runs manually — they are **not** created by
+    any Alembic migration, and the Settings UI's "add category" can't create the
+    reserved `UNSURE` row either. Skipping this step makes every ingested
+    transaction crash the run (`AttributeError: 'NoneType' object has no attribute
+    'id'` in `pipeline.py`'s `_persist_transaction`, found live — see issue #5's
+    branch history) on a genuinely fresh database like a new PVC gives you:
+    ```bash
+    kubectl -n transactagent exec deploy/api-service -- python3 -m transactagent_db.seed_categories
+    ```
+
 ## Multi-Device Access
 
 The default `ingress.host` is a sslip.io "magic IP" domain
