@@ -50,6 +50,41 @@ recommended path for local development.
    ```
    Then visit `https://<ingress.host>/` in a browser.
 
+7. **Create your login** (this app has no self-registration):
+   ```bash
+   ../scripts/create-k8s-user.sh
+   ```
+   Prompts interactively for a username and password, hashes the password *inside*
+   the `api-service` pod using the app's own real hashing code (same approach as
+   `README.md`'s docker-compose "Create your login" section), and inserts the user.
+   Nothing is typed into any chat/AI session, echoed to the terminal, or passed as a
+   `kubectl exec` command-line argument (which would otherwise land in the cluster's
+   own audit log) — see the script's own header comment for the full explanation.
+
+## Multi-Device Access
+
+The default `ingress.host` (`transactagent.k8s.orb.local`) resolves automatically,
+with trusted HTTPS, **only on the machine OrbStack itself runs on** — that DNS/TLS
+magic is host-local, not something another device on your network can use. To reach
+the app from another device:
+
+1. Add a hosts-file entry on that device pointing the same hostname at this Mac's
+   LAN IP (find it with `ipconfig getifaddr en0` or similar), e.g.:
+   ```
+   192.168.1.50 transactagent.k8s.orb.local
+   ```
+2. Access it over **plain `http://`**, not `https://` — the other device has no way
+   to trust OrbStack's local-only certificate. This works correctly without any
+   further configuration: the frontend derives its API calls from whatever
+   scheme/host actually loaded the page (see `frontend/src/config.ts`'s
+   `apiBasePath` handling), rather than assuming a fixed one.
+
+**Note on caching**: OrbStack's own proxy for `*.orb.local` domains caches responses
+by exact URL. After a rebuild/redeploy, a page you'd already loaded may keep showing
+old content until you hard-refresh or add a cache-busting query string (e.g.
+`?cb=1`) — the deployment itself has already updated; this is purely a client-facing
+caching quirk of OrbStack's proxy layer.
+
 ## Values Reference
 
 | Key | Default | Notes |
