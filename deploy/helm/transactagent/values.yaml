@@ -1,0 +1,155 @@
+# Default values for the transactagent chart.
+# See README.md for a full deploy walkthrough (prerequisites -> Vault init/unseal ->
+# populate secrets -> helm install).
+
+namespace: transactagent
+
+image:
+  # Empty by default -- on OrbStack specifically, images built locally via `docker
+  # build`/`docker compose build` (e.g. transactagent-api-service:latest) are already
+  # visible to the cluster with no registry and no push needed, since OrbStack shares
+  # its Docker image store directly with its Kubernetes cluster. Set this to a real
+  # registry (e.g. "ghcr.io/yourname") only if deploying somewhere that can't see your
+  # local Docker images -- FR-K8S-13 puts building/pushing images out of this feature's
+  # scope either way.
+  registry: ""
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+ingress:
+  # Adjust once ingress-nginx's Service is actually running and OrbStack has assigned
+  # it a real *.orb.local hostname -- this is a starting-point default, not observed.
+  # No separate "scheme" value: the same host is legitimately reachable as both
+  # OrbStack's auto-upgraded HTTPS (the host machine) and plain HTTP (another device
+  # on the network via a hosts-file entry, no cert trust) -- see configmap.yaml's
+  # FRONTEND_ORIGIN and frontend-deployment.yaml's API_BASE_PATH, which both handle
+  # this by matching whatever scheme actually loaded the page rather than assuming one.
+  host: transactagent.k8s.orb.local
+  className: nginx
+
+# -- Per-service resource sizing (NFR-K8S-4) -- starting points for a single-user
+# workload, not measured production benchmarks. Adjust freely.
+
+apiService:
+  replicas:
+    min: 1
+    max: 3
+  hpa:
+    targetCPUUtilizationPercentage: 80
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+frontend:
+  replicas:
+    min: 1
+    max: 3
+  hpa:
+    targetCPUUtilizationPercentage: 80
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+# No `replicas` field here on purpose (NFR-K8S-5): ingestion-worker's replica count is
+# hardcoded to 1 in templates/ingestion-worker-deployment.yaml, not values-configurable,
+# because its poll loop has no leader-election/concurrency-safety design.
+ingestionWorker:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+database:
+  # storageClassName intentionally omitted -- uses the cluster's default (Q5=A).
+  storage:
+    size: 5Gi
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: 1, memory: 1Gi }
+
+vectorDb:
+  storage:
+    size: 2Gi
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 1, memory: 1Gi }
+
+# -- Secrets bridge (External Secrets Operator + HashiCorp Vault, both cluster-shared
+# prerequisites -- see ../prerequisites/README.md). This chart never contains a real
+# secret value; it only references where ESO should find them.
+externalSecrets:
+  secretStoreName: vault-backend
+  vaultServer: "http://vault.vault.svc.cluster.local:8200"
+  # Logical path within the "secret" KV-v2 mount (SecretStore's spec.provider.vault.path
+  # below is the mount name itself, "secret" -- ESO's v2 handling adds the /data/ prefix
+  # internally). Must match what populate-vault-secrets.sh writes to: `vault kv put
+  # secret/transactagent ...`.
+  vaultPath: transactagent
+  refreshInterval: 1h
+  # Keys ESO syncs from Vault into this app's Secret object. Each key here must exist
+  # at `vaultPath` (populate-vault-secrets.sh writes them there) and becomes an
+  # identically-named key in the resulting Kubernetes Secret, matched 1:1 against what
+  # config.py/AuthContext-equivalent backend code expects as an env var.
+  secretKeys:
+    - DB_PASSWORD
+    - JWT_SECRET
+    - GOOGLE_OAUTH_CLIENT_SECRET
+    - GEMINI_API_KEY
+    - OPENROUTER_API_KEY
+    - EMBEDDING_API_KEY
+
+# -- Non-secret configuration, one-to-one with .env.example. Consumed via a ConfigMap
+# + envFrom by whichever service(s) actually read each variable. Kept as a flat map
+# (not one key per template line) so adding/removing a tunable never requires editing
+# a Go template, only this file -- see templates/configmap.yaml.
+#
+# NOT listed here: FRONTEND_ORIGIN and GOOGLE_OAUTH_REDIRECT_URI. Both must match the
+# real Ingress host exactly, so templates/configmap.yaml derives them directly from
+# `.Values.ingress.host` instead of duplicating that value here where it could drift
+# out of sync.
+env:
+  DB_NAME: transactagent
+  DB_USER: transactagent_app
+  GOOGLE_OAUTH_CLIENT_ID: "changeme.apps.googleusercontent.com"
+  GEMINI_MODEL: gemini-3.5-flash-lite
+  OPENROUTER_MODEL: openrouter/free
+  OPENROUTER_BASE_URL: https://openrouter.ai/api/v1
+  LLM_CLASSIFICATION_BATCH_SIZE: "10"
+  LLM_CLASSIFICATION_CONCURRENCY: "5"
+  SIMILARITY_THRESHOLD: "85.0"
+  SIMILARITY_AMOUNT_RATIO_TOLERANCE: "4.0"
+  SIMILARITY_AMOUNT_ABSOLUTE_FLOOR: "5.0"
+  RECATEGORIZATION_AUTO_APPLY_THRESHOLD: "97.0"
+  EXTRACTION_CONFIDENCE_THRESHOLD: medium
+  POLL_INTERVAL_SECONDS: "5.0"
+  RETRY_MAX_ATTEMPTS: "3"
+  RETRY_BACKOFF_BASE_SECONDS: "2.0"
+  REPORTING_CURRENCY: SGD
+  RECURRING_PAYMENT_MATCH_WINDOW_DAYS: "5"
+  RECURRING_PAYMENT_TRUSTED_AMOUNT_RATIO_TOLERANCE: "1.15"
+  RECURRING_PAYMENT_TRUSTED_AMOUNT_ABSOLUTE_FLOOR: "5.0"
+  RECURRING_PAYMENT_DETECTION_SCAN_INTERVAL_HOURS: "24"
+  RECURRING_PAYMENT_DETECTION_MIN_OCCURRENCES: "2"
+  RECURRING_PAYMENT_DETECTION_CADENCE_MIN_DAYS: "25"
+  RECURRING_PAYMENT_DETECTION_CADENCE_MAX_DAYS: "35"
+  BACKUP_SCHEDULE_HOUR: "2"
+  BACKUP_RETENTION_COUNT: "7"
+  GOOGLE_DRIVE_FOLDER_ID: "changeme"
+  GOOGLE_DRIVE_BACKUP_FOLDER_ID: "changeme"
+  AI_ASSISTANT_MAX_TRANSACTIONS: "3000"
+  JWT_EXPIRY_MINUTES: "1440"
+  DEFAULT_PAGE_SIZE: "50"
+  MAX_PAGE_SIZE: "200"
+  CSV_EXPORT_MAX_ROWS: "50000"
+  RECURRING_PAYMENT_DUE_SOON_LEAD_DAYS: "5"
+  # Host-only oMLX server (FR-K8S-11) -- reached via ordinary cluster egress, exactly
+  # as under Docker Compose. Empty by default: ingestion-worker treats an unset value
+  # as "no embeddings available" and falls back to fuzzy-text matching; nothing breaks
+  # if you never set this.
+  EMBEDDING_BASE_URL: ""
+  EMBEDDING_MODEL: embeddinggemma-300m
+  EMBEDDING_SIMILARITY_THRESHOLD: "0.82"
+  EMBEDDING_TOP_K: "5"
+  EMBEDDING_BATCH_SIZE: "50"
+  EMBEDDING_DIMENSIONS: "768"
+  EMBEDDING_PRICE_BUCKET_BOUNDARIES: "1,5,10,20,50,100,200,500,1000,2000,5000"
+  EMBEDDING_LLM_AGREEMENT_BOOST: "0.05"

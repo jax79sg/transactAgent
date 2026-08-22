@@ -1,0 +1,25 @@
+# Values for the official HashiCorp Vault chart (repo: https://helm.releases.hashicorp.com).
+# Single-node, persistent (Raft) storage -- per the user's explicit choice (requirements
+# clarification C1=B) over Vault's simpler "dev" mode. Requires a manual
+# `vault operator init` + unseal after install; see README.md in this directory.
+
+server:
+  dataStorage:
+    enabled: true
+    size: 2Gi
+  ha:
+    enabled: false
+  standalone:
+    enabled: true
+    config: |
+      listener "tcp" {
+        address = "0.0.0.0:8200"
+        tls_disable = true  # local-cluster-only traffic; add TLS here if this Vault
+                             # is ever reachable from outside the cluster network
+      }
+      storage "raft" {
+        path = "/vault/data"
+      }
+
+injector:
+  enabled: false  # not using Vault's sidecar-injector pattern here -- ESO reads Vault directly

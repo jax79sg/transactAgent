@@ -1,0 +1,11 @@
+apiVersion: v2
+name: transactagent
+description: >-
+  Bank Transaction Insights app (database, api-service, ingestion-worker,
+  frontend, vector-db). Deliberately has no chart dependencies: External
+  Secrets Operator, HashiCorp Vault, and an Ingress controller are
+  cluster-shared prerequisites installed separately -- see
+  ../prerequisites/README.md.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

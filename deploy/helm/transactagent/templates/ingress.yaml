@@ -1,0 +1,38 @@
+# Requires an Ingress controller already running in the cluster (this feature includes
+# ingress-nginx setup material in ../prerequisites/ since none was found on the target
+# cluster -- see infrastructure-design.md). TLS is handled by OrbStack's automatic
+# *.orb.local HTTPS for the default host below (C3=A) -- no cert-manager/public-domain
+# dependency for the primary target environment.
+#
+# rewrite-target strips the /api prefix before forwarding to api-service, since its
+# actual routes are /health, /transactions, etc, not /api/health -- api-service itself
+# is unaware it's being reached through a path prefix at all. The regex-capture pattern
+# below (standard ingress-nginx technique) applies the same rewrite to both rules; for
+# frontend's `/` rule this is a no-op (captures and re-emits the same path).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: transactagent
+  namespace: {{ .Values.namespace }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: api-service
+                port:
+                  number: 8000
+          - path: /()(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

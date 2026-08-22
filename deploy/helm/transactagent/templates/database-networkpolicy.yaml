@@ -1,0 +1,20 @@
+# Restricts database ingress to pods within this app's own namespace (NFR-K8S-4 --
+# "production-grade" hardening), rather than being reachable from anywhere in the
+# cluster. api-service and ingestion-worker (the only real callers) both live here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: database
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432
