@@ -9,8 +9,15 @@ import type {
   ProposalPage,
 } from "./types";
 
-export function listPendingProposals(page: number, pageSize = 20): Promise<ProposalPage> {
-  return apiRequest<ProposalPage>("/recategorization/proposals", { query: { page, pageSize } });
+export type ProposalSortByOption = "date" | "amount" | "score" | "source";
+
+export function listPendingProposals(
+  page: number,
+  pageSize = 20,
+  sortBy?: ProposalSortByOption,
+  sortDir?: "asc" | "desc",
+): Promise<ProposalPage> {
+  return apiRequest<ProposalPage>("/recategorization/proposals", { query: { page, pageSize, sortBy, sortDir } });
 }
 
 export function getPendingCount(): Promise<PendingCountResponse> {

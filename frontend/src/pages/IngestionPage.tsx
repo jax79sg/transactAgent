@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
 import { cancelRun, getRunStatus, listRunFiles, listRunHistory, listRunLogs, startRun } from "../api/ingestion";
-import type { IngestionRunStatus, RunLogLine } from "../api/types";
+import type { IngestionRunStatus, RunFileDetail, RunLogLine, RunStatusResponse } from "../api/types";
+import { SortableTh } from "../components/SortableTh";
 
 const ACTIVE_STATUSES: IngestionRunStatus[] = ["queued", "running"];
 const POLL_INTERVAL_MS = 3000; // business-logic-model.md: 3s poll while a run is active
@@ -75,7 +76,32 @@ export function RunLiveLogs({ runId, isActive }: { runId: string; isActive: bool
   );
 }
 
+type RunFileSortKey = "driveFileName" | "outcome" | "failureReason" | "transactionsExtractedCount";
+
+function sortRunFiles(files: RunFileDetail[], sortKey: RunFileSortKey, sortDir: "asc" | "desc"): RunFileDetail[] {
+  const sorted = [...files].sort((a, b) => {
+    switch (sortKey) {
+      case "driveFileName":
+        return a.driveFileName.localeCompare(b.driveFileName);
+      case "outcome":
+        return a.outcome.localeCompare(b.outcome);
+      case "failureReason":
+        return (a.failureReason ?? "").localeCompare(b.failureReason ?? "");
+      case "transactionsExtractedCount":
+        return (a.transactionsExtractedCount ?? 0) - (b.transactionsExtractedCount ?? 0);
+    }
+  });
+  return sortDir === "asc" ? sorted : sorted.reverse();
+}
+
 function RunFiles({ runId }: { runId: string }) {
+  const [sortKey, setSortKey] = useState<RunFileSortKey>("driveFileName");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const handleSort = (key: RunFileSortKey, dir: "asc" | "desc") => {
+    setSortKey(key);
+    setSortDir(dir);
+  };
+
   const { data: files, isPending } = useQuery({
     queryKey: ["ingestion", "runFiles", runId],
     queryFn: () => listRunFiles(runId),
@@ -87,14 +113,26 @@ function RunFiles({ runId }: { runId: string }) {
     <table className="mt-2 w-full text-xs">
       <thead>
         <tr className="text-left text-slate-500 dark:text-slate-400">
-          <th>File</th>
-          <th>Outcome</th>
-          <th>Reason</th>
-          <th>Transactions</th>
+          <SortableTh label="File" sortKey="driveFileName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          <SortableTh label="Outcome" sortKey="outcome" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          <SortableTh
+            label="Reason"
+            sortKey="failureReason"
+            activeSortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+          />
+          <SortableTh
+            label="Transactions"
+            sortKey="transactionsExtractedCount"
+            activeSortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+          />
         </tr>
       </thead>
       <tbody>
-        {files?.map((f) => (
+        {files && sortRunFiles(files, sortKey, sortDir).map((f) => (
           <tr key={f.id}>
             <td>{f.driveFileName}</td>
             <td>{f.outcome}</td>
@@ -107,10 +145,42 @@ function RunFiles({ runId }: { runId: string }) {
   );
 }
 
+type RunHistorySortKey =
+  | "startedAt"
+  | "status"
+  | "filesFoundCount"
+  | "filesProcessedCount"
+  | "filesSkippedCount"
+  | "filesFailedCount";
+
+function sortRunHistory(
+  runs: RunStatusResponse[],
+  sortKey: RunHistorySortKey,
+  sortDir: "asc" | "desc",
+): RunStatusResponse[] {
+  const sorted = [...runs].sort((a, b) => {
+    switch (sortKey) {
+      case "startedAt":
+        return a.startedAt.localeCompare(b.startedAt);
+      case "status":
+        return a.status.localeCompare(b.status);
+      default:
+        return a[sortKey] - b[sortKey];
+    }
+  });
+  return sortDir === "asc" ? sorted : sorted.reverse();
+}
+
 export function IngestionPage() {
   const queryClient = useQueryClient();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [historySortKey, setHistorySortKey] = useState<RunHistorySortKey>("startedAt");
+  const [historySortDir, setHistorySortDir] = useState<"asc" | "desc">("desc");
+  const handleHistorySort = (key: RunHistorySortKey, dir: "asc" | "desc") => {
+    setHistorySortKey(key);
+    setHistorySortDir(dir);
+  };
 
   const { data: history } = useQuery({
     queryKey: ["ingestion", "history"],
@@ -195,16 +265,52 @@ export function IngestionPage() {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-slate-500 dark:text-slate-400">
-            <th>Started</th>
-            <th>Status</th>
-            <th>Found</th>
-            <th>Processed</th>
-            <th>Skipped</th>
-            <th>Failed</th>
+            <SortableTh
+              label="Started"
+              sortKey="startedAt"
+              activeSortKey={historySortKey}
+              sortDir={historySortDir}
+              onSort={handleHistorySort}
+            />
+            <SortableTh
+              label="Status"
+              sortKey="status"
+              activeSortKey={historySortKey}
+              sortDir={historySortDir}
+              onSort={handleHistorySort}
+            />
+            <SortableTh
+              label="Found"
+              sortKey="filesFoundCount"
+              activeSortKey={historySortKey}
+              sortDir={historySortDir}
+              onSort={handleHistorySort}
+            />
+            <SortableTh
+              label="Processed"
+              sortKey="filesProcessedCount"
+              activeSortKey={historySortKey}
+              sortDir={historySortDir}
+              onSort={handleHistorySort}
+            />
+            <SortableTh
+              label="Skipped"
+              sortKey="filesSkippedCount"
+              activeSortKey={historySortKey}
+              sortDir={historySortDir}
+              onSort={handleHistorySort}
+            />
+            <SortableTh
+              label="Failed"
+              sortKey="filesFailedCount"
+              activeSortKey={historySortKey}
+              sortDir={historySortDir}
+              onSort={handleHistorySort}
+            />
           </tr>
         </thead>
         <tbody>
-          {history?.items.map((run) => (
+          {history && sortRunHistory(history.items, historySortKey, historySortDir).map((run) => (
             <>
               <tr
                 key={run.runId}
