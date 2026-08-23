@@ -8,19 +8,16 @@ data:
   # comment there) so these can never drift out of sync with the real Ingress.
   # /api matches templates/ingress.yaml's routing and frontend's API_BASE_PATH below.
   #
-  # FRONTEND_ORIGIN lists BOTH schemes (api-service's CORS config already supports a
-  # comma-separated list, per .env.example) rather than picking one: the same Ingress
-  # host is reachable two different ways in practice -- OrbStack auto-upgrades it to
-  # HTTPS for the machine OrbStack itself runs on (whose cert only that machine
-  # trusts), while another device on the network reached via a hosts-file entry has
-  # no such upgrade or cert trust and must use plain HTTP. The frontend's own request
-  # origin now always matches whichever one actually loaded the page (see
-  # frontend/src/config.ts's apiBasePath handling), so CORS just needs to allow both.
-  FRONTEND_ORIGIN: "https://{{ .Values.ingress.host }},http://{{ .Values.ingress.host }}"
-  # GOOGLE_OAUTH_REDIRECT_URI stays single-valued (Google's OAuth client config only
-  # accepts a fixed, pre-registered redirect URI, unlike CORS) -- https, since that's
-  # what you register in Google Cloud Console; the Drive-connect flow is expected to
-  # be run from the host machine (OrbStack's own HTTPS), not another device.
+  # FRONTEND_ORIGIN is single-valued HTTPS now (previously listed both http:// and
+  # https:// to work around OrbStack's *.orb.local auto-HTTPS being host-machine-only
+  # -- see git history). The Ingress host is now a sslip.io domain with its own
+  # self-signed cert (values.yaml's ingress.tls), which every device on the LAN
+  # reaches identically over https://, so that split is no longer needed.
+  FRONTEND_ORIGIN: "https://{{ .Values.ingress.host }}"
+  # GOOGLE_OAUTH_REDIRECT_URI: this is what you register in Google Cloud Console's
+  # OAuth client "Authorized redirect URIs". Must be https:// and a public-suffix
+  # domain -- see values.yaml's ingress.host comment for why *.orb.local can't be
+  # used here at all.
   GOOGLE_OAUTH_REDIRECT_URI: "https://{{ .Values.ingress.host }}/api/drive/callback"
 {{- range $key, $value := .Values.env }}
   {{ $key }}: {{ $value | quote }}

@@ -25,6 +25,7 @@ from ingestion_worker.clients.retry import TransientError
 from ingestion_worker.currency.service import resolve_converted_amount
 from ingestion_worker.duplicate_detection import service as duplicate_detection
 from ingestion_worker.extraction.service import ExtractionFailure, extract_statement
+from ingestion_worker.heartbeat import touch_heartbeat
 from ingestion_worker.logging_capture import set_current_run
 from ingestion_worker.orchestrator import repository as orchestrator_repository
 from ingestion_worker.recurring_payments import service as recurring_payments_service
@@ -75,6 +76,15 @@ def _process_run(db: Session, run) -> None:
                 )
                 orchestrator_repository.cancel_run(db, run)
                 return
+            # Refreshed here, not just once per poll cycle in main.py's run_forever
+            # loop: a single file's categorization calls can legitimately take up to
+            # ~186s in the worst case (60s timeout * up to 3 attempts, plus backoff --
+            # see openrouter_client.py), which exceeds the liveness probe's freshness
+            # window if the heartbeat only moves between poll cycles, not between
+            # files. Found live: the pod was getting SIGKILLed mid-file with nothing
+            # logged (a hard kill, not a catchable exception), masking every failure
+            # as a generic "run failed" with no diagnostic trace.
+            touch_heartbeat()
             logger.info("Ingestion run %s: processing file %d/%d: %s", run.id, index, len(files), file_ref.name)
             _process_one_file(db, run, file_ref)
     except Exception:

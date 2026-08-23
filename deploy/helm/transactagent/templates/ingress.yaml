@@ -1,8 +1,10 @@
 # Requires an Ingress controller already running in the cluster (this feature includes
 # ingress-nginx setup material in ../prerequisites/ since none was found on the target
-# cluster -- see infrastructure-design.md). TLS is handled by OrbStack's automatic
-# *.orb.local HTTPS for the default host below (C3=A) -- no cert-manager/public-domain
-# dependency for the primary target environment.
+# cluster -- see infrastructure-design.md). TLS is a self-signed cert (see values.yaml's
+# ingress.tls comment and ../scripts/generate-selfsigned-cert.sh for why: Google's OAuth
+# redirect-URI validator requires https:// and a public-suffix domain, but not a
+# CA-trusted cert -- OrbStack's old *.orb.local auto-HTTPS magic doesn't apply here
+# since the host is now a sslip.io domain, not *.orb.local).
 #
 # rewrite-target strips the /api prefix before forwarding to api-service, since its
 # actual routes are /health, /transactions, etc, not /api/health -- api-service itself
@@ -18,6 +20,12 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host }}
       http:
