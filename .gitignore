@@ -9,5 +9,7 @@ __pycache__/
 node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+frontend/playwright-report/
+frontend/test-results/
 .claude/settings.local.json
 aidlc-workflows/
