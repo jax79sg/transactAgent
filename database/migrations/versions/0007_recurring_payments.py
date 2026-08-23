@@ -33,6 +33,17 @@ def upgrade() -> None:
     tables = [Base.metadata.tables[name] for name in _TABLE_NAMES]
     Base.metadata.create_all(bind=bind, tables=tables, checkfirst=True)
 
+    # Same class of bug as 0001's fresh-database drift fix (see that migration's
+    # upgrade() for the full explanation): Base.metadata.create_all() above reflects
+    # the CURRENT recurring_payments model, which already includes embedding_status --
+    # a column actually introduced later, by 0010's own op.add_column(). Drop it here
+    # so 0010 remains the single source of truth for it and the full chain replays
+    # correctly from an empty database. Found via the same real fresh-database
+    # Kubernetes deployment attempt that surfaced 0001's version of this bug
+    # (2026-08-21) -- this was the very next failure once 0001 was fixed, from this
+    # exact same root cause recurring at a second, independent call site.
+    op.drop_column("recurring_payments", "embedding_status")  # actually added by 0010
+
     # BR-21: at most one "live" (non-rejected) match per (recurring_payment_id,
     # cycle_period) pair. Same partial-unique-index pattern as BR-10 (0001) and
     # BR-14 (0004) -- not representable via standard SQLAlchemy Table/Column
