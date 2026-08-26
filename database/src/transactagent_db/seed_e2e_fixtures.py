@@ -17,10 +17,16 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from transactagent_db.models import BankStatement, Category, CategorySource, Transaction, User
+from transactagent_db.models import (
+    BankStatement,
+    Category,
+    CategorySource,
+    Transaction,
+    User,
+)
 
 E2E_USERNAME = "e2e_test"
-E2E_PASSWORD = "E2e-Test-Password-2026"  # noqa: S105 -- CI-only fixture, not a real credential
+E2E_PASSWORD = "E2e-Test-Password-2026"
 
 _STATEMENT_DRIVE_FILE_ID = "e2e-fixture-statement"
 _STATEMENT_CONTENT_HASH = hashlib.sha256(b"e2e-fixture-statement").hexdigest()
@@ -94,9 +100,13 @@ if __name__ == "__main__":
 
     if len(sys.argv) != 2:
         print("Usage: python -m transactagent_db.seed_e2e_fixtures <bcrypt-hashed-password>", file=sys.stderr)
+        # Deliberately doesn't print E2E_PASSWORD's actual value, even though it's
+        # a CI-only fixture and not a real credential -- static analysis (and any
+        # future reader) can't tell the difference from a real secret just by
+        # looking at this line, so this never interpolates it into output.
         print(
             "(Compute it with: python -c \"from api_service.auth.security import hash_password; "
-            f'print(hash_password({E2E_PASSWORD!r}))"',
+            "from transactagent_db.seed_e2e_fixtures import E2E_PASSWORD; print(hash_password(E2E_PASSWORD))\"",
             file=sys.stderr,
         )
         sys.exit(1)
