@@ -368,9 +368,17 @@ export function TransactionsPage() {
               />
               <th>Description</th>
               <SortableTh
-                label="Out/In-flow"
+                label="Out-flow"
                 sortKey="amount"
-                colSpan={2}
+                testId="sort-amount-out"
+                activeSortKey={filter.sortBy}
+                sortDir={filter.sortDir ?? "desc"}
+                onSort={handleSort}
+              />
+              <SortableTh
+                label="In-flow"
+                sortKey="amount"
+                testId="sort-amount-in"
                 activeSortKey={filter.sortBy}
                 sortDir={filter.sortDir ?? "desc"}
                 onSort={handleSort}

@@ -13,6 +13,7 @@ export function SortableTh<K extends string>({
   onSort,
   className,
   colSpan,
+  testId,
 }: {
   label: string;
   sortKey: K;
@@ -21,6 +22,10 @@ export function SortableTh<K extends string>({
   onSort: (key: K, dir: "asc" | "desc") => void;
   className?: string;
   colSpan?: number;
+  /** Override when two headers share one sortKey (e.g. separate "Out-flow" /
+   * "In-flow" columns both sorting by the same combined "amount" key) -- avoids
+   * two elements with the same default `sort-${sortKey}` testid. */
+  testId?: string;
 }) {
   const isActive = activeSortKey === sortKey;
   const nextDir = isActive && sortDir === "asc" ? "desc" : "asc";
@@ -29,7 +34,7 @@ export function SortableTh<K extends string>({
     <th className={className} colSpan={colSpan}>
       <button
         type="button"
-        data-testid={`sort-${sortKey}`}
+        data-testid={testId ?? `sort-${sortKey}`}
         aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
         className="flex cursor-pointer select-none items-center gap-1 whitespace-nowrap hover:text-slate-900 dark:hover:text-slate-100"
         onClick={() => onSort(sortKey, nextDir)}
