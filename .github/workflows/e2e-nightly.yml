@@ -19,6 +19,12 @@ on:
     - cron: "0 18 * * *" # 18:00 UTC = 02:00 SGT
   workflow_dispatch: {}
 
+# This job only checks out code and runs the stack/tests locally on the runner --
+# it never pushes, comments, or otherwise writes back to the repo, so GITHUB_TOKEN
+# needs no more than read access.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}
   cancel-in-progress: true
