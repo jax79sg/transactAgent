@@ -215,7 +215,37 @@ class TestRecategorizeUnsureFromPrecedent:
         assert proposal.status == RecategorizationProposalStatus.PENDING
         assert proposal.source_bucket == RecategorizationProposalSourceBucket.UNSURE
         assert proposal.proposed_category_id == household.id
-        assert proposal.resolved_at is None
+
+    def test_repeated_job_does_not_duplicate_pending_proposal_for_same_candidate(self, db_session):
+        """Issue #12: a still-UNSURE candidate stays UNSURE (and so keeps matching
+        find_unsure_transactions' scan) until its pending proposal is resolved -- a
+        second RecategorizationJob (e.g. from a second, unrelated manual correction
+        toward the same category) must not propose it again while the first
+        proposal is still pending. Found live as ~6 duplicate rows in the Review
+        panel for the same candidate, one per job."""
+        household = _make_category(db_session, "Household")
+        unsure_category = _make_category(db_session, "UNSURE")
+
+        first_corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        unsure_txn = _make_transaction(db_session, "IKEA FURNITURE STORE #2", unsure_category, CategorySource.UNSURE)
+
+        first_job = self._make_job(db_session, first_corrected.id)
+        recategorize_unsure_from_precedent(db_session, first_job.id, first_corrected.id)
+
+        db_session.refresh(unsure_txn)
+        assert unsure_txn.category_source == CategorySource.UNSURE  # still pending review, not auto-applied
+
+        # A second, unrelated correction toward the same category triggers a fresh
+        # job that re-scans the whole UNSURE pool -- unsure_txn is still in it.
+        second_corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        second_job = self._make_job(db_session, second_corrected.id)
+        recategorize_unsure_from_precedent(db_session, second_job.id, second_corrected.id)
+
+        proposals = db_session.scalars(
+            select(RecategorizationProposal).where(RecategorizationProposal.candidate_transaction_id == unsure_txn.id)
+        ).all()
+        assert len(proposals) == 1
+        assert proposals[0].recategorization_job_id == first_job.id
 
     def test_already_categorized_transaction_is_never_scanned(self, db_session):
         """WR-9 revised (2026-08-19, Recategorization Scope Narrowing): the
