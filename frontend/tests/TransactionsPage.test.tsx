@@ -132,6 +132,50 @@ describe("TransactionsPage pagination", () => {
   });
 });
 
+describe("TransactionsPage column sorting (issue #10)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("clicking a sortable column header requests that column ascending first", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listBanks").mockResolvedValue([]);
+    const listSpy = vi.spyOn(transactionsApi, "listTransactions").mockImplementation(async (filter) => {
+      return pageOf(filter.page ?? 1);
+    });
+    renderTransactionsPage();
+
+    await waitFor(() => expect(screen.getByTestId("sort-bank")).toBeInTheDocument());
+    await user.click(screen.getByTestId("sort-bank"));
+
+    await waitFor(() => {
+      expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: "bank", sortDir: "asc", page: 1 }));
+    });
+  });
+
+  it("clicking an already-active sort column toggles its direction", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listBanks").mockResolvedValue([]);
+    const listSpy = vi.spyOn(transactionsApi, "listTransactions").mockImplementation(async (filter) => {
+      return pageOf(filter.page ?? 1);
+    });
+    renderTransactionsPage();
+
+    await waitFor(() => expect(screen.getByTestId("sort-date")).toBeInTheDocument());
+    await user.click(screen.getByTestId("sort-date"));
+    await waitFor(() => {
+      expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: "date", sortDir: "asc" }));
+    });
+
+    await user.click(screen.getByTestId("sort-date"));
+    await waitFor(() => {
+      expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy: "date", sortDir: "desc" }));
+    });
+  });
+});
+
 describe("TransactionsPage bank and category filters", () => {
   afterEach(() => {
     vi.restoreAllMocks();

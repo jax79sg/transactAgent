@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from api_service.auth.dependencies import get_current_user_id
 from api_service.db import get_db
 from api_service.recategorization import service
+from api_service.recategorization.repository import ProposalSortByOption, SortDir
 from api_service.recategorization.schemas import (
     BulkApproveResponse,
     BulkProposalRequest,
@@ -73,9 +74,15 @@ def _to_disagreement_dto(disagreement) -> DisagreementDTO:
 
 @router.get("/proposals", response_model=ProposalPage)
 def list_pending_proposals(
-    page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100), db: Session = Depends(get_db)
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    sort_by: ProposalSortByOption = Query(default="date"),
+    sort_dir: SortDir = Query(default="desc"),
+    db: Session = Depends(get_db),
 ) -> ProposalPage:
-    proposals, total_count = service.list_pending_proposals(db, page=page, page_size=page_size)
+    proposals, total_count = service.list_pending_proposals(
+        db, page=page, page_size=page_size, sort_by=sort_by, sort_dir=sort_dir
+    )
     return ProposalPage(
         items=[_to_proposal_dto(p) for p in proposals], page=page, page_size=page_size, total_count=total_count
     )

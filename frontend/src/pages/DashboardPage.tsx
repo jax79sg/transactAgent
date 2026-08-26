@@ -16,7 +16,14 @@ import {
   listRecurringPayments,
   rejectMatch,
 } from "../api/recurringPayments";
-import type { BulkImportRow, DashboardFilterState, RecurringPaymentFrequency, RecurringPaymentStatus } from "../api/types";
+import type {
+  BulkImportRow,
+  DashboardFilterState,
+  RecurringPaymentDTO,
+  RecurringPaymentFrequency,
+  RecurringPaymentStatus,
+} from "../api/types";
+import { SortableTh } from "../components/SortableTh";
 import { useTheme } from "../context/ThemeContext";
 import { CATEGORICAL_PALETTE, OTHER_LABEL, barMarkStyle, buildCategoricalSeries, lineMarkStyle } from "../lib/chartColors";
 import { getChartTheme } from "../lib/chartTheme";
@@ -244,8 +251,38 @@ function parseBulkImportText(text: string): BulkImportRow[] {
     });
 }
 
+type RecurringPaymentSortKey = "name" | "amount" | "dueDay" | "monthlySetAside" | "status";
+
+function sortPayments(
+  payments: RecurringPaymentDTO[],
+  sortKey: RecurringPaymentSortKey,
+  sortDir: "asc" | "desc",
+): RecurringPaymentDTO[] {
+  const sorted = [...payments].sort((a, b) => {
+    switch (sortKey) {
+      case "name":
+        return a.name.localeCompare(b.name);
+      case "amount":
+        return Number(a.expectedAmount) - Number(b.expectedAmount);
+      case "dueDay":
+        return a.dueDay - b.dueDay;
+      case "monthlySetAside":
+        return Number(a.monthlySetAside ?? 0) - Number(b.monthlySetAside ?? 0);
+      case "status":
+        return a.status.localeCompare(b.status);
+    }
+  });
+  return sortDir === "asc" ? sorted : sorted.reverse();
+}
+
 function RecurringPaymentsTab() {
   const queryClient = useQueryClient();
+  const [sortKey, setSortKey] = useState<RecurringPaymentSortKey>("dueDay");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const handleSort = (key: RecurringPaymentSortKey, dir: "asc" | "desc") => {
+    setSortKey(key);
+    setSortDir(dir);
+  };
   const [newName, setNewName] = useState("");
   const [newAmount, setNewAmount] = useState("");
   const [newFrequency, setNewFrequency] = useState<RecurringPaymentFrequency>("monthly");
@@ -312,15 +349,45 @@ function RecurringPaymentsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 dark:text-slate-400">
-                <th>Name</th>
-                <th>Amount</th>
-                <th>Due</th>
-                <th>Set aside/mo</th>
-                <th>Status</th>
+                <SortableTh
+                  label="Name"
+                  sortKey="name"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Amount"
+                  sortKey="amount"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Due"
+                  sortKey="dueDay"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Set aside/mo"
+                  sortKey="monthlySetAside"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Status"
+                  sortKey="status"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
               </tr>
             </thead>
             <tbody>
-              {payments!.map((payment) => (
+              {sortPayments(payments!, sortKey, sortDir).map((payment) => (
                 <tr
                   key={payment.id}
                   data-testid={`recurring-payment-row-${payment.id}`}

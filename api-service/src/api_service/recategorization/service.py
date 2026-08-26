@@ -23,8 +23,14 @@ from api_service.errors import (
 from api_service.recategorization import repository
 
 
-def list_pending_proposals(db: Session, page: int, page_size: int) -> tuple[list[RecategorizationProposal], int]:
-    return repository.list_pending(db, page=page, page_size=page_size)
+def list_pending_proposals(
+    db: Session,
+    page: int,
+    page_size: int,
+    sort_by: repository.ProposalSortByOption = "date",
+    sort_dir: repository.SortDir = "desc",
+) -> tuple[list[RecategorizationProposal], int]:
+    return repository.list_pending(db, page=page, page_size=page_size, sort_by=sort_by, sort_dir=sort_dir)
 
 
 def get_pending_count(db: Session) -> int:

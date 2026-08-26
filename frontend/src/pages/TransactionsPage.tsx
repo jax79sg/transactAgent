@@ -5,7 +5,8 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { listCategories } from "../api/categories";
 import { correctTransactionCategory, downloadTransactionsCsv, listBanks, listTransactions } from "../api/transactions";
-import type { CategoryDTO, GroupSummary, TransactionDTO, TransactionFilterState } from "../api/types";
+import type { CategoryDTO, GroupSummary, SortByOption, TransactionDTO, TransactionFilterState } from "../api/types";
+import { SortableTh } from "../components/SortableTh";
 import { useAuth } from "../context/AuthContext";
 import { filterStateToSearchParams, searchParamsToFilterState } from "../lib/urlFilterState";
 
@@ -266,6 +267,10 @@ export function TransactionsPage() {
     updateFilter({ categorySource: filter.categorySource === "unsure" ? undefined : "unsure" });
   }
 
+  function handleSort(sortBy: SortByOption, sortDir: "asc" | "desc") {
+    updateFilter({ sortBy, sortDir });
+  }
+
   async function handleExport() {
     await downloadTransactionsCsv(filter, token);
   }
@@ -353,12 +358,37 @@ export function TransactionsPage() {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              <th className="py-2">Date</th>
+              <SortableTh
+                className="py-2"
+                label="Date"
+                sortKey="date"
+                activeSortKey={filter.sortBy}
+                sortDir={filter.sortDir ?? "desc"}
+                onSort={handleSort}
+              />
               <th>Description</th>
-              <th>Out-flow</th>
-              <th>In-flow</th>
-              <th>Bank</th>
-              <th>Category</th>
+              <SortableTh
+                label="Out/In-flow"
+                sortKey="amount"
+                colSpan={2}
+                activeSortKey={filter.sortBy}
+                sortDir={filter.sortDir ?? "desc"}
+                onSort={handleSort}
+              />
+              <SortableTh
+                label="Bank"
+                sortKey="bank"
+                activeSortKey={filter.sortBy}
+                sortDir={filter.sortDir ?? "desc"}
+                onSort={handleSort}
+              />
+              <SortableTh
+                label="Category"
+                sortKey="category"
+                activeSortKey={filter.sortBy}
+                sortDir={filter.sortDir ?? "desc"}
+                onSort={handleSort}
+              />
               <th>Converted (SGD)</th>
               <th></th>
             </tr>

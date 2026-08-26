@@ -103,6 +103,52 @@ class TestListPendingProposals:
         assert [p.candidate_transaction_id for p in items] == [pending_candidate.id]
 
 
+class TestListPendingProposalsSort:
+    """Issue #10 (column sorting): score sorts directly on RecategorizationProposal;
+    date sorts through the explicit join to Transaction added in repository.py's
+    _apply_proposal_sort -- proven separately since a join bug wouldn't show up in
+    a score-only test."""
+
+    def _make_two_proposals(self, db_session):
+        household = _make_category(db_session, "Household")
+        source = _make_transaction(db_session, "IKEA", household, CategorySource.MANUAL)
+        job = _make_job(db_session, source.id)
+
+        low = _make_transaction(db_session, "Low candidate", household, CategorySource.UNSURE)
+        low.transaction_date = date(2026, 1, 1)
+        high = _make_transaction(db_session, "High candidate", household, CategorySource.UNSURE)
+        high.transaction_date = date(2026, 6, 1)
+        db_session.flush()
+
+        proposal_low = _make_proposal(db_session, job, low, household)
+        proposal_low.match_score = Decimal("50.00")
+        proposal_high = _make_proposal(db_session, job, high, household)
+        proposal_high.match_score = Decimal("95.00")
+        db_session.flush()
+        return proposal_low, proposal_high
+
+    def test_sorts_by_score_ascending(self, db_session):
+        low, high = self._make_two_proposals(db_session)
+
+        items, _ = service.list_pending_proposals(db_session, page=1, page_size=20, sort_by="score", sort_dir="asc")
+
+        assert [p.id for p in items] == [low.id, high.id]
+
+    def test_sorts_by_score_descending(self, db_session):
+        low, high = self._make_two_proposals(db_session)
+
+        items, _ = service.list_pending_proposals(db_session, page=1, page_size=20, sort_by="score", sort_dir="desc")
+
+        assert [p.id for p in items] == [high.id, low.id]
+
+    def test_sorts_by_date_via_candidate_transaction(self, db_session):
+        low, high = self._make_two_proposals(db_session)
+
+        items, _ = service.list_pending_proposals(db_session, page=1, page_size=20, sort_by="date", sort_dir="asc")
+
+        assert [p.id for p in items] == [low.id, high.id]
+
+
 class TestGetPendingCount:
     def test_counts_only_pending(self, db_session):
         household = _make_category(db_session, "Household")
