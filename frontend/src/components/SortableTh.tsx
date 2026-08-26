@@ -31,12 +31,17 @@ export function SortableTh<K extends string>({
         type="button"
         data-testid={`sort-${sortKey}`}
         aria-sort={isActive ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-        className="flex items-center gap-1 whitespace-nowrap hover:text-slate-900 dark:hover:text-slate-100"
+        className="flex cursor-pointer select-none items-center gap-1 whitespace-nowrap hover:text-slate-900 dark:hover:text-slate-100"
         onClick={() => onSort(sortKey, nextDir)}
       >
         {label}
-        <span className="text-[10px] leading-none" aria-hidden="true">
-          {isActive ? (sortDir === "asc" ? "▲" : "▼") : ""}
+        {/* Always visible, not just on hover/active -- a column that only reveals
+            it's sortable when you happen to hover it is a column nobody discovers
+            it's sortable at all (found live: issue #10 shipped but nobody could
+            tell the feature existed). Dimmed neutral glyph when inactive, solid
+            direction arrow once this column is the active sort. */}
+        <span className={`text-[10px] leading-none ${isActive ? "" : "text-slate-300 dark:text-slate-600"}`} aria-hidden="true">
+          {isActive ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
         </span>
       </button>
     </th>
