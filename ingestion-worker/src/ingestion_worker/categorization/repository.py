@@ -90,8 +90,23 @@ def find_category_by_name(db: Session, name: str) -> Category | None:
 
 
 def find_unsure_transactions(db: Session) -> list[Transaction]:
-    stmt = select(Transaction).join(Category, Transaction.category_id == Category.id).where(
-        Transaction.category_source == CategorySource.UNSURE
+    # Issue #12: excludes a candidate that already has a pending proposal from any
+    # earlier job -- without this, every fresh RecategorizationJob (one per manual
+    # correction, see transactions/service.py's correct_transaction_category)
+    # re-scans the entire UNSURE pool from scratch and re-proposes the same
+    # recurring-looking candidate again, since a still-UNSURE transaction stays
+    # UNSURE (and so keeps showing up here) until its pending proposal is actually
+    # resolved -- found live as ~6 duplicate rows in the Review panel for the same
+    # transaction, each from a different job, each with a slightly different score
+    # (the score drifts run to run because each job embeds a different source
+    # transaction to compare against, not because the candidate changed).
+    already_pending = select(RecategorizationProposal.candidate_transaction_id).where(
+        RecategorizationProposal.status == RecategorizationProposalStatus.PENDING
+    )
+    stmt = (
+        select(Transaction)
+        .join(Category, Transaction.category_id == Category.id)
+        .where(Transaction.category_source == CategorySource.UNSURE, Transaction.id.not_in(already_pending))
     )
     return list(db.scalars(stmt))
 
