@@ -15,6 +15,7 @@ import {
   resolveDisagreement,
 } from "../api/recategorization";
 import type { DisagreementDTO } from "../api/types";
+import { FlowAmount } from "../components/FlowAmount";
 import { SortableTh } from "../components/SortableTh";
 
 const PAGE_SIZE = 20;
@@ -192,7 +193,12 @@ function DisagreementTable() {
             >
               <td>{disagreement.candidateTransaction.transactionDate}</td>
               <td>{disagreement.candidateTransaction.description}</td>
-              <td>{disagreement.candidateTransaction.outFlow ?? disagreement.candidateTransaction.inFlow ?? ""}</td>
+              <td>
+                <FlowAmount
+                  outFlow={disagreement.candidateTransaction.outFlow}
+                  inFlow={disagreement.candidateTransaction.inFlow}
+                />
+              </td>
               <td>{disagreement.similarityScore}</td>
               <td>
                 <button
@@ -414,7 +420,12 @@ export function ReviewPage() {
                   </td>
                   <td>{proposal.candidateTransaction.transactionDate}</td>
                   <td>{proposal.candidateTransaction.description}</td>
-                  <td>{proposal.candidateTransaction.outFlow ?? proposal.candidateTransaction.inFlow ?? ""}</td>
+                  <td>
+                    <FlowAmount
+                      outFlow={proposal.candidateTransaction.outFlow}
+                      inFlow={proposal.candidateTransaction.inFlow}
+                    />
+                  </td>
                   <td>{proposal.candidateTransaction.category.name}</td>
                   <td>{proposal.proposedCategory.name}</td>
                   <td>{proposal.matchScore}</td>
