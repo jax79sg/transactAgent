@@ -1,0 +1,64 @@
+# No Service object -- nothing calls ingestion-worker, it's a poll loop against the
+# database (same as today's docker-compose setup).
+#
+# `replicas: 1` is HARDCODED here, not sourced from values.yaml (NFR-K8S-5). This is a
+# correctness constraint, not a tunable: ingestion-worker's poll loop has no leader-
+# election or concurrency-safety design, so a second concurrent replica would double-
+# process ingestion runs. Do not add a values.yaml override for this field.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-worker
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingestion-worker
+  template:
+    metadata:
+      labels:
+        app: ingestion-worker
+    spec:
+      containers:
+        - name: ingestion-worker
+          image: "{{ if .Values.image.registry }}{{ .Values.image.registry }}/{{ end }}transactagent-ingestion-worker:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef: { name: transactagent-config }
+            - secretRef: { name: transactagent-secrets }
+          env:
+            - name: DB_HOST
+              value: database
+            - name: DB_PORT
+              value: "5432"
+            - name: QDRANT_HOST
+              value: vector-db
+            - name: QDRANT_PORT
+              value: "6333"
+            - name: HEARTBEAT_FILE
+              value: /tmp/worker-heartbeat
+          resources:
+            {{- toYaml .Values.ingestionWorker.resources | nindent 12 }}
+          # Same heartbeat-file-mtime check as docker-compose's healthcheck -- no
+          # readinessProbe, since nothing routes traffic to this pod (liveness only).
+          #
+          # Freshness window widened from 0.5min to 5min (found live on K8s): a
+          # single file's categorization call can legitimately take up to ~186s
+          # worst-case (60s timeout * up to 3 retry attempts, plus backoff -- see
+          # openrouter_client.py), which blew past the old 0.5min window and got the
+          # pod SIGKILLed mid-request with nothing logged (a hard kill, not a
+          # catchable exception). pipeline.py now also refreshes the heartbeat
+          # between files, not just once per poll cycle, but a single especially
+          # slow file can still exceed a too-tight window on its own -- this margin
+          # covers that while still catching a genuine multi-minute hang
+          # (previously: no ceiling at all, confirmed stuck 7+ hours in one
+          # incident) well before it would in docker-compose's much looser manual
+          # restart cycle.
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "find /tmp/worker-heartbeat -mmin -5 | grep -q ."]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3

@@ -1,4 +1,5 @@
 .env
+values-local.yaml
 .venv/
 data/
 .DS_Store
