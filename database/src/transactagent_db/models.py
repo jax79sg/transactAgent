@@ -607,6 +607,14 @@ class RecurringPayment(Base):
         _enum_type(EmbeddingStatus), nullable=False, default=EmbeddingStatus.PENDING,
         server_default=EmbeddingStatus.PENDING.value,
     )
+    # Issue #15: per-payment override for AR-15's due-soon lead window -- NULL means
+    # "use the frequency-based default" (Settings.recurring_payment_due_soon_lead_days
+    # for monthly, .._annual for annual -- see recurring_payments/service.py's
+    # _compute_status_and_set_aside). A single global default couldn't give an annual
+    # bill meaningfully more advance notice than a monthly one, which was the
+    # original complaint -- this lets one specific payment (e.g. a large annual
+    # renewal) get an even longer lead time than its frequency's own default.
+    due_soon_lead_days: Mapped[int | None] = mapped_column(nullable=True)
 
     category: Mapped["Category | None"] = relationship(back_populates="recurring_payments")
     matches: Mapped[list["RecurringPaymentMatch"]] = relationship(back_populates="recurring_payment")
@@ -671,6 +679,24 @@ class DetectionSuggestion(Base):
     status: Mapped[DetectionSuggestionStatus] = mapped_column(
         _enum_type(DetectionSuggestionStatus), nullable=False, default=DetectionSuggestionStatus.NEW
     )
+    # Issue #15: which cadence the detection scan actually matched (monthly or
+    # annual -- see ingestion_worker/recurring_payments/service.py's
+    # _has_monthly_cadence/_has_annual_cadence). NULL for suggestions recorded
+    # before this column existed, which add_from_detection_suggestion treats as
+    # "monthly" (FR-12's original, only-ever-monthly behavior) for backward
+    # compatibility.
+    detected_frequency: Mapped[RecurringPaymentFrequency | None] = mapped_column(
+        _enum_type(RecurringPaymentFrequency), nullable=True
+    )
+    # Issue #15: the most recent detected occurrence's actual calendar day (and
+    # month, for an annual pattern) -- add_from_detection_suggestion defaults a
+    # new payment's due_day/due_month to these rather than "whatever day the user
+    # happens to click Add" (the previous behavior, date.today().day). NULL for
+    # both on a suggestion recorded before these columns existed, or
+    # suggested_due_month specifically for a MONTHLY suggestion (due_month must be
+    # None for monthly, BR-19).
+    suggested_due_month: Mapped[int | None] = mapped_column(nullable=True)
+    suggested_due_day: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

@@ -90,27 +90,26 @@ describe("NavBar recurring payments badge", () => {
     expect(screen.queryByTestId("recurring-payments-badge")).not.toBeInTheDocument();
   });
 
-  it("shows the combined overdue + pending + suggestion count", async () => {
+  it("shows the combined due-soon + overdue + pending + suggestion count", async () => {
     vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue({
       dueSoonCount: 3, overdueCount: 1, pendingMatchCount: 2, newSuggestionCount: 1,
     });
     renderNavBar();
 
     await waitFor(() => {
-      expect(screen.getByTestId("recurring-payments-badge")).toHaveTextContent("4"); // 1 + 2 + 1, not dueSoonCount
+      expect(screen.getByTestId("recurring-payments-badge")).toHaveTextContent("7"); // 3 + 1 + 2 + 1
     });
   });
 
-  it("does not count dueSoonCount toward the badge", async () => {
+  it("counts dueSoonCount toward the badge (issue #15 -- a due-soon payment must be visible without opening the Dashboard)", async () => {
     vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue({
       dueSoonCount: 5, overdueCount: 0, pendingMatchCount: 0, newSuggestionCount: 0,
     });
     renderNavBar();
 
     await waitFor(() => {
-      expect(recurringPaymentsApi.getRecurringPaymentsStatus).toHaveBeenCalled();
+      expect(screen.getByTestId("recurring-payments-badge")).toHaveTextContent("5");
     });
-    expect(screen.queryByTestId("recurring-payments-badge")).not.toBeInTheDocument();
   });
 });
 

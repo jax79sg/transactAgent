@@ -44,6 +44,18 @@ def upgrade() -> None:
     # exact same root cause recurring at a second, independent call site.
     op.drop_column("recurring_payments", "embedding_status")  # actually added by 0010
 
+    # Same fresh-database drift, found again (2026-08-27) the very next time a new
+    # column was added to either of these two models: due_soon_lead_days
+    # (RecurringPayment) and detected_frequency/suggested_due_month/
+    # suggested_due_day (DetectionSuggestion) are all actually added by 0015, not
+    # here -- Base.metadata.create_all() above already reflects the current model
+    # state, so all four must be dropped here for the same reason embedding_status
+    # is, above.
+    op.drop_column("recurring_payments", "due_soon_lead_days")  # actually added by 0015
+    op.drop_column("detection_suggestions", "detected_frequency")  # actually added by 0015
+    op.drop_column("detection_suggestions", "suggested_due_month")  # actually added by 0015
+    op.drop_column("detection_suggestions", "suggested_due_day")  # actually added by 0015
+
     # BR-21: at most one "live" (non-rejected) match per (recurring_payment_id,
     # cycle_period) pair. Same partial-unique-index pattern as BR-10 (0001) and
     # BR-14 (0004) -- not representable via standard SQLAlchemy Table/Column

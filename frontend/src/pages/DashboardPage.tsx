@@ -15,6 +15,7 @@ import {
   listPendingMatches,
   listRecurringPayments,
   rejectMatch,
+  updateRecurringPayment,
 } from "../api/recurringPayments";
 import type {
   BulkImportRow,
@@ -275,6 +276,40 @@ function sortPayments(
   return sortDir === "asc" ? sorted : sorted.reverse();
 }
 
+/** Issue #15: per-payment "notify me X days before due" override -- blank shows
+ * the frequency-based default is in effect; a value shows the override in place.
+ * Commits on blur/Enter, not per-keystroke -- RecurringPaymentUpdateRequest is a
+ * full PUT (see updateLeadDaysMutation), no reason to fire it on every digit. */
+function LeadDaysCell({
+  payment,
+  onCommit,
+}: {
+  payment: RecurringPaymentDTO;
+  onCommit: (dueSoonLeadDays: number | null) => void;
+}) {
+  const [value, setValue] = useState(payment.dueSoonLeadDays?.toString() ?? "");
+  const defaultLeadDays = payment.frequency === "annual" ? 30 : 5;
+
+  const commit = () => {
+    const trimmed = value.trim();
+    onCommit(trimmed === "" ? null : Number(trimmed));
+  };
+
+  return (
+    <input
+      data-testid={`lead-days-input-${payment.id}`}
+      type="number"
+      min={0}
+      placeholder={`default: ${defaultLeadDays}`}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      className="w-24 rounded border px-1 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+    />
+  );
+}
+
 function RecurringPaymentsTab() {
   const queryClient = useQueryClient();
   const [sortKey, setSortKey] = useState<RecurringPaymentSortKey>("dueDay");
@@ -288,6 +323,10 @@ function RecurringPaymentsTab() {
   const [newFrequency, setNewFrequency] = useState<RecurringPaymentFrequency>("monthly");
   const [newDueMonth, setNewDueMonth] = useState("");
   const [newDueDay, setNewDueDay] = useState("");
+  // Issue #15: blank means "use the frequency-based default" -- left empty by
+  // default rather than pre-filled with a number, so a blank field unambiguously
+  // means "no override," not "override of 0".
+  const [newDueSoonLeadDays, setNewDueSoonLeadDays] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkResult, setBulkResult] = useState<{ createdCount: number; failed: { row: number; reason: string }[] } | null>(null);
 
@@ -309,8 +348,26 @@ function RecurringPaymentsTab() {
       setNewAmount("");
       setNewDueMonth("");
       setNewDueDay("");
+      setNewDueSoonLeadDays("");
       invalidateAll();
     },
+  });
+
+  // Issue #15: RecurringPaymentUpdateRequest is a full PUT, not a per-field PATCH
+  // -- re-sends the payment's own current values for every other field, changing
+  // only dueSoonLeadDays, so this can't accidentally clobber anything else.
+  const updateLeadDaysMutation = useMutation({
+    mutationFn: ({ payment, dueSoonLeadDays }: { payment: RecurringPaymentDTO; dueSoonLeadDays: number | null }) =>
+      updateRecurringPayment(payment.id, {
+        name: payment.name,
+        expectedAmount: payment.expectedAmount,
+        frequency: payment.frequency,
+        dueMonth: payment.dueMonth,
+        dueDay: payment.dueDay,
+        categoryId: payment.category?.id ?? null,
+        dueSoonLeadDays,
+      }),
+    onSuccess: invalidateAll,
   });
 
   const bulkImportMutation = useMutation({
@@ -384,6 +441,7 @@ function RecurringPaymentsTab() {
                   sortDir={sortDir}
                   onSort={handleSort}
                 />
+                <th>Notify</th>
               </tr>
             </thead>
             <tbody>
@@ -402,6 +460,12 @@ function RecurringPaymentsTab() {
                   <td>
                     <StatusBadge status={payment.status} />
                   </td>
+                  <td>
+                    <LeadDaysCell
+                      payment={payment}
+                      onCommit={(dueSoonLeadDays) => updateLeadDaysMutation.mutate({ payment, dueSoonLeadDays })}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -418,6 +482,7 @@ function RecurringPaymentsTab() {
               frequency: newFrequency,
               dueMonth: newFrequency === "annual" ? Number(newDueMonth) : null,
               dueDay: Number(newDueDay),
+              dueSoonLeadDays: newDueSoonLeadDays === "" ? null : Number(newDueSoonLeadDays),
             });
           }}
         >
@@ -459,6 +524,13 @@ function RecurringPaymentsTab() {
             value={newDueDay}
             onChange={(e) => setNewDueDay(e.target.value)}
             className="w-24 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          />
+          <input
+            data-testid="new-recurring-payment-lead-days"
+            placeholder={`Notify Xd before (default: ${newFrequency === "annual" ? "30" : "5"})`}
+            value={newDueSoonLeadDays}
+            onChange={(e) => setNewDueSoonLeadDays(e.target.value)}
+            className="w-44 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <button
             type="submit"

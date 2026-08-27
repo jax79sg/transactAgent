@@ -55,9 +55,12 @@ function RecurringPaymentsBadge() {
   });
 
   if (!data) return null;
-  // dueSoonCount deliberately excluded -- nothing has gone wrong yet for a
-  // due-soon item (business-logic-model.md).
-  const attentionCount = data.overdueCount + data.pendingMatchCount + data.newSuggestionCount;
+  // Issue #15: dueSoonCount now included -- the previous exclusion ("nothing's
+  // gone wrong yet") meant a due-soon payment was invisible anywhere outside the
+  // Dashboard tab, so a user had no way to notice an upcoming payment without
+  // remembering to go check manually. Being due soon isn't a problem, but it's
+  // exactly the thing this badge exists to surface ahead of time.
+  const attentionCount = data.dueSoonCount + data.overdueCount + data.pendingMatchCount + data.newSuggestionCount;
   if (attentionCount === 0) return null;
 
   return (

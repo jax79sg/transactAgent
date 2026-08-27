@@ -111,6 +111,15 @@ class Settings(BaseSettings):
     recurring_payment_detection_min_occurrences: int = 2
     recurring_payment_detection_cadence_min_days: int = 25
     recurring_payment_detection_cadence_max_days: int = 35
+    # Issue #15: a second, much wider cadence window so the detection scan can also
+    # recognize a genuinely annual pattern, alongside (not instead of) the monthly
+    # window above -- see recurring_payments/service.py's _has_annual_cadence.
+    # 350-380 gives real calendar slack (leap years, a bill landing on a slightly
+    # different weekday) without coming anywhere near the monthly window's 35-day
+    # ceiling, so a short-cadence pattern (e.g. a daily meal purchase) can never
+    # satisfy either.
+    recurring_payment_detection_annual_cadence_min_days: int = 350
+    recurring_payment_detection_annual_cadence_max_days: int = 380
 
     # Epic 9 (Local Embedding-Based Semantic Similarity): the vector DB is this
     # project's own docker-compose service (NFR Requirements) -- host/port have real

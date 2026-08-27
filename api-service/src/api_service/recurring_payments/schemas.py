@@ -17,6 +17,10 @@ class RecurringPaymentDTO(CamelModel):
     is_trusted: bool
     status: str  # "due_soon" | "overdue" | "pending_review" | "paid" -- AR-15
     monthly_set_aside: Decimal | None  # AR-16, annual only
+    # Issue #15: NULL means "use the frequency-based default" -- see
+    # _compute_status_and_set_aside. Exposed so the frontend can show/edit a
+    # per-payment override distinct from "no override set".
+    due_soon_lead_days: int | None
 
 
 class RecurringPaymentCreateRequest(CamelModel):
@@ -26,6 +30,7 @@ class RecurringPaymentCreateRequest(CamelModel):
     due_month: int | None = None
     due_day: int
     category_id: UUID | None = None
+    due_soon_lead_days: int | None = None
 
 
 class RecurringPaymentUpdateRequest(CamelModel):
@@ -35,6 +40,7 @@ class RecurringPaymentUpdateRequest(CamelModel):
     due_month: int | None = None
     due_day: int
     category_id: UUID | None = None
+    due_soon_lead_days: int | None = None
 
 
 class BulkImportRow(CamelModel):
@@ -86,6 +92,11 @@ class DetectionSuggestionDTO(CamelModel):
     suggested_category: CategoryRef | None
     occurrence_count: int
     status: str
+    # Issue #15: which cadence the detection scan matched -- "monthly" | "annual" |
+    # None (a suggestion recorded before this field existed).
+    detected_frequency: str | None
+    suggested_due_month: int | None
+    suggested_due_day: int | None
 
 
 class AddFromDetectionSuggestionRequest(CamelModel):
@@ -95,6 +106,7 @@ class AddFromDetectionSuggestionRequest(CamelModel):
     due_month: int | None = None
     due_day: int | None = None
     category_id: UUID | None = None
+    due_soon_lead_days: int | None = None
 
 
 class RecurringPaymentsStatusSummaryDTO(CamelModel):
