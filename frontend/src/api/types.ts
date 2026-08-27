@@ -285,6 +285,8 @@ export interface RecurringPaymentDTO {
   isTrusted: boolean;
   status: RecurringPaymentStatus;
   monthlySetAside: string | null;
+  /** null means "use the frequency-based default" (issue #15). */
+  dueSoonLeadDays: number | null;
 }
 
 export interface RecurringPaymentCreateRequest {
@@ -294,6 +296,7 @@ export interface RecurringPaymentCreateRequest {
   dueMonth?: number | null;
   dueDay: number;
   categoryId?: string | null;
+  dueSoonLeadDays?: number | null;
 }
 
 export type RecurringPaymentUpdateRequest = RecurringPaymentCreateRequest;
@@ -338,6 +341,11 @@ export interface DetectionSuggestionDTO {
   suggestedCategory: CategoryRef | null;
   occurrenceCount: number;
   status: "new" | "dismissed" | "added";
+  /** Which cadence the detection scan matched -- null for a suggestion recorded
+   * before this field existed (issue #15). */
+  detectedFrequency: RecurringPaymentFrequency | null;
+  suggestedDueMonth: number | null;
+  suggestedDueDay: number | null;
 }
 
 export interface RecurringPaymentsStatusSummaryDTO {

@@ -325,6 +325,41 @@ class TestRunDetectionScan:
 
         assert db_session.query(DetectionScanRun).count() == 1
 
+    def test_creates_suggestion_for_a_repeating_annual_pattern(self, db_session):
+        """Issue #15: detection previously could only ever find monthly-cadence
+        patterns (FR-12) -- an annual renewal, paid once a year, was structurally
+        undetectable. suggested_due_month/suggested_due_day should default to the
+        most recent occurrence's actual calendar day, not today's."""
+        category = _make_category(db_session, "Insurance")
+        _make_transaction(db_session, "ANNUAL INSURANCE RENEWAL", "500.00", date(2025, 3, 20), category=category)
+        _make_transaction(db_session, "ANNUAL INSURANCE RENEWAL", "500.00", date(2026, 3, 22), category=category)
+
+        service.run_detection_scan(db_session)
+
+        from transactagent_db.models import DetectionSuggestion
+
+        suggestions = db_session.query(DetectionSuggestion).all()
+        assert len(suggestions) == 1
+        assert suggestions[0].detected_frequency == RecurringPaymentFrequency.ANNUAL
+        assert suggestions[0].suggested_due_month == 3
+        assert suggestions[0].suggested_due_day == 22
+
+    def test_daily_pattern_is_never_suggested_even_with_many_occurrences(self, db_session):
+        """The explicit requirement (issue #15): a daily-cadence pattern is almost
+        certainly routine purchases (e.g. meals), not a bill, and must never be
+        recommended -- exercised through the real scan, not just _detect_cadence
+        directly, so a future change to run_detection_scan's own filtering can't
+        silently reintroduce this."""
+        category = _make_category(db_session, "Dining")
+        for day in range(1, 11):
+            _make_transaction(db_session, "COFFEE SHOP", "5.00", date(2026, 6, day), category=category)
+
+        service.run_detection_scan(db_session)
+
+        from transactagent_db.models import DetectionSuggestion
+
+        assert db_session.query(DetectionSuggestion).count() == 0
+
 
 class TestRunDetectionScanEmbeddingMerge:
     """WR-22 (Epic 9, corrected from the original Application Design addendum --
@@ -421,3 +456,52 @@ class TestHasMonthlyCadence:
         txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
 
         assert service._has_monthly_cadence([txn1]) is False
+
+
+class TestHasAnnualCadence:
+    def test_two_occurrences_365_days_apart_is_annual_cadence(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2025, 1, 15))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 1, 15))
+
+        assert service._has_annual_cadence([txn1, txn2]) is True
+
+    def test_thirty_day_gap_is_not_annual_cadence(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 7, 5))
+
+        assert service._has_annual_cadence([txn1, txn2]) is False
+
+
+class TestDetectCadence:
+    """Issue #15: _detect_cadence is the single entry point run_detection_scan
+    actually calls -- these prove monthly/annual are both reachable through it, and
+    that the explicit requirement ("don't recommend daily-cadence payments -- those
+    are probably meal payments") holds regardless of which cadence window a gap is
+    checked against."""
+
+    def test_monthly_gap_resolves_to_monthly(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 7, 5))
+
+        assert service._detect_cadence([txn1, txn2]) == RecurringPaymentFrequency.MONTHLY
+
+    def test_annual_gap_resolves_to_annual(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2025, 1, 15))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 1, 15))
+
+        assert service._detect_cadence([txn1, txn2]) == RecurringPaymentFrequency.ANNUAL
+
+    def test_daily_gap_is_never_a_recurring_pattern(self, db_session):
+        """The explicit requirement: a daily-cadence cluster (almost certainly
+        routine purchases like meals, not a bill) must never be suggested, no
+        matter how many occurrences pile up -- neither the monthly nor the annual
+        window can ever match a ~1-day gap."""
+        txns = [_make_transaction(db_session, "COFFEE SHOP", "5.00", date(2026, 6, day)) for day in range(1, 11)]
+
+        assert service._detect_cadence(txns) is None
+
+    def test_sporadic_gap_matching_neither_window_is_not_a_cadence(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 12))  # 7 days -- below both windows
+
+        assert service._detect_cadence([txn1, txn2]) is None

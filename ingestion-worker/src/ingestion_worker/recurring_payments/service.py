@@ -14,6 +14,7 @@ from uuid import UUID
 from rapidfuzz import fuzz
 from transactagent_db.models import (
     RecurringPayment,
+    RecurringPaymentFrequency,
     RecurringPaymentMatchStatus,
     Transaction,
 )
@@ -184,6 +185,36 @@ def _has_monthly_cadence(cluster: list[Transaction]) -> bool:
     )
 
 
+def _has_annual_cadence(cluster: list[Transaction]) -> bool:
+    """Issue #15: same shape as _has_monthly_cadence, checked against a much wider
+    window (default 350-380 days) so it can never overlap the monthly window's
+    35-day ceiling -- a short-cadence pattern (e.g. a daily meal purchase) can
+    never satisfy either."""
+    dates = sorted(t.transaction_date for t in cluster)
+    if len(dates) < 2:
+        return False
+    gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+    return any(
+        settings.recurring_payment_detection_annual_cadence_min_days
+        <= gap
+        <= settings.recurring_payment_detection_annual_cadence_max_days
+        for gap in gaps
+    )
+
+
+def _detect_cadence(cluster: list[Transaction]) -> RecurringPaymentFrequency | None:
+    """Issue #15: monthly checked first -- the original, far more common case --
+    then annual; a cluster whose gaps satisfy neither window is not a recurring
+    pattern at all (e.g. sporadic or daily purchases, per the explicit
+    requirement that a daily-cadence pattern -- almost certainly routine
+    purchases like meals, not a bill -- must never be suggested)."""
+    if _has_monthly_cadence(cluster):
+        return RecurringPaymentFrequency.MONTHLY
+    if _has_annual_cadence(cluster):
+        return RecurringPaymentFrequency.ANNUAL
+    return None
+
+
 def _consistent_category_id(cluster: list[Transaction]) -> UUID | None:
     category_ids = {t.category_id for t in cluster}
     return category_ids.pop() if len(category_ids) == 1 else None
@@ -266,9 +297,10 @@ def _merge_groups_via_embedding(groups: dict[str, list[Transaction]]) -> dict[st
 
 
 def run_detection_scan(db) -> None:
-    """WR-19: monthly-cadence only (FR-12), records new DetectionSuggestion rows,
-    skips patterns already covered by an existing match or already suggested
-    (BR-22 is the real backstop; this pre-check just avoids a doomed insert)."""
+    """WR-19: monthly- or annual-cadence (issue #15 extended FR-12's original
+    monthly-only scope), records new DetectionSuggestion rows, skips patterns
+    already covered by an existing match or already suggested (BR-22 is the real
+    backstop; this pre-check just avoids a doomed insert)."""
     already_matched_ids = repository.list_matched_transaction_ids(db)
     unmatched = [t for t in repository.list_all_transactions_for_detection(db) if t.id not in already_matched_ids]
 
@@ -284,7 +316,8 @@ def run_detection_scan(db) -> None:
         for cluster in _cluster_by_amount(txns):
             if len(cluster) < settings.recurring_payment_detection_min_occurrences:
                 continue
-            if not _has_monthly_cadence(cluster):
+            detected_frequency = _detect_cadence(cluster)
+            if detected_frequency is None:
                 continue
             if repository.find_suggestion_by_pattern(db, pattern) is not None:
                 continue
@@ -295,7 +328,19 @@ def run_detection_scan(db) -> None:
                 suggested_amount=_transaction_amount(most_recent),
                 suggested_category_id=_consistent_category_id(cluster),
                 occurrence_count=len(cluster),
+                detected_frequency=detected_frequency,
+                # Issue #15: the actual detected occurrence's calendar day, not
+                # "whatever day someone happens to click Add" -- due_month only
+                # for an annual pattern (BR-19: a monthly payment's due_month must
+                # be None).
+                suggested_due_month=most_recent.transaction_date.month
+                if detected_frequency == RecurringPaymentFrequency.ANNUAL
+                else None,
+                suggested_due_day=most_recent.transaction_date.day,
             )
-            logger.info("Detected untracked recurring pattern %r (%d occurrences)", pattern, len(cluster))
+            logger.info(
+                "Detected untracked recurring pattern %r (%d occurrences, %s cadence)",
+                pattern, len(cluster), detected_frequency.value,
+            )
 
     repository.record_detection_scan_run(db)

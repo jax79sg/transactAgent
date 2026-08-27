@@ -16,6 +16,7 @@ from transactagent_db.models import (
     Transaction,
 )
 
+from api_service.config import settings
 from api_service.errors import (
     CategoryNotFoundError,
     DetectionSuggestionNotNewError,
@@ -317,6 +318,32 @@ class TestStatusComputation:
         assert dto.monthly_set_aside is None
 
 
+class TestResolveLeadDays:
+    """Issue #15: a single global lead time couldn't give an annual bill
+    meaningfully more advance notice than a monthly one -- these prove the
+    frequency-based defaults differ, and that a per-payment override always wins
+    over either default."""
+
+    def test_monthly_payment_uses_the_monthly_default(self, db_session):
+        payment = _make_payment(db_session, frequency=RecurringPaymentFrequency.MONTHLY)
+        assert service._resolve_lead_days(payment) == settings.recurring_payment_due_soon_lead_days
+
+    def test_annual_payment_uses_the_longer_annual_default(self, db_session):
+        payment = _make_payment(db_session, frequency=RecurringPaymentFrequency.ANNUAL, due_month=6)
+        assert service._resolve_lead_days(payment) == settings.recurring_payment_due_soon_lead_days_annual
+        assert service._resolve_lead_days(payment) > settings.recurring_payment_due_soon_lead_days
+
+    def test_per_payment_override_wins_over_the_monthly_default(self, db_session):
+        payment = _make_payment(db_session, frequency=RecurringPaymentFrequency.MONTHLY, due_soon_lead_days=20)
+        assert service._resolve_lead_days(payment) == 20
+
+    def test_per_payment_override_wins_over_the_annual_default(self, db_session):
+        payment = _make_payment(
+            db_session, frequency=RecurringPaymentFrequency.ANNUAL, due_month=6, due_soon_lead_days=45
+        )
+        assert service._resolve_lead_days(payment) == 45
+
+
 class TestApproveRejectMatch:
     def test_approve_marks_paid_and_trusts_the_payment(self, db_session):
         payment = _make_payment(db_session)
@@ -392,6 +419,26 @@ class TestDetectionSuggestions:
         assert dto.frequency == "monthly"
         db_session.refresh(suggestion)
         assert suggestion.status.value == "added"
+
+    def test_add_from_annual_detected_suggestion_defaults_frequency_and_due_date(self, db_session):
+        """Issue #15: a suggestion the detection scan matched as annual-cadence
+        should produce an ANNUAL payment by default, defaulting due_month/due_day
+        to the actual detected occurrence's calendar day -- not the previous
+        hardcoded "monthly" + today's day."""
+        suggestion = self._make_suggestion(
+            db_session,
+            description_pattern="ANNUAL INSURANCE RENEWAL",
+            suggested_amount=Decimal("500.00"),
+            detected_frequency=RecurringPaymentFrequency.ANNUAL,
+            suggested_due_month=3,
+            suggested_due_day=22,
+        )
+
+        dto = service.add_from_detection_suggestion(db_session, suggestion.id, AddFromDetectionSuggestionRequest())
+
+        assert dto.frequency == "annual"
+        assert dto.due_month == 3
+        assert dto.due_day == 22
 
     def test_add_allows_overriding_fields_before_saving(self, db_session):
         suggestion = self._make_suggestion(db_session)

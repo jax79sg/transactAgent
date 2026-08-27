@@ -25,6 +25,7 @@ function makePayment(overrides: Partial<RecurringPaymentDTO> = {}): RecurringPay
     isTrusted: false,
     status: "due_soon",
     monthlySetAside: null,
+    dueSoonLeadDays: null,
     ...overrides,
   };
 }
@@ -65,6 +66,9 @@ function makeSuggestion(overrides: Partial<DetectionSuggestionDTO> = {}): Detect
     suggestedCategory: null,
     occurrenceCount: 2,
     status: "new",
+    detectedFrequency: "monthly",
+    suggestedDueMonth: null,
+    suggestedDueDay: 15,
     ...overrides,
   };
 }

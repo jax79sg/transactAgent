@@ -215,9 +215,26 @@ _SPECS: tuple[SettingSpec, ...] = (
         cross_field="greater_than", cross_field_partner="recurring_payment_detection_cadence_min_days",
     ),
     SettingSpec(
+        "recurring_payment_detection_annual_cadence_min_days", (_WORKER,), "standard", _RECURRING,
+        "Lower bound (days between occurrences) for a pattern to be considered annual-cadence recurring -- must stay below the max below.",
+        "int", 350, min=0, min_exclusive=True,
+        cross_field="less_than", cross_field_partner="recurring_payment_detection_annual_cadence_max_days",
+    ),
+    SettingSpec(
+        "recurring_payment_detection_annual_cadence_max_days", (_WORKER,), "standard", _RECURRING,
+        "Upper bound (days between occurrences) for a pattern to be considered annual-cadence recurring -- must stay above the min above.",
+        "int", 380, min=0, min_exclusive=True,
+        cross_field="greater_than", cross_field_partner="recurring_payment_detection_annual_cadence_min_days",
+    ),
+    SettingSpec(
         "recurring_payment_due_soon_lead_days", (_API,), "standard", _RECURRING,
-        "How many days before an upcoming due date (or before the next cycle, once the current one is paid) a recurring payment's status flips to \"due soon\".",
+        "How many days before an upcoming due date (or before the next cycle, once the current one is paid) a MONTHLY recurring payment's status flips to \"due soon\". A payment's own custom lead time (if set) overrides this.",
         "int", 5, min=0,
+    ),
+    SettingSpec(
+        "recurring_payment_due_soon_lead_days_annual", (_API,), "standard", _RECURRING,
+        "Same as recurring_payment_due_soon_lead_days, but for ANNUAL recurring payments -- defaults longer, since a yearly bill needs more advance notice to prepare for than a monthly one. A payment's own custom lead time (if set) overrides this.",
+        "int", 30, min=0,
     ),
     # --- Backup ---
     SettingSpec(
@@ -300,4 +317,4 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 41, f"expected 41 settings, got {len(SETTINGS_BY_NAME)}"
+assert len(SETTINGS_BY_NAME) == 44, f"expected 44 settings, got {len(SETTINGS_BY_NAME)}"

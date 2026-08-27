@@ -57,8 +57,13 @@ class Settings(BaseSettings):
 
     # Epic 8 (Recurring Payments): AR-15's due-soon lead window -- how many days
     # before an upcoming due date (or before the next cycle, once the current one
-    # is already paid) status flips from "paid"/nothing to "due_soon".
+    # is already paid) status flips from "paid"/nothing to "due_soon". This is the
+    # MONTHLY default; a per-payment RecurringPayment.due_soon_lead_days override
+    # takes priority over either default (see recurring_payments/service.py's
+    # _resolve_lead_days) -- issue #15: a single lead time couldn't give an annual
+    # bill meaningfully more advance notice than a monthly one.
     recurring_payment_due_soon_lead_days: int = 5
+    recurring_payment_due_soon_lead_days_annual: int = 30
 
     # --- Display-only mirror of Ingestion Worker's own settings (added 2026-08-16,
     # Configurable Application Settings, found after live verification showed the
@@ -93,6 +98,15 @@ class Settings(BaseSettings):
     recurring_payment_detection_min_occurrences: int = 2
     recurring_payment_detection_cadence_min_days: int = 25
     recurring_payment_detection_cadence_max_days: int = 35
+    # Issue #15: a second, much wider cadence window so the detection scan can also
+    # recognize a genuinely annual pattern (e.g. a once-a-year renewal), alongside
+    # (not instead of) the monthly window above -- see ingestion_worker/
+    # recurring_payments/service.py's _has_annual_cadence. 350-380 gives real
+    # calendar slack (leap years, a bill landing on a slightly different weekday)
+    # without coming anywhere near the monthly window's 35-day ceiling, so a
+    # short-cadence pattern (e.g. a daily meal purchase) can never satisfy either.
+    recurring_payment_detection_annual_cadence_min_days: int = 350
+    recurring_payment_detection_annual_cadence_max_days: int = 380
     qdrant_host: str = "vector-db"
     qdrant_port: int = 6333
     embedding_base_url: str = ""

@@ -167,8 +167,8 @@ class TestCrossFieldValidation:
         assert check_cross_field(spec, 90.0, None) is None
 
 
-def test_catalog_has_exactly_41_settings():
-    assert len(SETTINGS_BY_NAME) == 41
+def test_catalog_has_exactly_44_settings():
+    assert len(SETTINGS_BY_NAME) == 44
 
 
 def test_every_setting_has_a_category_and_description():

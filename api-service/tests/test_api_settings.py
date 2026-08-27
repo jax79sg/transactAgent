@@ -6,11 +6,11 @@ class TestListSettingsApi:
         response = client.get("/settings")
         assert response.status_code == 401
 
-    def test_returns_all_41_settings(self, client, auth_headers, settings_override_path):
+    def test_returns_all_44_settings(self, client, auth_headers, settings_override_path):
         response = client.get("/settings", headers=auth_headers)
         assert response.status_code == 200
         body = response.json()
-        assert len(body) == 41
+        assert len(body) == 44
         names = {s["name"] for s in body}
         assert "similarity_threshold" in names
         assert "embedding_similarity_threshold" in names
