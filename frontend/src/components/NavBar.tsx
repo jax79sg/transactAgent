@@ -167,8 +167,8 @@ export function NavBar() {
   const { logout } = useAuth();
 
   return (
-    <nav className="flex items-center justify-between border-b border-slate-200 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex gap-6">
+    <nav className="flex items-center justify-between gap-4 overflow-x-auto border-b border-slate-200 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex shrink-0 gap-6">
         {LINKS.map((link) => (
           <NavLink
             key={link.to}
@@ -186,7 +186,7 @@ export function NavBar() {
           </NavLink>
         ))}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
         <ActivityIndicator />
         <ThemeToggle />
         <button
