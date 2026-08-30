@@ -14,7 +14,7 @@ export interface CategoryRef {
 export type CategorySourceValue = "similarity" | "llm" | "manual" | "unsure";
 export type FlowDirection = "in" | "out";
 export type GroupByOption = "category" | "bank" | "month" | "categorySource";
-export type SortByOption = "date" | "amount" | "category" | "bank";
+export type SortByOption = "date" | "amount" | "category" | "bank" | "description";
 export type SortDir = "asc" | "desc";
 
 export interface TransactionDTO {

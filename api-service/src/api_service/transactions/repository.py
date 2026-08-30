@@ -58,6 +58,7 @@ _SORT_COLUMNS = {
     "date": Transaction.transaction_date,
     "amount": func.coalesce(Transaction.out_flow, Transaction.in_flow),
     "bank": Transaction.bank_name,
+    "description": Transaction.description,
 }
 
 
