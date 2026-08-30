@@ -110,20 +110,22 @@ function CategoryTrendsTab({ filter }: { filter: DashboardFilterState }) {
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
-      <Bar
-        data={{ labels: months, datasets }}
-        options={{
-          ...getChartTheme<"bar">(theme).options,
-          onClick: (_evt, elements) => {
-            if (elements.length === 0) return;
-            const { datasetIndex, index } = elements[0];
-            const category = series[datasetIndex].label;
-            if (category === OTHER_LABEL) return; // no single category to filter by
-            const { dateFrom, dateTo } = monthBounds(months[index]);
-            navigate(`/transactions?category=${encodeURIComponent(category)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
-          },
-        }}
-      />
+      <div className="relative h-72 w-full">
+        <Bar
+          data={{ labels: months, datasets }}
+          options={{
+            ...getChartTheme<"bar">(theme).options,
+            onClick: (_evt, elements) => {
+              if (elements.length === 0) return;
+              const { datasetIndex, index } = elements[0];
+              const category = series[datasetIndex].label;
+              if (category === OTHER_LABEL) return; // no single category to filter by
+              const { dateFrom, dateTo } = monthBounds(months[index]);
+              navigate(`/transactions?category=${encodeURIComponent(category)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
+            },
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -143,29 +145,31 @@ function CashFlowTab({ filter }: { filter: DashboardFilterState }) {
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
-      <Line
-        data={{
-          labels: data.series.map((p) => p.month),
-          datasets: [
-            {
-              label: "Income",
-              data: data.series.map((p) => Number(p.incomeSgd)),
-              ...lineMarkStyle(CATEGORICAL_PALETTE[0], chartTheme.surfaceColor),
-            },
-            {
-              label: "Expenses",
-              data: data.series.map((p) => Number(p.expenseSgd)),
-              ...lineMarkStyle(CATEGORICAL_PALETTE[1], chartTheme.surfaceColor),
-            },
-            {
-              label: "Net",
-              data: data.series.map((p) => Number(p.netSgd)),
-              ...lineMarkStyle(CATEGORICAL_PALETTE[2], chartTheme.surfaceColor),
-            },
-          ],
-        }}
-        options={chartTheme.options}
-      />
+      <div className="relative h-72 w-full">
+        <Line
+          data={{
+            labels: data.series.map((p) => p.month),
+            datasets: [
+              {
+                label: "Income",
+                data: data.series.map((p) => Number(p.incomeSgd)),
+                ...lineMarkStyle(CATEGORICAL_PALETTE[0], chartTheme.surfaceColor),
+              },
+              {
+                label: "Expenses",
+                data: data.series.map((p) => Number(p.expenseSgd)),
+                ...lineMarkStyle(CATEGORICAL_PALETTE[1], chartTheme.surfaceColor),
+              },
+              {
+                label: "Net",
+                data: data.series.map((p) => Number(p.netSgd)),
+                ...lineMarkStyle(CATEGORICAL_PALETTE[2], chartTheme.surfaceColor),
+              },
+            ],
+          }}
+          options={chartTheme.options}
+        />
+      </div>
     </div>
   );
 }
@@ -194,20 +198,22 @@ function BankBreakdownTab({ filter }: { filter: DashboardFilterState }) {
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
-      <Bar
-        data={{ labels: months, datasets }}
-        options={{
-          ...getChartTheme<"bar">(theme).options,
-          onClick: (_evt, elements) => {
-            if (elements.length === 0) return;
-            const { datasetIndex, index } = elements[0];
-            const bank = series[datasetIndex].label;
-            if (bank === OTHER_LABEL) return; // no single bank to filter by
-            const { dateFrom, dateTo } = monthBounds(months[index]);
-            navigate(`/transactions?bank=${encodeURIComponent(bank)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
-          },
-        }}
-      />
+      <div className="relative h-72 w-full">
+        <Bar
+          data={{ labels: months, datasets }}
+          options={{
+            ...getChartTheme<"bar">(theme).options,
+            onClick: (_evt, elements) => {
+              if (elements.length === 0) return;
+              const { datasetIndex, index } = elements[0];
+              const bank = series[datasetIndex].label;
+              if (bank === OTHER_LABEL) return; // no single bank to filter by
+              const { dateFrom, dateTo } = monthBounds(months[index]);
+              navigate(`/transactions?bank=${encodeURIComponent(bank)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
+            },
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -27,6 +27,12 @@ export function getChartTheme<T extends ChartType = "bar">(theme: Theme): { opti
   return {
     surfaceColor: theme === "dark" ? DARK_SURFACE_COLOR : SURFACE_COLOR,
     options: {
+      // Without an explicit height + maintainAspectRatio: false, Chart.js sizes the
+      // canvas off its default aspect ratio rather than shrinking to the actual
+      // viewport width, which is what caused the dashboard to overflow horizontally
+      // on narrow mobile screens (issue #19) -- pairs with each chart's h-* wrapper.
+      responsive: true,
+      maintainAspectRatio: false,
       scales: {
         x: { ticks: { color: tickColor }, grid: { color: gridColor } },
         y: { ticks: { color: tickColor }, grid: { color: gridColor } },
