@@ -2658,3 +2658,165 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Code Generation stage COMPLETE & APPROVED. All units for this feature done (Frontend SPA only). Proceeding to Build and Test.
 
 ---
+
+## Post-Completion Change: Recategorization Algorithm Rework — Request Logged
+**Timestamp**: 2026-08-28T12:25:00Z
+**User Input**: "the recategorisaion scan is a total failure. we need to totally rework on the algorithm."
+**AI Response**: "Logged as a new Post-Completion Change on top of the prior 'Recategorization Scope Narrowing' change (df19a24, 2026-08-21). Investigated current state before drafting clarifying questions: read `categorization/service.py`'s `recategorize_unsure_from_precedent` (the FR-5.4/WR-5 retroactive re-scan the user is almost certainly referring to, distinct from `categorize()`'s ingestion-time fallback chain) and queried the live `recategorization_jobs`/`recategorization_proposals` tables for evidence. Finding: every proposal batch from 2026-08-23 onward is 'rejected' (2026-08-23 through 2026-08-27: 100% rejected across ~9 jobs; today 2026-08-28: two pending, not yet reviewed, all UNSURE-bucket auto-triggered jobs return updated_transaction_count=0), a sharp change from the healthy approved/rejected/auto_applied mix seen 2026-08-15 through 2026-08-18. Also noted `.env` overrides `EMBEDDING_SIMILARITY_THRESHOLD=0.75`, looser than `config.py`'s coded default of 0.82 -- a plausible contributor to noisy proposals, flagged for the user rather than assumed. Created `aidlc-docs/inception/requirements/requirement-verification-questions.md` (6 questions) grounded in this evidence per requirements-analysis.md Step 6 -- gate: awaiting user answers before Requirements Document generation."
+**Context**: Requirements Analysis (Standard/Comprehensive depth -- existing feature, user-reported total failure, algorithm rework requested) started for this Post-Completion Change. Reused Workspace Detection / Reverse Engineering artifacts from base project (no re-run needed, brownfield project with existing artifacts).
+
+---
+
+## Requirements Analysis — Recategorization Algorithm Rework — Answers Received
+**Timestamp**: 2026-08-28T12:35:00Z
+**User Input**: "done" (answers filled into `requirement-verification-questions.md`: Q1=A and C, Q2=C, Q3=A, Q4=A, Q5=C, Q6=A)
+**AI Response**: "Read all 6 answers -- no contradictions per question-format-guide.md's checklist (scope/risk/timeline/impact all internally consistent: broaden precedent pool + add LLM check + precision-first tuning is a coherent direction). Q2 and Q5 explicitly asked for investigation before finalizing scope/root-cause, so performed that investigation before writing the requirements document rather than looping back with more questions: (1) queried `recategorization_proposals` joined to `transactions`/`categories` for the 2026-08-23..08-27 rejected batch -- scores cluster 75-83, and the specific rejected pairs are unrelated PayNow payees (HITPAY PAYMENTS, NOVALAND PTE LTD, Askalamoonzxs, REVIN TANRI) cross-matched purely on shared boilerplate phrasing, confirming the loosened `.env` threshold (0.75 vs code default 0.82) is not the primary cause since most rejected scores exceed 0.82 too; (2) queried `categorization_disagreements` (0 rows since 2026-08-15) and spot-checked ~20 recent PayNow-boilerplate transactions categorized via `categorize()` -- substantively correct, confirming ingestion-time categorization does not share this failure pattern, attributed to its existing full-precedent-pool search + always-on independent LLM cross-check, which the re-scan currently lacks. Generated `aidlc-docs/inception/requirements/recategorization-algorithm-rework-requirements.md` (5 FRs, 2 NFRs) incorporating both the answers and this evidence. Updated `aidlc-docs/aidlc-state.md`."
+**Context**: Requirements Analysis stage complete for this Post-Completion Change. Presenting completion message, awaiting user approval before proceeding (User Stories assessment expected to recommend SKIP, then Workflow Planning).
+
+---
+
+## Requirements Analysis — Recategorization Algorithm Rework — Request Changes (Embedding Construction)
+**Timestamp**: 2026-08-28T12:40:00Z
+**User Input**: "if you are still using embedding for the matching, i sgguest to also relook into how embedding is created today and if its useful. Personally, besides the transaction description, we also should look into whether its in-flow, out-flow. certain things like transaction ids are probably less weighted."
+**AI Response**: "Confirmed via code read: `build_embedding_text` (`embedding/text.py:32`) is a single shared function -- `f\"{description} | {price_bucket_label(amount)}\"`, raw description + price bucket only, no direction signal, no reference-code de-weighting -- used by 3 call sites: the re-scan (in scope), `categorize()` (previously scoped OUT after investigation), and Recurring Payment Manager's matching (a separate feature, not previously discussed). This creates a real tension with FR-RAR-4's scope boundary, since changing the shared function necessarily touches all three. Created `recategorization-algorithm-rework-embedding-questions.md` (3 questions: how far the embedding-text change should reach, how in-flow/out-flow should factor in, how reference-code de-weighting should work) rather than deciding scope silently. Gate: awaiting answers."
+**Context**: Requirements Analysis reopened (Step 6 gate) following user's Request Changes feedback during review. Requirements document not yet amended -- pending these answers.
+
+---
+
+## Requirements Analysis — Recategorization Algorithm Rework — Embedding Follow-Up Answers Received
+**Timestamp**: 2026-08-28T12:45:00Z
+**User Input**: "done" (answers filled into `recategorization-algorithm-rework-embedding-questions.md`: Q1=A [apply everywhere], Q2=A [direction as embedded signal, not a hard pre-filter], Q3=B [keep raw text, rely on LLM verification instead of stripping IDs])
+**AI Response**: "No contradictions -- coherent with the earlier 6 answers (precision-first, LLM-gate-centric approach). Amended `recategorization-algorithm-rework-requirements.md` in place: added Background item 4 (embedding-text finding), FR-RAR-6 (global embedding-text rework -- direction token appended alongside the existing price bucket, all 3 consumers affected since it's one shared function), FR-RAR-7 (explicitly no reference-code stripping -- raw text preserved, re-scan's new LLM gate covers what stripping would have covered, `categorize()` already has its own always-on LLM check), refined FR-RAR-4 (matching-algorithm redesign stays re-scan-only; embedding-text change is global -- two different scope layers, not one), and NFR-RAR-3 (flagged a real risk found during this amendment, not asked about directly: `process_next_embedding_batch` only re-embeds rows still in `pending` state -- existing stored vectors won't reflect the new text format unless backfilled, and no backfill mechanism currently exists in the codebase; left as an explicit open decision for Functional Design rather than assumed away)."
+**Context**: Requirements Analysis amended and complete for this Post-Completion Change. Re-presenting completion message, awaiting user approval before proceeding.
+
+---
+
+## Requirements Analysis — Recategorization Algorithm Rework — Approved
+**Timestamp**: 2026-08-28T12:50:00Z
+**User Input**: "approved"
+**AI Response**: "Acknowledged. Requirements Analysis approved for Recategorization Algorithm Rework. Proceeding to User Stories intelligent assessment (Step 1, user-stories.md) before Workflow Planning."
+**Context**: Requirements Analysis stage COMPLETE & APPROVED. Proceeding to User Stories assessment.
+
+---
+
+## User Stories Assessment — Recategorization Algorithm Rework — Skipped
+**Timestamp**: 2026-08-28T12:52:00Z
+**User Input**: (none -- automatic assessment per user-stories.md Step 1)
+**AI Response**: "Created `recategorization-algorithm-rework-user-stories-assessment.md`. Decision: Execute User Stories = No. Medium Priority bucket technically triggered (backend change, indirect user impact) but no complexity factor actually justifies stories: zero new UI/workflow, single stakeholder, and ambiguity already resolved via 2 rounds of Requirements Analysis Q&A conducted directly against real code/data. Matches this project's own precedent -- both prior recategorization-matching changes skipped User Stories identically. Proceeding directly to Workflow Planning."
+**Context**: User Stories stage SKIPPED (justified, documented). Proceeding to Workflow Planning.
+
+---
+
+## Workflow Planning — Recategorization Algorithm Rework — Plan Created
+**Timestamp**: 2026-08-28T12:55:00Z
+**User Input**: (none -- automatic per workflow-planning.md)
+**AI Response**: "Created `recategorization-algorithm-rework-execution-plan.md`. Application Design SKIP (no new component/service -- both changed functions live inside existing Categorization Engine / Embedding Manager boundaries), Units Generation SKIP (single existing unit, Ingestion Worker Service). Functional Design EXECUTE (new business logic + the NFR-RAR-3 backfill decision needs resolving before Code Generation). NFR Requirements/NFR Design/Infrastructure Design SKIP (no new tech stack/infra; the two real NFR concerns are already captured directly in the requirements doc). Code Generation + Build and Test ALWAYS. Risk rated Medium -- broader blast radius than prior recategorization changes (shared function, 3 consumers), live production data, and reintroduces an LLM dependency into a path that was deliberately LLM-free, worth naming given today's earlier oMLX multi-hour-hang incident on this same machine. Presenting plan for approval."
+**Context**: Workflow Planning stage complete, awaiting user approval before proceeding to Functional Design (Ingestion Worker Service unit).
+
+---
+
+## Requirements Analysis — Recategorization Algorithm Rework — Request Changes (Drop LLM Gate For Now)
+**Timestamp**: 2026-08-28T13:00:00Z
+**User Input**: "you are right, let's just focus on working on making the embedding more accurate. Let's not include LLM for recategorsation for now.."
+**AI Response**: "Acknowledged -- deferring FR-RAR-2 (LLM verification gate). Flagged the resulting contradiction: FR-RAR-7 (no ID-stripping) was explicitly predicated on the LLM gate catching reference-code-noise-driven false matches (User Answer Q3=B from the embedding follow-up round) -- with the gate deferred, that safety net no longer exists. Created `recategorization-algorithm-rework-no-llm-questions.md` (2 questions: whether to now strip ID-like substrings before embedding given the LLM safety net is gone, and whether to remove FR-RAR-2 from the requirements doc entirely or keep it documented as deferred future work). Gate: awaiting answers before amending requirements.md and the execution plan."
+**Context**: Workflow Planning approval paused; Requirements Analysis reopened (Step 6 gate) for this scope change.
+
+---
+
+## Requirements Analysis — Recategorization Algorithm Rework — No-LLM Follow-Up Answers Received
+**Timestamp**: 2026-08-28T13:05:00Z
+**User Input**: "done" (answers filled into `recategorization-algorithm-rework-no-llm-questions.md`: Q1=A [strip ID-like substrings], Q2=B [keep LLM gate documented as deferred future work])
+**AI Response**: "No contradictions. Amended `recategorization-algorithm-rework-requirements.md`: FR-RAR-2 marked DEFERRED (not built, kept as documented future enhancement); FR-RAR-3/FR-RAR-4 updated to reflect embedding-accuracy-only scope; FR-RAR-7 reversed (now strips ID-like substrings before embedding instead of relying on the now-deferred LLM gate), applied globally via the same shared function as FR-RAR-6; NFR-RAR-1 marked moot for this pass. Updated Summary to reflect final narrowed scope. Also updated `recategorization-algorithm-rework-execution-plan.md`: removed the LLM-dependency risk factor, revised Risk Level Medium -> Low-Medium, updated Functional Design rationale (ID-stripping heuristic instead of LLM-gate disagreement handling)."
+**Context**: Requirements Analysis re-amended and complete. Workflow Planning execution plan updated to match. Re-presenting plan for approval.
+
+---
+
+## Workflow Planning — Recategorization Algorithm Rework — Approved
+**Timestamp**: 2026-08-28T13:10:00Z
+**User Input**: "approved"
+**AI Response**: "Acknowledged. Workflow Planning approved. Proceeding to Functional Design for the Ingestion Worker Service unit."
+**Context**: Workflow Planning stage COMPLETE & APPROVED. Proceeding to CONSTRUCTION PHASE -- Functional Design (Ingestion Worker Service unit).
+
+---
+
+## Functional Design — Ingestion Worker Service (Recategorization Algorithm Rework) — Plan Created
+**Timestamp**: 2026-08-28T13:15:00Z
+**User Input**: (none -- automatic per functional-design.md)
+**AI Response**: "Created `ingestion-worker-service-recategorization-algorithm-rework-functional-design-plan.md`. Investigated feasibility before proposing designs: confirmed Qdrant vector-store points carry no payload metadata (id+vector only), ruling out native category-filtered vector search without a larger schema change -- recommended reusing existing top-K nearest-neighbor retrieval + in-Python category filtering instead (FR-RAR-1). Derived an ID-stripping heuristic (8+ char alphanumeric tokens containing a digit) directly from the specific reference-code examples in the requirements evidence (FR-RAR-7). 4 embedded questions: precedent-pool retrieval approach, ID-stripping heuristic aggressiveness, threshold values (FR-RAR-3/5), and the NFR-RAR-3 backfill decision. Gate: awaiting answers."
+**Context**: Functional Design Part 1 (Planning) in progress for Ingestion Worker Service unit.
+
+---
+
+## Functional Design — Ingestion Worker Service (Recategorization Algorithm Rework) — Answers Received, Artifacts Generated
+**Timestamp**: 2026-08-28T13:20:00Z
+**User Input**: "done" (answers filled into the functional design plan: Q1=A [recommended retrieval approach], Q2=C [delimiter-based ID-stripping, less aggressive than originally proposed], Q3=A [reconcile .env to 0.82 only, no other threshold changes], Q4=A [accept temporary vector mismatch, no backfill])
+**AI Response**: "No contradictions. Before finalizing, found a relevant precedent while reading business-rules.md for WR-numbering context: WR-32 (Matching Precision Refinement) did force a full re-embedding backfill the last time build_embedding_text's format changed (WR-29's price-bucket addition) -- the user's Q4=A answer this round deliberately diverges from that precedent. Proceeded with the user's explicit answer (clear, not ambiguous) but documented the divergence transparently as WR-39 rather than silently applying it, and am surfacing it in the completion message for final visibility before approval. Generated business-rules.md WR-35 (broadened precedent pool), WR-36 (direction signal), WR-37 (delimiter-based ID stripping), WR-38 (threshold reconciliation), WR-39 (no backfill, divergence noted), plus a 'Deferred' entry documenting the LLM gate for future reference. Updated business-logic-model.md's Categorization Engine and Embedding Manager sections with corresponding addenda. domain-entities.md left unchanged -- no new entities/fields."
+**Context**: Functional Design artifacts generated for Ingestion Worker Service unit. Presenting completion message, awaiting approval before Code Generation.
+
+---
+
+## Functional Design — Ingestion Worker Service (Recategorization Algorithm Rework) — Request Changes (Backfill Reversed)
+**Timestamp**: 2026-08-28T13:25:00Z
+**User Input**: "to clarify, a full re-embedding should occur, but their current assigned categories should not change."
+**AI Response**: "Reversed WR-39: now a full re-embedding backfill (following WR-32's exact precedent) rather than accepting the mismatch, with an explicit hard constraint that categories (`category_id`/`category_source`) must not change as a side effect. Confirmed this constraint is already satisfied by construction -- `processNextEmbeddingBatch` only calls `computeEmbedding`/`upsertEmbedding`/flips `embedding_status`, never invokes categorization logic -- but documented it explicitly anyway as a requirement Code Generation and Build and Test must both verify, not merely infer. Updated `business-rules.md` (WR-39), `business-logic-model.md` (Embedding Manager addendum), `recategorization-algorithm-rework-requirements.md` (NFR-RAR-3), and the functional design plan."
+**Context**: Functional Design re-amended. Re-presenting completion message, awaiting approval before Code Generation.
+
+---
+
+## Functional Design — Ingestion Worker Service (Recategorization Algorithm Rework) — Approved
+**Timestamp**: 2026-08-28T13:30:00Z
+**User Input**: "proceed"
+**AI Response**: "Acknowledged. Functional Design approved for Ingestion Worker Service. Proceeding to Code Generation."
+**Context**: Functional Design stage COMPLETE & APPROVED. Proceeding to Code Generation (Ingestion Worker Service unit).
+
+---
+
+## Code Generation — Ingestion Worker Service (Recategorization Algorithm Rework) — Plan Created (Part 1)
+**Timestamp**: 2026-08-28T13:35:00Z
+**AI Prompt**: "Ready to proceed with this code generation plan?"
+**AI Response/Context**: "Created `ingestion-worker-service-recategorization-algorithm-rework-code-generation-plan.md`, 8 steps: embedding/text.py (direction param + ID stripping), categorization/service.py (broadened precedent pool + direction wiring, including a categorize()/pipeline.py direction-parameter addition traced from raw_txn.direction), recurring_payments/service.py (direction wiring only, no algorithm change), embedding/service.py (direction wiring), .env threshold reconciliation, a new DB migration (0016, following 0012's exact prior-precedent pattern for the WR-39 backfill, explicit vectors-only constraint in the docstring), unit test updates across 4 test files, and a code summary doc. Investigated real call sites before writing the plan (pipeline.py's categorize() call site doesn't yet have a Transaction row, only raw_txn.direction.value; RecurringPayment has no direction field of its own, defaulted to 'outflow' per this domain's recurring-payment norms, documented as an explicit low-stakes implementation decision rather than asked as a question). Awaiting approval."
+**Context**: Code Generation Part 1 (Planning) complete for Ingestion Worker Service unit.
+
+---
+
+## Code Generation — Ingestion Worker Service (Recategorization Algorithm Rework) — Plan Approved
+**Timestamp**: 2026-08-28T13:40:00Z
+**User Input**: "approve"
+**AI Response**: "Acknowledged. Proceeding to Code Generation Part 2 (Generation), executing the 8-step plan in sequence."
+**Context**: Code Generation Part 1 (Planning) APPROVED. Proceeding to Part 2 (Generation).
+
+---
+
+## Code Generation — Ingestion Worker Service (Recategorization Algorithm Rework) — Generation Complete
+**Timestamp**: 2026-08-28T14:00:00Z
+**User Input**: (none)
+**AI Response**: "Executed all 8 plan steps. Modified `embedding/text.py` (direction param + delimiter-based ID stripping, WR-36/37), `categorization/service.py` (WR-35's broadened category-filtered nearest-neighbor redesign of recategorize_unsure_from_precedent, direction wiring, removed now-unused SimilarityCandidate/cosine_similarity imports), `orchestrator/pipeline.py` (direction derivation for categorize()'s new call site), `recurring_payments/service.py` (direction wiring; made a Code-Generation-time design call to always pass \"outflow\" for the recurring_payment_names query side, since RecurringPayment vectors are always embedded as outflow and passing a transaction's true direction there would introduce an unrelated systematic mismatch), `embedding/service.py` (direction wiring), `.env` (WR-38 threshold reconciliation). Created `database/migrations/versions/0016_reembed_after_direction_and_id_stripping_text_change.py` (WR-39, following 0012's exact precedent, vectors-only). Updated 4 test files -- test_embedding_text.py rewritten/extended (8 new tests), test_categorization_service.py (all call sites fixed for the new signature, the recategorization embedding test rewritten to mock query_nearest_neighbors since the old direct-pairwise approach no longer exists, +2 new WR-35 tests), test_recurring_payments_service.py (1 test's mock-lookup dict fixed for the new direction token), test_embedding_service.py (2 exact-text assertions updated). Discovered this machine's ingestion-worker/.venv has a broken Python symlink -- could not execute the test suite; verified via py_compile (clean) and a full repo-wide grep confirming no stale call-site signatures remain instead. Wrote `recategorization-algorithm-rework-summary.md`. Presenting completion message."
+**Context**: Code Generation Part 2 (Generation) complete for Ingestion Worker Service unit. Awaiting user approval before proceeding to Build and Test.
+
+---
+
+## Code Generation — Ingestion Worker Service (Recategorization Algorithm Rework) — Approved
+**Timestamp**: 2026-08-28T14:05:00Z
+**User Input**: "approve"
+**AI Response**: "Acknowledged. Code Generation approved for Ingestion Worker Service -- only affected unit for this feature. Proceeding to Build and Test."
+**Context**: Code Generation stage COMPLETE & APPROVED for Ingestion Worker Service. All units complete for this feature. Proceeding to Build and Test.
+
+---
+
+## Build and Test — Recategorization Algorithm Rework — Complete
+**Timestamp**: 2026-08-29T02:00:00Z
+**Build Status**: Success
+**Test Status**: Pass
+**AI Response**: "Fixed the broken ingestion-worker/.venv (pyenv python3.12, reinstalled deps). Ran the real test suite: 291/291 passing. ruff clean. docker compose build ingestion-worker clean. Live-verified against real oMLX/Qdrant infrastructure using placeholder rows in a rolled-back DB transaction (zero commits): Check A reproduced the exact reported false-positive shape (shared PayNow boilerplate, different real payee) and confirmed it now produces zero match/proposal (previously always PENDING at score 75-83); Check B confirmed a genuine near-duplicate still auto-applies correctly (98.77), proving no overcorrection. Redeployed `transactagent-worker` for real -- migration 0016 applied automatically at startup (alembic_version=0016), confirmed 6096 Transaction + 14 RecurringPayment rows reset to embedding_status='pending', confirmed the existing poll-cycle mechanism already re-embedding them (250 completed within 15s, zero errors), confirmed by construction that categories are untouched (single-column UPDATE; processNextEmbeddingBatch never touches category fields). All 5 live containers healthy. Wrote `recategorization-algorithm-rework-build-and-test-summary.md`."
+**Files Generated**:
+- `aidlc-docs/construction/build-and-test/recategorization-algorithm-rework-build-and-test-summary.md`
+
+---
+
+## Build and Test — Recategorization Algorithm Rework — Approved
+**Timestamp**: 2026-08-29T02:05:00Z
+**User Input**: "Approve"
+**AI Response**: "Acknowledged. Build and Test approved. Recategorization Algorithm Rework feature complete -- Operations phase is a placeholder for this project (all build/test/deploy activity handled in Construction). Not committed to git; awaiting explicit instruction per established git workflow preference (branch+PR, never direct-to-main, merge only when asked)."
+**Context**: Build and Test stage COMPLETE & APPROVED. Feature COMPLETE.
+
+---

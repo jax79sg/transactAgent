@@ -111,6 +111,17 @@ def find_unsure_transactions(db: Session) -> list[Transaction]:
     return list(db.scalars(stmt))
 
 
+def list_pending_proposal_candidate_ids(db: Session) -> set[UUID]:
+    """WR-43: same Issue #12 dedup reasoning as find_unsure_transactions's
+    already_pending subquery, reused directly here rather than duplicated --
+    a candidate already flagged by an earlier job and still awaiting review must
+    not be re-flagged by a later, unrelated correction."""
+    stmt = select(RecategorizationProposal.candidate_transaction_id).where(
+        RecategorizationProposal.status == RecategorizationProposalStatus.PENDING
+    )
+    return set(db.scalars(stmt))
+
+
 def get_transaction(db: Session, transaction_id: UUID) -> Transaction | None:
     return db.get(Transaction, transaction_id)
 

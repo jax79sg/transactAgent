@@ -15,6 +15,7 @@ from transactagent_db.models import (
     Transaction,
 )
 
+from ingestion_worker.categorization import repository
 from ingestion_worker.categorization.service import (
     categorize,
     classify_batch,
@@ -70,7 +71,7 @@ class TestCategorize:
 
         # A single-digit change (#123 -> #124) scores ~95 with rapidfuzz token_sort_ratio,
         # comfortably above the default 85 threshold.
-        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "Groceries")
+        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "outflow", "Groceries")
 
         assert result.source == "similarity"
         assert result.category_name == "Groceries"
@@ -83,7 +84,7 @@ class TestCategorize:
         groceries = _make_category(db_session, "Groceries")
         _make_transaction(db_session, "NTUC FAIRPRICE #123", groceries, CategorySource.SIMILARITY)
 
-        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "UNSURE")
+        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "outflow", "UNSURE")
 
         assert result.source == "similarity"
         assert result.category_name == "Groceries"
@@ -98,7 +99,7 @@ class TestCategorize:
         _make_category(db_session, "UNSURE")
         _make_transaction(db_session, "NTUC FAIRPRICE #123", groceries, CategorySource.SIMILARITY, amount=Decimal("10.00"))
 
-        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("500.00"), "UNSURE")
+        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("500.00"), "outflow", "UNSURE")
 
         assert result.source == "unsure"  # text match rejected by amount gate; LLM also abstained
 
@@ -108,7 +109,7 @@ class TestCategorize:
         _make_category(db_session, "Dining")
         _make_category(db_session, "UNSURE")
 
-        result = categorize(db_session, "SOME BRAND NEW MERCHANT XYZ", Decimal("10.00"), "Dining")
+        result = categorize(db_session, "SOME BRAND NEW MERCHANT XYZ", Decimal("10.00"), "outflow", "Dining")
 
         assert result.source == "llm"
         assert result.category_name == "Dining"
@@ -118,7 +119,7 @@ class TestCategorize:
         _make_category(db_session, "Dining")
         _make_category(db_session, "UNSURE")
 
-        result = categorize(db_session, "TOTALLY AMBIGUOUS TRANSACTION", Decimal("10.00"), "UNSURE")
+        result = categorize(db_session, "TOTALLY AMBIGUOUS TRANSACTION", Decimal("10.00"), "outflow", "UNSURE")
 
         assert result.source == "unsure"
         assert result.category_name == "UNSURE"
@@ -134,7 +135,7 @@ class TestCategorize:
         _make_category(db_session, "Dining")
         _make_transaction(db_session, "NTUC FAIRPRICE #123", groceries, CategorySource.SIMILARITY)
 
-        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "Dining")
+        result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "outflow", "Dining")
 
         assert result.source == "unsure"
         assert result.category_name == "UNSURE"
@@ -247,11 +248,14 @@ class TestRecategorizeUnsureFromPrecedent:
         assert len(proposals) == 1
         assert proposals[0].recategorization_job_id == first_job.id
 
-    def test_already_categorized_transaction_is_never_scanned(self, db_session):
-        """WR-9 revised (2026-08-19, Recategorization Scope Narrowing): the
-        already-categorized bucket is removed entirely -- an already-categorized
-        transaction gets no proposal at all, not even a pending one, regardless of
-        how well it matches (exact description match here, score 100)."""
+    def test_already_categorized_transaction_is_flagged_pending_not_auto_applied(self, db_session):
+        """Supersedes the WR-9-revision (2026-08-19) behavior this test originally
+        asserted ("already-categorized bucket removed entirely, no proposal at
+        all") -- WR-43 (Recategorization Algorithm Rework) deliberately
+        reintroduces this bucket, so an already-categorized transaction now DOES
+        get flagged, but strictly as a PENDING review proposal, never silently
+        auto-applied (WR-10's original safety rule, still absolute). See
+        TestRecategorizeCrossCategoryFlag for full WR-43 coverage."""
         household = _make_category(db_session, "Household")
         groceries = _make_category(db_session, "Groceries")
 
@@ -265,15 +269,16 @@ class TestRecategorizeUnsureFromPrecedent:
 
         db_session.refresh(already_categorized)
         assert already_categorized.id not in auto_applied_ids
-        assert already_categorized.category_id == groceries.id  # untouched
+        assert already_categorized.category_id == groceries.id  # untouched -- never silently overwritten
         assert already_categorized.category_source == CategorySource.SIMILARITY  # untouched
 
         proposal = db_session.scalars(
             select(RecategorizationProposal).where(
                 RecategorizationProposal.candidate_transaction_id == already_categorized.id
             )
-        ).first()
-        assert proposal is None
+        ).one()
+        assert proposal.status == RecategorizationProposalStatus.PENDING
+        assert proposal.source_bucket == RecategorizationProposalSourceBucket.CATEGORIZED
 
     def test_non_manual_source_transaction_is_a_no_op(self, db_session):
         household = _make_category(db_session, "Household")
@@ -387,7 +392,7 @@ class TestFindSimilarTransactionViaEmbedding:
 
     def test_returns_none_when_embedding_computation_fails(self, db_session):
         with patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=None):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE", Decimal("10.00"))
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE", Decimal("10.00"), "outflow")
         assert result is None
 
     def test_returns_none_when_vector_store_finds_nothing(self, db_session):
@@ -395,7 +400,7 @@ class TestFindSimilarTransactionViaEmbedding:
             patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1]),
             patch("ingestion_worker.categorization.service.vector_store.query_nearest_neighbors", return_value=None),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE", Decimal("10.00"))
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE", Decimal("10.00"), "outflow")
         assert result is None
 
     def test_returns_best_candidate_clearing_threshold_and_amount_gate(self, db_session):
@@ -406,14 +411,14 @@ class TestFindSimilarTransactionViaEmbedding:
             patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1]),
             patch(
                 "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
-                return_value=[(str(precedent.id), 0.9)],
+                return_value=[(str(precedent.id), 0.95)],
             ),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"))
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "outflow")
 
         assert result is not None
         assert result.candidate.transaction_id == str(precedent.id)
-        assert result.score == 90.0  # rescaled to the 0-100 scale, WR-23
+        assert result.score == 95.0  # rescaled to the 0-100 scale, WR-23
 
     def test_candidate_rejected_when_below_embedding_threshold(self, db_session):
         groceries = _make_category(db_session, "Groceries")
@@ -423,11 +428,11 @@ class TestFindSimilarTransactionViaEmbedding:
             patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1]),
             patch(
                 "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
-                # Default embedding_similarity_threshold is 0.75 -- 0.5 doesn't clear it.
+                # Default embedding_similarity_threshold is 0.92 -- 0.5 doesn't clear it.
                 return_value=[(str(precedent.id), 0.5)],
             ),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"))
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "outflow")
 
         assert result is None
 
@@ -444,7 +449,7 @@ class TestFindSimilarTransactionViaEmbedding:
                 return_value=[(str(precedent.id), 0.99)],
             ),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("500.00"))
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("500.00"), "outflow")
 
         assert result is None
 
@@ -458,7 +463,7 @@ class TestFindSimilarTransactionViaEmbedding:
                 return_value=[(str(uuid.uuid4()), 0.99)],
             ),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"))
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "outflow")
 
         assert result is None
 
@@ -470,16 +475,16 @@ class TestFindSimilarTransactionViaEmbedding:
         groceries = _make_category(db_session, "Groceries")
         precedent = _make_transaction(db_session, "FAIRPRICE FINEST", groceries, CategorySource.SIMILARITY, amount=Decimal("10.00"))
 
-        # Default embedding_similarity_threshold is 0.82; 0.80 alone doesn't clear
-        # it, but 0.80 + the default 0.05 boost = 0.85 does.
+        # Default embedding_similarity_threshold is 0.92; 0.90 alone doesn't clear
+        # it, but 0.90 + the default 0.05 boost = 0.95 does.
         with (
             patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1]),
             patch(
                 "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
-                return_value=[(str(precedent.id), 0.80)],
+                return_value=[(str(precedent.id), 0.90)],
             ),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "Groceries")
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "outflow", "Groceries")
 
         assert result is not None
         assert result.candidate.transaction_id == str(precedent.id)
@@ -498,7 +503,7 @@ class TestFindSimilarTransactionViaEmbedding:
                 return_value=[(str(precedent.id), 0.80)],
             ),
         ):
-            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "Dining")
+            result = find_similar_transaction_via_embedding(db_session, "NTUC FAIRPRICE ONLINE", Decimal("10.00"), "outflow", "Dining")
 
         assert result is None
 
@@ -526,7 +531,7 @@ class TestCategorizeEmbeddingFirst:
                 return_value=[(str(embedding_precedent.id), 0.99)],
             ),
         ):
-            result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "Embedding Match Category")
+            result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "outflow", "Embedding Match Category")
 
         assert result.category_name == "Embedding Match Category"
         assert result.source == "similarity"
@@ -536,7 +541,7 @@ class TestCategorizeEmbeddingFirst:
         _make_transaction(db_session, "NTUC FAIRPRICE #123", groceries, CategorySource.SIMILARITY)
 
         with patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=None):
-            result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "Groceries")
+            result = categorize(db_session, "NTUC FAIRPRICE #124", Decimal("10.00"), "outflow", "Groceries")
 
         assert result.category_name == "Groceries"
         assert result.source == "similarity"
@@ -551,10 +556,13 @@ class TestRecategorizeEmbeddingFirst:
         db.flush()
         return job
 
-    def test_embedding_pairwise_match_auto_applies_above_rescaled_threshold(self, db_session):
-        """WR-21/23 (Epic 9): the embedding cosine score is rescaled to 0-100
-        before being compared against recategorization_auto_apply_threshold (97.0)
-        -- a raw 0.0-1.0 cosine score would never clear that threshold otherwise."""
+    def test_embedding_match_auto_applies_above_rescaled_threshold(self, db_session):
+        """WR-21/23 (Epic 9), WR-35 (Recategorization Algorithm Rework): the
+        embedding cosine score is rescaled to 0-100 before being compared against
+        recategorization_auto_apply_threshold (97.0). WR-35 broadened this from a
+        pairwise comparison to a vector-store nearest-neighbor search, so both
+        compute_embedding and query_nearest_neighbors are mocked (same pattern as
+        TestFindSimilarTransactionViaEmbedding)."""
         household = _make_category(db_session, "Household")
         unsure_category = _make_category(db_session, "UNSURE")
 
@@ -566,9 +574,12 @@ class TestRecategorizeEmbeddingFirst:
             db_session, "SCANDINAVIAN HOME FURNISHINGS CO", unsure_category, CategorySource.UNSURE
         )
 
-        with patch(
-            "ingestion_worker.categorization.service.embedding_client.compute_embedding",
-            return_value=[0.1, 0.2],  # identical vector for both calls -> cosine_similarity = 1.0
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                return_value=[(str(corrected.id), 0.99)],
+            ),
         ):
             auto_applied_ids = recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
 
@@ -576,6 +587,66 @@ class TestRecategorizeEmbeddingFirst:
         assert unsure_txn.id in auto_applied_ids
         assert unsure_txn.category_id == household.id
         assert unsure_txn.category_source == CategorySource.SIMILARITY
+
+    def test_broadened_pool_matches_any_precedent_of_the_corrected_category(self, db_session):
+        """WR-35: the re-scan is no longer limited to comparing against only the
+        single just-corrected transaction -- a different, pre-existing precedent
+        already in the corrected category (not `corrected` itself) is what the
+        mocked vector-store nearest-neighbor search returns, and that's enough."""
+        household = _make_category(db_session, "Household")
+        unsure_category = _make_category(db_session, "UNSURE")
+
+        other_household_precedent = _make_transaction(
+            db_session, "IKEA FURNITURE STORE #99", household, CategorySource.SIMILARITY
+        )
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        unsure_txn = _make_transaction(
+            db_session, "SCANDINAVIAN HOME FURNISHINGS CO", unsure_category, CategorySource.UNSURE
+        )
+
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                return_value=[(str(other_household_precedent.id), 0.99)],
+            ),
+        ):
+            auto_applied_ids = recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        db_session.refresh(unsure_txn)
+        assert unsure_txn.id in auto_applied_ids
+        assert unsure_txn.category_id == household.id
+
+    def test_nearest_neighbor_of_a_different_category_is_not_matched(self, db_session):
+        """WR-35: a candidate's true nearest neighbor overall might belong to some
+        other category entirely -- this re-scan correctly finds no match rather
+        than proposing the wrong category just because *something* was close.
+        (Fuzzy-text fallback also finds nothing here, since the descriptions share
+        no real similarity -- this isolates WR-35's category filter, not the
+        amount/text gates already covered elsewhere.)"""
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+        unsure_category = _make_category(db_session, "UNSURE")
+
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        dining_precedent = _make_transaction(db_session, "SOME RESTAURANT", dining, CategorySource.SIMILARITY)
+        unsure_txn = _make_transaction(db_session, "TOTALLY UNRELATED TEXT", unsure_category, CategorySource.UNSURE)
+
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                # Closest neighbor overall, but the wrong category -- must be excluded, not used.
+                return_value=[(str(dining_precedent.id), 0.99)],
+            ),
+        ):
+            auto_applied_ids = recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        db_session.refresh(unsure_txn)
+        assert unsure_txn.id not in auto_applied_ids
+        assert unsure_txn.category_source == CategorySource.UNSURE
 
     def test_falls_back_to_fuzzy_when_embedding_unavailable(self, db_session):
         household = _make_category(db_session, "Household")
@@ -592,6 +663,148 @@ class TestRecategorizeEmbeddingFirst:
 
         db_session.refresh(unsure_txn)
         assert unsure_txn.id in auto_applied_ids  # exact-text fuzzy match (score 100) still auto-applies
+
+
+class TestRecategorizeCrossCategoryFlag:
+    """WR-43: reintroduces WR-9's original "already-categorized" bucket (removed
+    2026-08-19) -- confidently-categorized transactions highly similar to the one
+    just corrected, but under a DIFFERENT category, get flagged as a PENDING
+    proposal for review. WR-10's original safety rule still holds absolutely:
+    this bucket never auto-applies, regardless of score."""
+
+    def _make_job(self, db, source_transaction_id):
+        job = RecategorizationJob(source_transaction_id=source_transaction_id)
+        db.add(job)
+        db.flush()
+        return job
+
+    def test_flags_similar_transaction_in_different_category(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        dining_precedent = _make_transaction(db_session, "SOME RESTAURANT", dining, CategorySource.SIMILARITY)
+
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                return_value=[(str(dining_precedent.id), 0.95)],
+            ),
+        ):
+            recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        proposal = db_session.scalars(
+            select(RecategorizationProposal).where(RecategorizationProposal.candidate_transaction_id == dining_precedent.id)
+        ).one()
+        assert proposal.status == RecategorizationProposalStatus.PENDING
+        assert proposal.source_bucket == RecategorizationProposalSourceBucket.CATEGORIZED
+        assert proposal.proposed_category_id == household.id
+
+    def test_never_auto_applies_even_at_very_high_score(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        dining_precedent = _make_transaction(db_session, "SOME RESTAURANT", dining, CategorySource.SIMILARITY)
+
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                return_value=[(str(dining_precedent.id), 0.999)],  # would clear the auto-apply threshold if it applied here
+            ),
+        ):
+            auto_applied_ids = recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        db_session.refresh(dining_precedent)
+        assert dining_precedent.id not in auto_applied_ids
+        assert dining_precedent.category_id == dining.id  # untouched -- never silently overwritten
+        assert dining_precedent.category_source == CategorySource.SIMILARITY  # untouched
+
+        proposal = db_session.scalars(
+            select(RecategorizationProposal).where(RecategorizationProposal.candidate_transaction_id == dining_precedent.id)
+        ).one()
+        assert proposal.status == RecategorizationProposalStatus.PENDING  # never AUTO_APPLIED, regardless of score
+
+    def test_does_not_flag_candidate_already_in_proposed_category(self, db_session):
+        household = _make_category(db_session, "Household")
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        other_household_precedent = _make_transaction(
+            db_session, "IKEA FURNITURE STORE #2", household, CategorySource.SIMILARITY
+        )
+
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                return_value=[(str(other_household_precedent.id), 0.95)],
+            ),
+        ):
+            recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        proposal = db_session.scalars(
+            select(RecategorizationProposal).where(
+                RecategorizationProposal.candidate_transaction_id == other_household_precedent.id
+            )
+        ).first()
+        assert proposal is None  # same category as proposed -- not a cross-category flag
+
+    def test_no_duplicate_flag_when_already_pending(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        dining_precedent = _make_transaction(db_session, "SOME RESTAURANT", dining, CategorySource.SIMILARITY)
+
+        earlier_job = self._make_job(db_session, corrected.id)
+        repository.record_proposal(
+            db_session,
+            job_id=earlier_job.id,
+            candidate_transaction_id=dining_precedent.id,
+            proposed_category_id=household.id,
+            match_score=95.0,
+            source_bucket=RecategorizationProposalSourceBucket.CATEGORIZED,
+            status=RecategorizationProposalStatus.PENDING,
+        )
+
+        with (
+            patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=[0.1, 0.2]),
+            patch(
+                "ingestion_worker.categorization.service.vector_store.query_nearest_neighbors",
+                return_value=[(str(dining_precedent.id), 0.95)],
+            ),
+        ):
+            recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        proposals = db_session.scalars(
+            select(RecategorizationProposal).where(RecategorizationProposal.candidate_transaction_id == dining_precedent.id)
+        ).all()
+        assert len(proposals) == 1  # not duplicated by the second job
+
+    def test_fuzzy_fallback_flags_cross_category_match_when_embedding_unavailable(self, db_session):
+        household = _make_category(db_session, "Household")
+        dining = _make_category(db_session, "Dining")
+
+        corrected = _make_transaction(db_session, "IKEA FURNITURE STORE", household, CategorySource.MANUAL)
+        job = self._make_job(db_session, corrected.id)
+        # Exact-text match (score 100) so it clears similarity_threshold via fuzzy-text alone.
+        dining_precedent = _make_transaction(db_session, "IKEA FURNITURE STORE", dining, CategorySource.SIMILARITY)
+
+        with patch("ingestion_worker.categorization.service.embedding_client.compute_embedding", return_value=None):
+            recategorize_unsure_from_precedent(db_session, job.id, corrected.id)
+
+        db_session.refresh(dining_precedent)
+        assert dining_precedent.category_id == dining.id  # untouched -- fallback never auto-applies either
+        proposal = db_session.scalars(
+            select(RecategorizationProposal).where(RecategorizationProposal.candidate_transaction_id == dining_precedent.id)
+        ).one()
+        assert proposal.status == RecategorizationProposalStatus.PENDING
+        assert proposal.source_bucket == RecategorizationProposalSourceBucket.CATEGORIZED
 
 
 class TestClassifyBatch:

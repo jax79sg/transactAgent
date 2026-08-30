@@ -119,6 +119,46 @@ poll ingestion_runs for status='queued' (every 5s, Question 6 = A)
 
   **Correction found at Code Generation**: `amountSgd` is not actually available at `classifyBatch`'s original call time — Currency Conversion previously ran later, per-transaction, inside the persistence loop. The Ingestion Orchestrator's pipeline was restructured so conversion resolves upfront, per transaction, before `classifyBatch` (same conversion logic/DB effects, just reordered), and the already-computed result is reused rather than recomputed during persistence.
 
+- **Addendum (2026-08-28 — Recategorization Algorithm Rework, WR-35)**: `recategorizeUnsureFromPrecedent`'s candidate search is redesigned:
+  ```
+  # For each UNSURE candidate transaction:
+  neighbors = VectorStoreClient.queryNearestNeighbors(
+      computeEmbedding(buildEmbeddingText(candidate.description, candidate.direction, candidate.amount)),
+      collection='transactions', top_k=embedding_top_k)              [same call findSimilarPastTransaction uses]
+  candidate_rows = getSimilarityCandidatesByIds(neighbor_ids)
+  same_category = [row for row in candidate_rows if row.category_name == corrected_category]  [WR-35's filter]
+  match = best-scoring row in same_category, if any                  [else: no match from this candidate]
+
+  # Fuzzy-text fallback (embedding unavailable), WR-21 step 4:
+  match = find_best_match(candidate.description, candidate.amount,
+                           listSimilarityCandidates() filtered to category == corrected_category,
+                           ...)                                       [was: single source_candidate]
+  ```
+  This replaces the previous single-pairwise-comparison design (candidate vs. only the one just-corrected transaction) — see WR-35 for the full rule and the reasoning against an unconstrained "closest match in all of history" search. The auto-apply/pending split (WR-9's revision, i.e. current UNSURE-only scope) and `RecategorizationProposal` recording are otherwise unchanged. No LLM-agreement boost changes (WR-30's boost logic against the candidate's own `llm_suggested_category_id` still applies identically, now scored against whichever `same_category` row was selected as the match).
+
+- **Addendum (2026-08-29 — Recategorization Algorithm Rework, WR-43)**: `recategorizeUnsureFromPrecedent` gains a second pass, after the UNSURE-bucket loop above completes, reintroducing WR-9's original already-categorized bucket (removed 2026-08-19) as a review-only flag:
+  ```
+  # Once per job, for source_transaction itself (not per-candidate):
+  neighbors = VectorStoreClient.queryNearestNeighbors(
+      computeEmbedding(buildEmbeddingText(source.description, source.amount, source.direction)),
+      collection='transactions', top_k=embedding_top_k, exclude=source.id)
+  for neighbor in getSimilarityCandidatesByIds(neighbor_ids):
+    if neighbor.category_source != 'unsure'                 [that's the first bucket's territory]
+       and neighbor.category_name != corrected_category      [only cross-category candidates]
+       and neighbor.id not in already_pending_candidate_ids  [Issue #12 dedup, shared helper]
+       and score >= embedding_similarity_threshold
+       and amounts_in_range(source.amount, neighbor.amount):
+      recordProposal(candidate=neighbor, proposed_category=corrected_category,
+                      source_bucket='categorized', status='pending')   [NEVER 'auto_applied' -- WR-10, absolute]
+
+  # Fuzzy-text fallback (embedding unavailable or found nothing), WR-21 step 4:
+  match = find_best_match(source.description, source.amount,
+                           listSimilarityCandidates() filtered to category != corrected_category
+                                                        and id not in already_pending_candidate_ids,
+                           ...)   # single best match, same fallback shape as elsewhere
+  ```
+  Source-centric (one search per job) rather than candidate-centric (one search per already-categorized transaction in the database) — the latter would mean an embedding search per transaction against a pool that could be thousands of rows, on every single manual correction. `RecategorizationProposalSourceBucket.CATEGORIZED` is the same enum value the pre-WR-9-revision bucket used — no schema change, since WR-9's revision explicitly kept it around for historical rows. Never writes to `Transaction.category_id`/`category_source` for this bucket, under any score — the entire point of bringing this bucket back with this constraint is that a human always makes the final call for a cross-category suggestion, unlike the UNSURE bucket where a high-confidence match may auto-apply.
+
 ## Currency Conversion Component
 
 - **Primary source** (Clarification 2a = A): if the Statement Extraction step captured a printed SGD-converted amount for a transaction (common on Singapore bank/card statements per user's domain knowledge), use it directly as `converted_amount_sgd`; `conversion_is_approximate = false`, `fx_rate_used_id = NULL` (no API rate was used — the source was the statement itself, not a cached rate).
@@ -305,3 +345,13 @@ processNextEmbeddingBatch() -> {processedCount}:                            [WR-
 ```
 
 An interrupted batch (worker restart, endpoint goes down mid-batch) simply leaves the remaining rows `pending` — the next poll cycle's call picks up exactly where the backlog left off, with no separate resume state to track (NFR-4). This single mechanism is "the async embedding job" for new/renamed rows and "the one-time historical backfill" for pre-existing ones (FR-6/FR-11) — there is no code path that distinguishes the two.
+
+- **Addendum (2026-08-28 — Recategorization Algorithm Rework, WR-36/37)**: `buildEmbeddingText(description, amount, direction)` (called at every one of this component's call sites listed above, plus `findSimilarPastTransaction`/`recategorizeUnsureFromPrecedent`/`matchNewTransaction`) changes from `"{description} | {price bucket}"` (WR-29) to:
+  ```
+  buildEmbeddingText(description, amount, direction):
+    cleaned = strip everything from the first occurrence of "OTHR-" / "OTHR - " / "REF:" onward   [WR-37, case-insensitive]
+    return f"{cleaned} | {priceBucketLabel(amount)} | {direction}"                                  [WR-36 appends direction]
+  ```
+  `direction` is `"inflow"` or `"outflow"`, derived from whichever of `Transaction.in_flow`/`out_flow` is set (or the equivalent for a `RecurringPayment`'s `expected_amount`, which has no direction of its own today — Code Generation resolves how a `RecurringPayment` supplies this parameter, likely always `"outflow"` given recurring payments are overwhelmingly outgoing, or omitted for that call site if no natural direction exists). The stripping in `cleaned` only affects what gets embedded — `description` itself, as read/displayed/stored everywhere else, is untouched (WR-24's "raw, unmodified text" principle still holds for the persisted field; only this function's *output* changes).
+
+  **Full re-embedding backfill, vectors only** (WR-39, following WR-32's exact precedent): a one-time migration resets every already-`completed` `Transaction`/`RecurringPayment` row back to `embedding_status = 'pending'`, so the unchanged `processNextEmbeddingBatch` above naturally re-embeds the full backlog under the new text format on subsequent poll cycles — no new code path. **Explicit constraint**: this touches `embedding_status` and the stored vector only; `category_id`/`category_source` and every other field are untouched, since `processNextEmbeddingBatch` never calls into categorization logic at all.

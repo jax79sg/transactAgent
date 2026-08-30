@@ -179,7 +179,11 @@ def _process_one_file(db: Session, run, file_ref) -> None:
 
 
 def _persist_transaction(db: Session, statement, currency: str, raw_txn, llm_category: str, conversion) -> Transaction:
-    categorization = categorize(db, raw_txn.description, raw_txn.amount, llm_category)
+    # WR-36: "outflow"/"inflow", mirroring categorization/service.py's _transaction_direction
+    # -- raw_txn has no Transaction row yet at this point, so it's derived from
+    # raw_txn.direction.value ("out"/"in") rather than out_flow/in_flow.
+    direction = "outflow" if raw_txn.direction.value == "out" else "inflow"
+    categorization = categorize(db, raw_txn.description, raw_txn.amount, direction, llm_category)
     category = categorization_repository.find_category_by_name(db, categorization.category_name)
     # find_category_by_name always resolves here: categorize() only ever returns a
     # whitelist name or "UNSURE", both of which are guaranteed to exist as Category rows.
