@@ -22,7 +22,7 @@ const filterStateArbitrary: fc.Arbitrary<TransactionFilterState> = fc.record(
     flowDirection: fc.constantFrom<FlowDirection>("in", "out"),
     categorySource: fc.constantFrom<CategorySourceValue>("similarity", "llm", "manual", "unsure"),
     groupBy: fc.constantFrom<GroupByOption>("category", "bank", "month", "categorySource"),
-    sortBy: fc.constantFrom<SortByOption>("date", "amount", "category", "bank"),
+    sortBy: fc.constantFrom<SortByOption>("date", "amount", "category", "bank", "description"),
     sortDir: fc.constantFrom<SortDir>("asc", "desc"),
     page: fc.integer({ min: 1, max: 1000 }),
     pageSize: fc.integer({ min: 1, max: 200 }),
