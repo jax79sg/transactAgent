@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     # similarity_threshold and this value, which becomes a reviewable proposal
     # instead). Tuned during Code Generation/testing, same as similarity_threshold
     # itself (WR-3) -- not an exact science, just a defensible starting point.
+    # Re-confirmed by WR-42's live precision evaluation: 100% same-category
+    # precision at/above 97 (n=6) with a real cliff just below (96 -> 0/2) --
+    # left unchanged.
     recategorization_auto_apply_threshold: float = 97.0
     extraction_confidence_threshold: str = "medium"  # "low" | "medium" | "high"
 
@@ -142,9 +145,19 @@ class Settings(BaseSettings):
     # of 0.75 -- a moderate +0.07 increase, one of three coordinated tightening
     # changes alongside the price-bucket text (below) and the LLM-agreement boost,
     # not expected to fully address over-eager matching on its own.
-    embedding_similarity_threshold: float = 0.82
+    # WR-42 (Recategorization Algorithm Rework, threshold-evaluation trial): raised
+    # again, 0.82 -> 0.92, based on a live precision evaluation against 160 real
+    # nearest-neighbor pairs -- 0.82 only achieved ~62% same-category precision,
+    # 0.92 achieves ~67% on a comparable sample size (n=86). recategorization_auto_apply_threshold
+    # (below) was NOT changed -- the same evaluation found it already well-calibrated
+    # (100% precision at/above 97, a real cliff just below it).
+    embedding_similarity_threshold: float = 0.92
     embedding_top_k: int = 5
     embedding_batch_size: int = 50
+    # WR-40 (Recategorization Algorithm Rework, backfill speed-up): processNextEmbeddingBatch
+    # computes embeddings concurrently, bounded the same way llm_classification_concurrency
+    # already bounds classify_batch -- same local model server, same overload concern.
+    embedding_concurrency: int = 5
     # Must match the embedding model's actual output dimensionality (used only when
     # creating the Qdrant collections, WR-26/NFR Requirements).
     embedding_dimensions: int = 768

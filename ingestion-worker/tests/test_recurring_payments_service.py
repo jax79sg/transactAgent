@@ -198,13 +198,13 @@ class TestMatchNewTransactionEmbeddingFirst:
         txn.llm_suggested_category_id = subscriptions.id
         db_session.flush()
 
-        # Default embedding_similarity_threshold is 0.82; 0.80 alone doesn't clear
-        # it, but 0.80 + the default 0.05 boost = 0.85 does.
+        # Default embedding_similarity_threshold is 0.92; 0.90 alone doesn't clear
+        # it, but 0.90 + the default 0.05 boost = 0.95 does.
         with (
             patch("ingestion_worker.recurring_payments.service.embedding_client.compute_embedding", return_value=[0.1]),
             patch(
                 "ingestion_worker.recurring_payments.service.vector_store.query_nearest_neighbors",
-                return_value=[(str(payment.id), 0.80)],
+                return_value=[(str(payment.id), 0.90)],
             ),
         ):
             service.match_new_transaction(db_session, txn)
@@ -410,11 +410,11 @@ class TestRunDetectionScanEmbeddingMerge:
         _make_transaction(db_session, "NETFLIX.COM", "15.00", date(2026, 6, 5), category=category)
         _make_transaction(db_session, "SPOTIFY PREMIUM", "15.00", date(2026, 7, 5), category=category)
 
-        # Keyed by the WR-29 price-bucketed text (both $15.00 -> "$10 to $20"), not
-        # the bare description alone.
+        # Keyed by the WR-29 price-bucketed text (both $15.00 -> "$10 to $20") plus
+        # the WR-36 direction token, not the bare description alone.
         vectors = {
-            "NETFLIX.COM | $10 to $20": [1.0, 0.0],
-            "SPOTIFY PREMIUM | $10 to $20": [0.0, 1.0],
+            "NETFLIX.COM | $10 to $20 | outflow": [1.0, 0.0],
+            "SPOTIFY PREMIUM | $10 to $20 | outflow": [0.0, 1.0],
         }  # orthogonal -> cosine 0.0
 
         with patch(

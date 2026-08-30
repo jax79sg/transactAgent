@@ -35,6 +35,11 @@ def _transaction_amount(transaction: Transaction) -> Decimal:
     return transaction.out_flow if transaction.out_flow is not None else transaction.in_flow
 
 
+def _transaction_direction(transaction: Transaction) -> str:
+    """WR-36: "outflow"/"inflow" mirroring _transaction_amount's out_flow/in_flow check."""
+    return "outflow" if transaction.out_flow is not None else "inflow"
+
+
 def _embedding_candidate_scores(description: str, amount: Decimal) -> dict[UUID, float] | None:
     """WR-21/22 (Epic 9), WR-29/30 (Matching Precision Refinement): searches the
     `recurring_payment_names` vector-store collection using price-bucketed query
@@ -48,8 +53,17 @@ def _embedding_candidate_scores(description: str, amount: Decimal) -> dict[UUID,
     unusable (endpoint down) AND when it ran successfully but found zero neighbors
     at all -- both cases mean the same thing to the caller: fall back to the
     fuzzy-text check for every payment (WR-21 step 4 is a whole-operation fallback,
-    not a per-payment one)."""
-    vector = embedding_client.compute_embedding(embedding_text.build_embedding_text(description, amount))
+    not a per-payment one).
+
+    WR-36: direction is always passed as "outflow" here, regardless of the querying
+    transaction's own actual direction -- `RecurringPayment` has no direction field
+    of its own (this domain's recurring payments are overwhelmingly outgoing), so
+    every vector in the `recurring_payment_names` collection was itself embedded
+    with "outflow" (embedding/service.py). Passing the transaction's true direction
+    instead would silently defeat matching for the rare inflow transaction (e.g. a
+    refunded subscription) against an otherwise-correct recurring payment, for a
+    reason unrelated to what this feature is actually trying to improve."""
+    vector = embedding_client.compute_embedding(embedding_text.build_embedding_text(description, amount, "outflow"))
     if vector is None:
         return None
     neighbors = vector_store.query_nearest_neighbors(
@@ -246,10 +260,14 @@ def _merge_groups_via_embedding(groups: dict[str, list[Transaction]]) -> dict[st
     representative: dict[str, Transaction] = {key: max(groups[key], key=lambda t: t.transaction_date) for key in keys}
     representative_vector: dict[str, list[float] | None] = {
         key: embedding_client.compute_embedding(
-            embedding_text.build_embedding_text(representative[key].description, _transaction_amount(representative[key]))
+            embedding_text.build_embedding_text(
+                representative[key].description,
+                _transaction_amount(representative[key]),
+                _transaction_direction(representative[key]),
+            )
         )
         for key in keys
-    }  # WR-29: price-bucketed text
+    }  # WR-29: price-bucketed text; WR-36: direction token
 
     parent = {key: key for key in keys}
 
