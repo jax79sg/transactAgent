@@ -3520,3 +3520,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Step 5 in progress: about to commit the change to the PR branch, then run the backfill per the runbook.
 
 ---
+
+## Rollout Step 5 — Stopped Again Before the Wipe: the Local Model Server Does Not Serve the Configured Models
+**Timestamp**: 2026-10-04T23:08:11Z
+**User Input**: (none; continuing the authorised step 5)
+**AI Response**: "Committed and pushed the correction-matching change (0c34429) and rebuilt the worker image. Before the run, checked what the reingest depends on beyond Drive: the categorisation LLM and the embedding endpoint at http://host.docker.internal:8000/v1 (the user's local model server). Both answer HTTP 401 without a key, so the server is up; but with the worker's own configuration the model in effect (Qwen3.8-27B-4bit, set through the Settings page and selected by the override file) and the embedding model (embeddinggemma-300m) are NOT served: the server lists a single model, APUS-OpenJev-v1-9B-MLX-8bit, and a one-token chat request and a one-word embedding request each returned 404 'Model not found'. The machine or Docker had restarted earlier today, so the server was presumably brought back up with a different model loaded. DECISION: the backfill was NOT started. Wiping and re-ingesting now would re-categorise every transaction with a model that is not there and could embed nothing — a worse state than today — and switching the user's model setting to whatever is loaded, or starting or reloading models in the user's own server process, is not the assistant's call. Nothing was wiped, backed up, written or changed by this attempt. The worker was recreated on the rebuilt image (so it carries the correction-matching fix) and verified: healthy, 172 statements, 6,667 transactions, 2 pending pairs, 13 ingestion runs, no leftover containers. Step 5 therefore awaits two things from the user: the local server serving Qwen3.8-27B-4bit (categorisation) and embeddinggemma-300m (embedding) — or an explicit instruction to use another model — and then a go-ahead; the runbook resumes at 'run' (check-extraction already done: 7 of 10 identical, 3 explained)."
+**Context**: Rollout step 5 blocked a second time, by a prerequisite outside the assistant's control. Not performed.
+
+---
