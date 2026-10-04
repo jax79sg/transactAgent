@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     llm_classification_batch_size: int = 10
     embedding_price_bucket_boundaries: str = "1,5,10,20,50,100,200,500,1000,2000,5000"
     embedding_llm_agreement_boost: float = 0.05
+    # Epic 14 (probable duplicate detection) -- display-only mirrors of the worker's three settings.
+    duplicate_detection_enabled: bool = False
+    duplicate_match_ratio: float = 0.80
+    duplicate_min_transactions: int = 3
     openrouter_model: str = "openrouter/free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     backup_schedule_hour: int = 2

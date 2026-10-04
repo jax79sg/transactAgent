@@ -11,6 +11,8 @@ from transactagent_db.migrate import run_migrations_with_lock
 from ingestion_worker.backup import service as backup_service
 from ingestion_worker.config import settings
 from ingestion_worker.db import session_scope
+from ingestion_worker.duplicates import removal as removal_service
+from ingestion_worker.duplicates import service as duplicates_service
 from ingestion_worker.embedding import service as embedding_service
 from ingestion_worker.embedding import vector_store
 from ingestion_worker.heartbeat import touch_heartbeat
@@ -26,10 +28,15 @@ _DATABASE_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "database" / "alem
 
 def poll_once() -> None:
     """One poll cycle: claim and fully process at most one queued IngestionRun,
-    then at most one queued RecategorizationJob, then (Epic 7) a nightly backup if
-    one is due, then (Epic 8) a recurring-payment detection scan if one is due.
-    Never processes two of the four concurrently (WR-8, WR-11, WR-19) -- each
-    branch only runs when every branch before it found nothing to do."""
+    then at most one queued RecategorizationJob, then (Epic 14) a statement removal job,
+    then (Epic 7) a nightly backup if one is due, then (Epic 8) a recurring-payment
+    detection scan if one is due, then (Epic 14) the probable-duplicate pair scan, then
+    the embedding backlog. Never processes two of these concurrently (WR-8, WR-11, WR-19,
+    WR-65) -- each branch only runs when every branch before it found nothing to do.
+
+    A removal is third because the user is waiting on it; the pair scan is sixth, ahead of
+    the embedding backlog, because that branch has work on every cycle while anything is
+    pending and would otherwise starve it (WR-65)."""
     with session_scope() as db:
         run = repository.find_queued_run(db)
         if run is not None:
@@ -54,6 +61,20 @@ def poll_once() -> None:
             pipeline.process_recategorize_job(db, job)
         return  # one job per poll cycle -- don't also check for a backup this cycle
 
+    removal_ran = False
+    try:
+        with session_scope() as db:
+            if removal_service.is_removal_pending_now(db):
+                removal_service.process_next_removal(db)
+                removal_ran = True
+    except Exception:
+        # WR-65: a failing removal never raises out of the cycle, and never starves the branches
+        # after it. Expected failures are recorded on the job itself; this catches the rest.
+        logger.exception("Statement removal branch failed; continuing with the rest of this cycle")
+
+    if removal_ran:
+        return  # one removal per poll cycle -- don't also check for a backup this cycle
+
     backup_ran = False
     with session_scope() as db:
         if backup_service.is_backup_due_now(db):
@@ -72,7 +93,20 @@ def poll_once() -> None:
     if detection_scan_ran:
         return  # one detection scan per poll cycle -- don't also check the embedding backlog this cycle
 
-    # Epic 9 (services.md correction): fifth, lowest-priority branch -- backlog-
+    pair_scan_ran = False
+    try:
+        with session_scope() as db:
+            if duplicates_service.is_pair_scan_due_now(db):
+                duplicates_service.run_pair_scan(db)
+                pair_scan_ran = True
+    except Exception:
+        # WR-65 / WR-63: a failed scan is logged and stays due, so it is retried next cycle.
+        logger.exception("Duplicate pair scan failed; it stays due and will be retried")
+
+    if pair_scan_ran:
+        return  # one pair scan per poll cycle -- don't also process the embedding backlog this cycle
+
+    # Epic 9 (services.md correction): last, lowest-priority branch -- backlog-
     # triggered (any Transaction OR RecurringPayment row with embedding_status =
     # 'pending'), not time-triggered, so there's no separate "is due" check: the
     # batch call itself is a no-op (processedCount = 0) when nothing is pending.
@@ -93,11 +127,13 @@ def recover_stale_state() -> None:
     with session_scope() as db:
         stale_runs = repository.fail_stale_runs(db)
         stale_jobs = repository.fail_stale_recategorize_jobs(db)
-    if stale_runs or stale_jobs:
+        stale_removals = removal_service.fail_stale_removal_jobs(db)  # Epic 14, WR-65
+    if stale_runs or stale_jobs or stale_removals:
         logger.warning(
-            "Startup recovery: marked %d orphaned ingestion run(s) and %d orphaned "
-            "recategorization job(s) as failed (left over from a previous process)",
-            stale_runs, stale_jobs,
+            "Startup recovery: marked %d orphaned ingestion run(s), %d orphaned "
+            "recategorization job(s) and %d orphaned statement removal job(s) as failed "
+            "(left over from a previous process)",
+            stale_runs, stale_jobs, stale_removals,
         )
 
 

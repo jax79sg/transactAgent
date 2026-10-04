@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -37,13 +37,25 @@ const EMBEDDING_BASE_URL_SETTING: SettingDTO = {
   type: "string",
 };
 
-function renderSettingsPage() {
+const DUPLICATE_SWITCH_SETTING: SettingDTO = {
+  name: "duplicate_detection_enabled",
+  value: "false",
+  isOverridden: false,
+  owningServices: ["ingestion-worker", "api-service"],
+  classification: "standard",
+  category: "Duplicate Statements",
+  description: "Whether the same statement arriving as a different file is detected.",
+  type: "enum",
+  allowedValues: ["false", "true"],
+};
+
+function renderSettingsPage(settings: SettingDTO[] = [SIMILARITY_THRESHOLD_SETTING, EMBEDDING_BASE_URL_SETTING]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
   // Default, always-on mock -- ApplicationSettingsSection's list query runs
   // unconditionally on every SettingsPage render, same precedent as
   // ReviewPage.test.tsx's beforeEach default for DisagreementTable's always-on query.
-  vi.spyOn(settingsApi, "listSettings").mockResolvedValue([SIMILARITY_THRESHOLD_SETTING, EMBEDDING_BASE_URL_SETTING]);
+  vi.spyOn(settingsApi, "listSettings").mockResolvedValue(settings);
   vi.spyOn(settingsApi, "listSettingHistory").mockResolvedValue([]);
   return render(
     <QueryClientProvider client={queryClient}>
@@ -201,5 +213,71 @@ describe("SettingsPage Application Settings section", () => {
     await waitFor(() => {
       expect(screen.getByText(/85.0/)).toBeInTheDocument();
     });
+  });
+});
+
+describe("SettingsPage enumerated settings (Epic 14 on/off switch)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const SETTINGS = [SIMILARITY_THRESHOLD_SETTING, DUPLICATE_SWITCH_SETTING];
+
+  it("shows the switch under its own 'Duplicate Statements' category, as false/true in lowercase", async () => {
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    renderSettingsPage(SETTINGS);
+
+    await waitFor(() => expect(screen.getByTestId("setting-row-duplicate_detection_enabled")).toBeInTheDocument());
+    expect(screen.getByTestId("setting-category-Duplicate Statements")).toBeInTheDocument();
+    expect(screen.getByTestId("setting-row-duplicate_detection_enabled")).toHaveTextContent("false");
+  });
+
+  it("edits an enumerated setting with a dropdown of exactly its allowed values", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    renderSettingsPage(SETTINGS);
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByTestId("setting-row-duplicate_detection_enabled")).toBeInTheDocument());
+    await user.click(within(screen.getByTestId("setting-row-duplicate_detection_enabled")).getByText("Edit"));
+
+    const control = screen.getByTestId("setting-input-duplicate_detection_enabled");
+    expect(control.tagName).toBe("SELECT");
+    expect(within(control).getAllByRole("option").map((o) => o.textContent)).toEqual(["false", "true"]);
+    expect(control).toHaveValue("false"); // starts at the current value
+  });
+
+  it("still edits a numeric setting with a text box", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    renderSettingsPage(SETTINGS);
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByTestId("setting-row-similarity_threshold")).toBeInTheDocument());
+    await user.click(within(screen.getByTestId("setting-row-similarity_threshold")).getByText("Edit"));
+
+    expect(screen.getByTestId("setting-input-similarity_threshold").tagName).toBe("INPUT");
+  });
+
+  it("chooses a value from the dropdown, confirms, and saves exactly that string", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(settingsApi, "updateSetting").mockResolvedValue({
+      setting: { ...DUPLICATE_SWITCH_SETTING, value: "true", isOverridden: true },
+      restartGuidance: [{ owningService: "ingestion-worker", restartCommand: "docker restart transactagent-worker" }],
+    });
+    renderSettingsPage(SETTINGS);
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(screen.getByTestId("setting-row-duplicate_detection_enabled")).toBeInTheDocument());
+    await user.click(within(screen.getByTestId("setting-row-duplicate_detection_enabled")).getByText("Edit"));
+    await user.selectOptions(screen.getByTestId("setting-input-duplicate_detection_enabled"), "true");
+    await user.click(screen.getByText("Save"));
+
+    expect(settingsApi.updateSetting).not.toHaveBeenCalled(); // the confirmation comes first, as for every setting
+    await user.click(screen.getByTestId("confirm-setting-change"));
+
+    await waitFor(() => expect(settingsApi.updateSetting).toHaveBeenCalledWith("duplicate_detection_enabled", "true"));
+    await waitFor(() => expect(screen.getByTestId("restart-command")).toHaveTextContent("docker restart transactagent-worker"));
   });
 });

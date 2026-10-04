@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as backgroundActivityApi from "../src/api/backgroundActivity";
+import * as duplicatesApi from "../src/api/duplicates";
 import * as recategorizationApi from "../src/api/recategorization";
 import * as recurringPaymentsApi from "../src/api/recurringPayments";
 import { NavBar } from "../src/components/NavBar";
@@ -14,9 +15,16 @@ import { ThemeProvider } from "../src/context/ThemeContext";
 vi.mock("../src/api/recategorization");
 vi.mock("../src/api/recurringPayments");
 vi.mock("../src/api/backgroundActivity");
+vi.mock("../src/api/duplicates");
 
 const NO_ATTENTION_NEEDED = { dueSoonCount: 0, overdueCount: 0, pendingMatchCount: 0, newSuggestionCount: 0 };
 const NO_ACTIVITY = { current: null, recent: [] };
+const NO_PENDING_DUPLICATES = { pendingCount: 0 };
+
+// Every NavBar render also asks for the probable-duplicate count; tests that are about something else get "none".
+beforeEach(() => {
+  vi.spyOn(duplicatesApi, "getPendingPairCount").mockResolvedValue(NO_PENDING_DUPLICATES);
+});
 
 function renderNavBar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -224,5 +232,63 @@ describe("NavBar theme toggle", () => {
       expect(screen.getByTestId("pending-review-badge")).toHaveTextContent("2");
     });
     expect(screen.getByTestId("theme-toggle")).toBeInTheDocument();
+  });
+});
+
+describe("NavBar pending duplicates badge", () => {
+  beforeEach(() => {
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 0 });
+    vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue(NO_ATTENTION_NEEDED);
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("is invisible when there are no pairs awaiting a decision", async () => {
+    vi.spyOn(duplicatesApi, "getPendingPairCount").mockResolvedValue(NO_PENDING_DUPLICATES);
+    renderNavBar();
+
+    await waitFor(() => expect(duplicatesApi.getPendingPairCount).toHaveBeenCalled());
+    expect(screen.queryByTestId("pending-duplicates-badge")).not.toBeInTheDocument();
+  });
+
+  it("shows the number of pairs awaiting a decision, on the Review link", async () => {
+    vi.spyOn(duplicatesApi, "getPendingPairCount").mockResolvedValue({ pendingCount: 3 });
+    renderNavBar();
+
+    const badge = await screen.findByTestId("pending-duplicates-badge");
+    expect(badge).toHaveTextContent("3");
+    expect(screen.getByText("Review").closest("a")).toContainElement(badge);
+  });
+
+  it("is told apart from the recategorization badge: both can show at once, each with its own number", async () => {
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 4 });
+    vi.spyOn(duplicatesApi, "getPendingPairCount").mockResolvedValue({ pendingCount: 2 });
+    renderNavBar();
+
+    await waitFor(() => expect(screen.getByTestId("pending-duplicates-badge")).toHaveTextContent("2"));
+    expect(screen.getByTestId("pending-review-badge")).toHaveTextContent("4");
+  });
+
+  it("reads as words to a screen reader, not a bare number, and gets the plural right", async () => {
+    const count = vi.spyOn(duplicatesApi, "getPendingPairCount").mockResolvedValue({ pendingCount: 1 });
+    const { unmount } = renderNavBar();
+    expect(await screen.findByTestId("pending-duplicates-badge")).toHaveAccessibleName("1 duplicate statement awaiting review");
+    unmount();
+
+    count.mockResolvedValue({ pendingCount: 5 });
+    renderNavBar();
+    expect(await screen.findByTestId("pending-duplicates-badge")).toHaveAccessibleName("5 duplicate statements awaiting review");
+  });
+
+  it("does not disturb the existing recategorization badge when there are no duplicates", async () => {
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 6 });
+    vi.spyOn(duplicatesApi, "getPendingPairCount").mockResolvedValue(NO_PENDING_DUPLICATES);
+    renderNavBar();
+
+    await waitFor(() => expect(screen.getByTestId("pending-review-badge")).toHaveTextContent("6"));
+    expect(screen.queryByTestId("pending-duplicates-badge")).not.toBeInTheDocument();
   });
 });

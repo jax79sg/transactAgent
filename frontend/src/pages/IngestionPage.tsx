@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { cancelRun, getRunStatus, listRunFiles, listRunHistory, listRunLogs, startRun } from "../api/ingestion";
 import type { IngestionRunStatus, RunFileDetail, RunLogLine, RunStatusResponse } from "../api/types";
 import { SortableTh } from "../components/SortableTh";
+import { formatStatementLabel } from "../lib/duplicates";
 
 const ACTIVE_STATUSES: IngestionRunStatus[] = ["queued", "running"];
 const POLL_INTERVAL_MS = 3000; // business-logic-model.md: 3s poll while a run is active
@@ -135,7 +137,22 @@ function RunFiles({ runId }: { runId: string }) {
         {files && sortRunFiles(files, sortKey, sortDir).map((f) => (
           <tr key={f.id}>
             <td>{f.driveFileName}</td>
-            <td>{f.outcome}</td>
+            <td>
+              {f.outcome === "skipped_probable_duplicate" && f.duplicateComparisonId ? (
+                // Epic 14 (US-14.1/14.2): the file was judged a probable duplicate; the link opens the stored comparison.
+                // The same text appears in every later run that meets the file again (US-14.4).
+                <Link
+                  data-testid={`run-file-duplicate-link-${f.id}`}
+                  to={`/duplicates/${f.duplicateComparisonId}`}
+                  className="underline"
+                >
+                  Probable duplicate of{" "}
+                  {f.matchedStatement ? formatStatementLabel(f.matchedStatement) : "a statement you already have"}
+                </Link>
+              ) : (
+                f.outcome
+              )}
+            </td>
             <td>{f.failureReason ?? ""}</td>
             <td>{f.transactionsExtractedCount ?? ""}</td>
           </tr>

@@ -1,5 +1,6 @@
 """Environment-sourced configuration (NFR-4.1)."""
 
+from pydantic import Field
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -184,6 +185,21 @@ class Settings(BaseSettings):
     # LLM-classification agreement signal is present, before the threshold check
     # above -- never a penalty on disagreement, only a boost withheld.
     embedding_llm_agreement_boost: float = 0.05
+
+    # Epic 14 (Probable Duplicate Statement Detection, WR-57). The switch gates only NEW
+    # judgments -- the check after extraction and the pair scan. The remembered-file
+    # lookup, removal jobs and the Review panel keep working when it is off, because they
+    # honour decisions the user already made. Ships OFF: it is switched on only after the
+    # accuracy evaluation (`check-duplicates`) has been run on the real statements.
+    duplicate_detection_enabled: bool = False
+    # A pair is a probable duplicate when at least this fraction of the SMALLER statement's
+    # transactions match. Below 0.50 the rule would start flagging statements that are
+    # plainly different, so the range is bounded and a bad value stops the worker starting.
+    # Also the size relation for "removal offered" (Question 1 = C, WR-64).
+    duplicate_match_ratio: float = Field(default=0.80, ge=0.50, le=1.00)
+    # Statements with fewer transactions than this are never flagged on transactions alone
+    # (FR-PD-4): their account identifier and closing balance must match too.
+    duplicate_min_transactions: int = Field(default=3, ge=1, le=50)
 
     @property
     def database_url(self) -> str:

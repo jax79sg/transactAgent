@@ -189,6 +189,7 @@ const CATEGORY_ORDER = [
   "Recurring Payments",
   "Backup",
   "Ingestion",
+  "Duplicate Statements",
   "API & Access",
   "Ask AI",
 ];
@@ -363,12 +364,32 @@ function SettingRow({ setting }: { setting: SettingDTO }) {
             setConfirming(true);
           }}
         >
-          <input
-            className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            value={draftValue}
-            onChange={(e) => setDraftValue(e.target.value)}
-            data-testid={`setting-input-${setting.name}`}
-          />
+          {setting.type === "enum" && setting.allowedValues && setting.allowedValues.length > 0 ? (
+            // An enumerated setting is a fixed choice, so it is a dropdown rather than a text box to type into
+            // (Epic 14 added the first on/off switch, which would otherwise have to be typed as "true"/"false").
+            <select
+              className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              value={draftValue}
+              onChange={(e) => setDraftValue(e.target.value)}
+              data-testid={`setting-input-${setting.name}`}
+            >
+              {(setting.allowedValues.includes(draftValue)
+                ? setting.allowedValues
+                : [draftValue, ...setting.allowedValues]
+              ).map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              value={draftValue}
+              onChange={(e) => setDraftValue(e.target.value)}
+              data-testid={`setting-input-${setting.name}`}
+            />
+          )}
           <span className="text-xs text-slate-400 dark:text-slate-500">{formatSettingType(setting)}</span>
           <button
             type="submit"

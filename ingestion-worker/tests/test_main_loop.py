@@ -7,12 +7,27 @@ test_orchestrator_pipeline.py; this file only tests the dispatch wiring.
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from ingestion_worker import main
 
 
 @contextmanager
 def _fake_session_scope(fake_db):
     yield fake_db
+
+
+@pytest.fixture(autouse=True)
+def _no_duplicate_work_by_default():
+    """Epic 14 added two branches (removal, third; pair scan, sixth). The existing tests here are
+    about the OTHER branches' dispatch, so by default those two find nothing to do; the new tests
+    below override them. Without this, a MagicMock session would look like a pending removal."""
+    with (
+        patch("ingestion_worker.main.removal_service.is_removal_pending_now", return_value=False),
+        patch("ingestion_worker.main.removal_service.fail_stale_removal_jobs", return_value=0),
+        patch("ingestion_worker.main.duplicates_service.is_pair_scan_due_now", return_value=False),
+    ):
+        yield
 
 
 class TestPollOnce:
@@ -207,6 +222,142 @@ class TestPollOnce:
         mock_embed.assert_not_called()
 
 
+class TestDuplicateBranches:
+    """Epic 14, WR-65: the removal branch is third and the pair scan sixth, one thing per cycle."""
+
+    def _scope(self, fake_db):
+        return patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db))
+
+    def _quiet(self):
+        """Every branch ahead of the one under test finds nothing."""
+        return (
+            patch("ingestion_worker.main.repository.find_queued_run", return_value=None),
+            patch("ingestion_worker.main.repository.find_queued_recategorize_job", return_value=None),
+        )
+
+    def test_a_pending_removal_is_processed_when_no_run_or_job_is_queued(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.removal_service.is_removal_pending_now", return_value=True),
+            patch("ingestion_worker.main.removal_service.process_next_removal") as mock_removal,
+            patch("ingestion_worker.main.backup_service.is_backup_due_now") as mock_backup_due,
+        ):
+            main.poll_once()
+
+        mock_removal.assert_called_once_with(fake_db)
+        mock_backup_due.assert_not_called()  # one thing per cycle
+
+    def test_a_pending_removal_wins_over_a_due_backup(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.removal_service.is_removal_pending_now", return_value=True),
+            patch("ingestion_worker.main.removal_service.process_next_removal"),
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=True),
+            patch("ingestion_worker.main.backup_service.run_backup") as mock_run_backup,
+        ):
+            main.poll_once()
+
+        mock_run_backup.assert_not_called()
+
+    def test_a_queued_run_wins_over_a_pending_removal(self):
+        fake_db = MagicMock()
+        fake_run = MagicMock()
+        with (
+            self._scope(fake_db),
+            patch("ingestion_worker.main.repository.find_queued_run", return_value=fake_run),
+            patch("ingestion_worker.main.repository.claim_run"),
+            patch("ingestion_worker.main.pipeline.process_run"),
+            patch.object(fake_db, "merge", return_value=fake_run),
+            patch("ingestion_worker.main.removal_service.is_removal_pending_now", return_value=True) as mock_pending,
+        ):
+            main.poll_once()
+
+        mock_pending.assert_not_called()
+
+    def test_a_failing_removal_never_raises_out_of_the_cycle_and_does_not_starve_the_rest(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.removal_service.is_removal_pending_now", return_value=True),
+            patch("ingestion_worker.main.removal_service.process_next_removal", side_effect=RuntimeError("boom")),
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=True),
+            patch("ingestion_worker.main.backup_service.run_backup") as mock_run_backup,
+            patch("ingestion_worker.main.logger") as mock_logger,
+        ):
+            main.poll_once()  # must not raise
+
+        mock_logger.exception.assert_called_once()
+        mock_run_backup.assert_called_once()  # the cycle carried on to the next branch
+
+    def test_the_pair_scan_runs_only_when_nothing_earlier_did_and_is_due(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=False),
+            patch("ingestion_worker.main.recurring_payments_service.is_detection_scan_due_now", return_value=False),
+            patch("ingestion_worker.main.duplicates_service.is_pair_scan_due_now", return_value=True),
+            patch("ingestion_worker.main.duplicates_service.run_pair_scan") as mock_scan,
+            patch("ingestion_worker.main.embedding_service.process_next_embedding_batch") as mock_embed,
+        ):
+            main.poll_once()
+
+        mock_scan.assert_called_once_with(fake_db)
+        mock_embed.assert_not_called()  # the scan ran, so the embedding backlog waits for the next cycle
+
+    def test_the_pair_scan_comes_before_the_embedding_backlog_so_the_backlog_cannot_starve_it(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        order = []
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=False),
+            patch("ingestion_worker.main.recurring_payments_service.is_detection_scan_due_now", return_value=False),
+            patch("ingestion_worker.main.duplicates_service.is_pair_scan_due_now", return_value=True),
+            patch("ingestion_worker.main.duplicates_service.run_pair_scan", side_effect=lambda _db: order.append("scan")),
+            patch("ingestion_worker.main.embedding_service.process_next_embedding_batch", side_effect=lambda _db: order.append("embed")),
+        ):
+            main.poll_once()
+
+        assert order == ["scan"]
+
+    def test_the_pair_scan_is_not_run_after_a_detection_scan(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=False),
+            patch("ingestion_worker.main.recurring_payments_service.is_detection_scan_due_now", return_value=True),
+            patch("ingestion_worker.main.recurring_payments_service.run_detection_scan"),
+            patch("ingestion_worker.main.duplicates_service.is_pair_scan_due_now", return_value=True) as mock_due,
+        ):
+            main.poll_once()
+
+        mock_due.assert_not_called()
+
+    def test_a_failing_pair_scan_is_logged_and_never_raises(self):
+        fake_db = MagicMock()
+        quiet_run, quiet_job = self._quiet()
+        with (
+            self._scope(fake_db), quiet_run, quiet_job,
+            patch("ingestion_worker.main.backup_service.is_backup_due_now", return_value=False),
+            patch("ingestion_worker.main.recurring_payments_service.is_detection_scan_due_now", return_value=False),
+            patch("ingestion_worker.main.duplicates_service.is_pair_scan_due_now", return_value=True),
+            patch("ingestion_worker.main.duplicates_service.run_pair_scan", side_effect=RuntimeError("boom")),
+            patch("ingestion_worker.main.embedding_service.process_next_embedding_batch") as mock_embed,
+            patch("ingestion_worker.main.logger") as mock_logger,
+        ):
+            main.poll_once()  # must not raise
+
+        mock_logger.exception.assert_called_once()
+        mock_embed.assert_called_once()  # a failed scan does not starve the embedding backlog
+
+
 class TestRecoverStaleState:
     """Regression coverage for a real incident: a categorization call hung
     indefinitely (2026-08-04), leaving an IngestionRun stuck "running" forever and
@@ -226,6 +377,20 @@ class TestRecoverStaleState:
 
         mock_fail_runs.assert_called_once_with(fake_db)
         mock_fail_jobs.assert_called_once_with(fake_db)
+        mock_logger.warning.assert_called_once()
+
+    def test_stale_removal_jobs_are_failed_at_startup_and_reported(self):
+        fake_db = MagicMock()
+        with (
+            patch("ingestion_worker.main.session_scope", side_effect=lambda: _fake_session_scope(fake_db)),
+            patch("ingestion_worker.main.repository.fail_stale_runs", return_value=0),
+            patch("ingestion_worker.main.repository.fail_stale_recategorize_jobs", return_value=0),
+            patch("ingestion_worker.main.removal_service.fail_stale_removal_jobs", return_value=2) as mock_fail_removals,
+            patch("ingestion_worker.main.logger") as mock_logger,
+        ):
+            main.recover_stale_state()
+
+        mock_fail_removals.assert_called_once_with(fake_db)
         mock_logger.warning.assert_called_once()
 
     def test_no_warning_when_nothing_is_stale(self):

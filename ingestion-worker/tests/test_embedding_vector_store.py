@@ -95,3 +95,70 @@ class TestQueryNearestNeighbors:
 
         assert result == []
         assert result is not None
+
+
+class TestRecreateTransactionsCollection:
+    """Epic 13 (WR-52): the backfill wipes every in-scope transaction, so the whole
+    `transactions` collection is orphaned and is recreated empty."""
+
+    def test_drops_and_recreates_only_the_transactions_collection(self):
+        fake_client = MagicMock()
+        both = [MagicMock(), MagicMock()]
+        both[0].name, both[1].name = vector_store.TRANSACTIONS_COLLECTION, vector_store.RECURRING_PAYMENT_NAMES_COLLECTION
+        fake_client.get_collections.return_value = MagicMock(collections=both)
+
+        with patch("ingestion_worker.embedding.vector_store._client", return_value=fake_client):
+            assert vector_store.recreate_transactions_collection() is True
+
+        fake_client.delete_collection.assert_called_once_with(collection_name=vector_store.TRANSACTIONS_COLLECTION)
+        created = [c.kwargs["collection_name"] for c in fake_client.create_collection.call_args_list]
+        assert created == [vector_store.TRANSACTIONS_COLLECTION]  # the recurring-payment collection is untouched
+
+    def test_creates_it_when_it_does_not_exist_yet(self):
+        fake_client = MagicMock()
+        fake_client.get_collections.return_value = MagicMock(collections=[])
+
+        with patch("ingestion_worker.embedding.vector_store._client", return_value=fake_client):
+            assert vector_store.recreate_transactions_collection() is True
+
+        fake_client.delete_collection.assert_not_called()
+        assert fake_client.create_collection.call_count == 1
+
+    def test_returns_false_and_never_raises_when_qdrant_is_unreachable(self):
+        with patch("ingestion_worker.embedding.vector_store._client", side_effect=ConnectionError("refused")):
+            assert vector_store.recreate_transactions_collection() is False
+
+
+class TestDeleteEmbeddings:
+    """Epic 14 (WR-68): used only by the Statement Removal Handler."""
+
+    def test_deletes_the_given_points_from_the_given_collection(self):
+        fake_client = MagicMock()
+        ids = ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]
+
+        with patch("ingestion_worker.embedding.vector_store._client", return_value=fake_client):
+            assert vector_store.delete_embeddings(vector_store.TRANSACTIONS_COLLECTION, ids) is True
+
+        call = fake_client.delete.call_args.kwargs
+        assert call["collection_name"] == vector_store.TRANSACTIONS_COLLECTION
+        assert call["points_selector"].points == ids  # the ids pass through unchanged
+
+    def test_an_empty_list_is_a_successful_no_op(self):
+        fake_client = MagicMock()
+
+        with patch("ingestion_worker.embedding.vector_store._client", return_value=fake_client):
+            assert vector_store.delete_embeddings(vector_store.TRANSACTIONS_COLLECTION, []) is True
+
+        fake_client.delete.assert_not_called()
+
+    def test_returns_false_and_never_raises_when_the_delete_fails(self):
+        fake_client = MagicMock()
+        fake_client.delete.side_effect = ConnectionError("refused")
+
+        with patch("ingestion_worker.embedding.vector_store._client", return_value=fake_client):
+            assert vector_store.delete_embeddings(vector_store.TRANSACTIONS_COLLECTION, ["x"]) is False
+
+    def test_returns_false_and_never_raises_when_the_client_cannot_be_created(self):
+        with patch("ingestion_worker.embedding.vector_store._client", side_effect=ConnectionError("refused")):
+            assert vector_store.delete_embeddings(vector_store.TRANSACTIONS_COLLECTION, ["x"]) is False
+

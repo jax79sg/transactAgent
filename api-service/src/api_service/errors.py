@@ -190,3 +190,48 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=exc.status_code,
             content={"error": exc.error_code, "message": exc.message, "details": exc.details},
         )
+
+
+class PairNotPendingError(ApiError):
+    """AR-43/AR-42 (Epic 14): a probable-duplicate pair can only be decided while it is `pending`."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "pair_not_pending"
+
+
+class RemovalNotOfferedError(ApiError):
+    """AR-42 (Epic 14, Question 1 = C): removal is offered only for pairs of comparable size; the
+    worker stores `removal_allowed` on the pair and the API never overrides it."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "removal_not_offered"
+
+
+class RemovalAlreadyRequestedError(ApiError):
+    """AR-42/AR-43 (Epic 14, BR-45): a removal for this pair is already queued, running, or cleaning up."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "removal_already_requested"
+
+
+class StatementMissingError(ApiError):
+    """AR-42 (Epic 14): one of the pair's statements no longer exists, so there is nothing safe to remove."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "statement_missing"
+
+
+class ConfirmationOutOfDateError(ApiError):
+    """AR-42 (Epic 14): what the user confirmed (which copy, how many manual corrections would be lost)
+    no longer matches the data. Nothing was changed; the user must look again."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "confirmation_out_of_date"
+
+
+class NotASkippedFileError(ApiError):
+    """AR-44 (Epic 14): the comparison has no remembered file to override (it belongs to a held pair)."""
+
+    status_code = status.HTTP_409_CONFLICT
+    error_code = "not_a_skipped_file"
+

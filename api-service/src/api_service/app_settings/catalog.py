@@ -1,4 +1,4 @@
-"""The settings allow-list (AR-28) -- the sole source of truth for which of the 40
+"""The settings allow-list (AR-28) -- the sole source of truth for which of the 47
 in-scope settings exist and what a valid value looks like. A name not in this dict
 has no code path to a value, secret or otherwise (NFR-CAS-2).
 
@@ -70,6 +70,7 @@ _EMBEDDING = "Embedding & Semantic Matching"
 _RECURRING = "Recurring Payments"
 _BACKUP = "Backup"
 _INGESTION = "Ingestion"
+_DUPLICATES = "Duplicate Statements"
 _API_ACCESS = "API & Access"
 _ASK_AI = "Ask AI"
 
@@ -268,6 +269,27 @@ _SPECS: tuple[SettingSpec, ...] = (
         "The currency every transaction's converted amount is reported in across dashboards and exports.",
         "string", "SGD", format="currency_code",
     ),
+    # --- Duplicate Statements (Epic 14) ---
+    SettingSpec(
+        "duplicate_detection_enabled", (_WORKER,), "standard", _DUPLICATES,
+        "Whether the same statement saved as a different file is detected and skipped, and stored statements are "
+        "scanned for existing duplicates. Ships off: switch it on only after running the `check-duplicates` accuracy "
+        "check on your real statements. Decisions you have already made (a removed copy, an override) are honoured "
+        "either way. Takes effect when the ingestion-worker restarts.",
+        "enum", "false", allowed_values=("false", "true"),
+    ),
+    SettingSpec(
+        "duplicate_match_ratio", (_WORKER,), "standard", _DUPLICATES,
+        "A pair is a probable duplicate when at least this fraction of the SMALLER statement's transactions match "
+        "(0.50-1.00). Also decides whether two statements are the same size: removal is offered only for those.",
+        "float", 0.80, min=0.50, max=1.00,
+    ),
+    SettingSpec(
+        "duplicate_min_transactions", (_WORKER,), "advanced", _DUPLICATES,
+        "A statement with fewer transactions than this is never flagged on its transactions alone: its account "
+        "identifier and closing balance must match too.",
+        "int", 3, min=1, max=50,
+    ),
     # --- API & Access ---
     SettingSpec(
         "jwt_expiry_minutes", (_API,), "standard", _API_ACCESS,
@@ -317,4 +339,4 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 44, f"expected 44 settings, got {len(SETTINGS_BY_NAME)}"
+assert len(SETTINGS_BY_NAME) == 47, f"expected 47 settings, got {len(SETTINGS_BY_NAME)}"

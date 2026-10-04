@@ -2,6 +2,9 @@
 precedence over process environment variables, and a missing/malformed-for-this-
 service override file must never crash startup."""
 
+import pytest
+from pydantic import ValidationError
+
 import ingestion_worker.config as config_module
 from ingestion_worker.config import Settings
 
@@ -55,3 +58,69 @@ class TestSettingsOverrideFile:
 
         assert settings.similarity_threshold == 91.5
         assert not hasattr(settings, "jwt_expiry_minutes")
+
+
+class TestDuplicateDetectionSettings:
+    """WR-57: three settings, validated at startup."""
+
+    def test_defaults(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        for name in ("DUPLICATE_DETECTION_ENABLED", "DUPLICATE_MATCH_RATIO", "DUPLICATE_MIN_TRANSACTIONS"):
+            monkeypatch.delenv(name, raising=False)
+
+        settings = Settings()
+
+        assert settings.duplicate_detection_enabled is False  # ships OFF
+        assert settings.duplicate_match_ratio == 0.80
+        assert settings.duplicate_min_transactions == 3
+
+    def test_boolean_accepts_the_catalogs_lowercase_values(self, tmp_path, monkeypatch):
+        """The API's catalog stores the switch as the text `false` / `true`."""
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("DUPLICATE_DETECTION_ENABLED", "true")
+        assert Settings().duplicate_detection_enabled is True
+        monkeypatch.setenv("DUPLICATE_DETECTION_ENABLED", "false")
+        assert Settings().duplicate_detection_enabled is False
+
+    @pytest.mark.parametrize("ratio", ["0.50", "0.8", "1.0"])
+    def test_ratio_within_bounds_is_accepted(self, tmp_path, monkeypatch, ratio):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("DUPLICATE_MATCH_RATIO", ratio)
+
+        assert Settings().duplicate_match_ratio == float(ratio)
+
+    @pytest.mark.parametrize("ratio", ["0.49", "0", "1.01", "-1"])
+    def test_ratio_outside_bounds_stops_startup(self, tmp_path, monkeypatch, ratio):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("DUPLICATE_MATCH_RATIO", ratio)
+
+        with pytest.raises(ValidationError):
+            Settings()
+
+    @pytest.mark.parametrize("minimum", ["1", "3", "50"])
+    def test_minimum_within_bounds_is_accepted(self, tmp_path, monkeypatch, minimum):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("DUPLICATE_MIN_TRANSACTIONS", minimum)
+
+        assert Settings().duplicate_min_transactions == int(minimum)
+
+    @pytest.mark.parametrize("minimum", ["0", "51", "-2"])
+    def test_minimum_outside_bounds_stops_startup(self, tmp_path, monkeypatch, minimum):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("DUPLICATE_MIN_TRANSACTIONS", minimum)
+
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_override_file_wins_for_the_new_names(self, tmp_path, monkeypatch):
+        override_file = tmp_path / "settings.env"
+        override_file.write_text("DUPLICATE_DETECTION_ENABLED=true\nDUPLICATE_MATCH_RATIO=0.9\n")
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(override_file))
+        monkeypatch.setenv("DUPLICATE_DETECTION_ENABLED", "false")
+        monkeypatch.setenv("DUPLICATE_MATCH_RATIO", "0.7")
+
+        settings = Settings()
+
+        assert settings.duplicate_detection_enabled is True
+        assert settings.duplicate_match_ratio == 0.9
+

@@ -3,6 +3,7 @@ and PDF-to-image conversion mocked (no real network/PDF rendering needed)."""
 
 import json
 from datetime import date, timedelta
+from decimal import Decimal
 from typing import ClassVar
 from unittest.mock import patch
 
@@ -555,3 +556,205 @@ class TestDayMonthSwapRepair:
 
         assert isinstance(result, ExtractionFailure)
         assert "schema validation" in result.reason
+
+
+def _txn(day: str, description: str = "TXN", amount: float = 10.0, direction: str = "out") -> dict:
+    return {
+        "transaction_date": day,
+        "description": description,
+        "amount": amount,
+        "direction": direction,
+        "printed_converted_amount_sgd": None,
+        "confidence": "high",
+    }
+
+
+def _sectioned(*sections: dict, **overrides) -> dict:
+    return {"bank_name": "DBS", "currency": "SGD", "confidence": "high", "sections": list(sections), **overrides}
+
+
+def _extract(response: dict):
+    p1, p2 = _mock_pipeline(json.dumps(response))
+    with p1, p2:
+        return extract_statement(b"fake-pdf-bytes")
+
+
+class TestAccountSections:
+    """Epic 13 (WR-44, WR-46): a statement holds one or more account sections."""
+
+    def test_two_sections_are_returned_with_their_own_fields(self):
+        result = _extract(
+            _sectioned(
+                {"account_identifier": "123-456", "account_type": "deposit", "closing_balance": 1000.5,
+                 "closing_balance_date": "2026-01-31", "transactions": [_txn("2026-01-15", "A")]},
+                {"account_identifier": "4111", "account_type": "credit_card", "closing_balance": None,
+                 "transactions": [_txn("2026-01-16", "B")]},
+            )
+        )
+
+        assert not isinstance(result, ExtractionFailure)
+        assert [s.account_identifier for s in result.sections] == ["123-456", "4111"]
+        assert [s.account_type.value for s in result.sections] == ["deposit", "credit_card"]
+        assert result.sections[0].closing_balance == Decimal("1000.5")
+        assert [t.description for t in result.transactions] == ["A", "B"]
+
+    def test_a_flat_reply_still_works_as_one_section(self):
+        result = _extract({**_VALID_RESPONSE})
+
+        assert not isinstance(result, ExtractionFailure)
+        assert len(result.sections) == 1
+        assert result.sections[0].currency == "SGD"
+
+    def test_section_currency_defaults_to_the_statement_currency(self):
+        result = _extract(_sectioned({"transactions": [_txn("2026-01-15")]}))
+
+        assert result.sections[0].currency == "SGD"
+
+    def test_a_section_may_have_its_own_currency(self):
+        result = _extract(
+            _sectioned({"transactions": [_txn("2026-01-15")]}, {"currency": "usd", "transactions": [_txn("2026-01-16")]})
+        )
+
+        assert [s.currency for s in result.sections] == ["SGD", "USD"]
+
+    def test_no_currency_anywhere_is_the_existing_failure(self):
+        result = _extract(_sectioned({"transactions": [_txn("2026-01-15")]}, currency=None))
+
+        assert isinstance(result, ExtractionFailure)
+        assert "bank name and/or currency" in result.reason
+
+    def test_a_section_currency_alone_is_enough_when_the_statement_has_none(self):
+        result = _extract(_sectioned({"currency": "SGD", "transactions": [_txn("2026-01-15")]}, currency=None))
+
+        assert not isinstance(result, ExtractionFailure)
+
+    def test_new_fields_never_fail_an_extraction(self):
+        result = _extract(
+            _sectioned(
+                {"account_type": "who knows", "closing_balance": "n/a", "closing_balance_date": "garbage",
+                 "account_identifier": None, "transactions": [_txn("2026-01-15")]}
+            )
+        )
+
+        assert not isinstance(result, ExtractionFailure)
+        section = result.sections[0]
+        assert section.account_type.value == "unknown"
+        assert section.closing_balance is None and section.closing_balance_date is None
+
+    def test_zero_transactions_across_the_whole_statement_is_a_failure(self):
+        result = _extract(_sectioned({"transactions": []}, {"transactions": []}))
+
+        assert isinstance(result, ExtractionFailure)
+        assert "Zero transactions" in result.reason
+
+    def test_one_section_with_no_transactions_is_fine_if_another_has_some(self):
+        result = _extract(
+            _sectioned(
+                {"account_identifier": "111", "closing_balance": 50.0, "closing_balance_date": "2026-01-31", "transactions": []},
+                {"account_identifier": "222", "transactions": [_txn("2026-01-15")]},
+            )
+        )
+
+        assert not isinstance(result, ExtractionFailure)
+        assert [s.account_identifier for s in result.sections] == ["111", "222"]  # the empty one kept: it has a balance
+
+    def test_a_section_with_neither_transactions_nor_a_balance_is_dropped(self):
+        result = _extract(_sectioned({"account_identifier": "999", "transactions": []}, {"transactions": [_txn("2026-01-15")]}))
+
+        assert [s.account_identifier for s in result.sections] == [None]
+
+    def test_balance_restatement_lines_are_dropped_in_every_section(self):
+        result = _extract(
+            _sectioned(
+                {"transactions": [_txn("2026-01-15", "BALANCE BROUGHT FORWARD"), _txn("2026-01-16", "COFFEE")]},
+                {"transactions": [_txn("2026-01-17", "Closing Balance"), _txn("2026-01-18", "LUNCH")]},
+            )
+        )
+
+        assert [t.description for t in result.transactions] == ["COFFEE", "LUNCH"]
+
+
+class TestClosingBalanceValidation:
+    """WR-47: the closing date gets the same protection as every other date."""
+
+    def _section(self, **fields) -> dict:
+        return {"closing_balance": 500.0, "transactions": [_txn("2026-01-15"), _txn("2026-01-28")], **fields}
+
+    def test_a_date_on_or_shortly_after_the_last_transaction_is_kept(self):
+        result = _extract(_sectioned(self._section(closing_balance_date="2026-01-31")))
+
+        assert str(result.sections[0].closing_balance_date) == "2026-01-31"
+        assert result.sections[0].closing_balance == Decimal("500.0")
+
+    def test_an_ambiguous_date_is_resolved_to_the_reading_inside_the_window(self):
+        # printed 31/01 or 01/02: "2026-02-01" read month-first lands a day-order away; the
+        # reading in the window after the 28 Jan transaction is 1 Feb.
+        result = _extract(_sectioned(self._section(closing_balance_date="2026-01-02")))
+
+        assert str(result.sections[0].closing_balance_date) == "2026-02-01"
+
+    def test_an_implausible_date_falls_back_to_the_validated_statement_date(self):
+        result = _extract(_sectioned(self._section(closing_balance_date="2025-06-30"), statement_date="2026-01-31"))
+
+        assert str(result.sections[0].closing_balance_date) == "2026-01-31"
+        assert result.sections[0].closing_balance == Decimal("500.0")
+
+    def test_an_implausible_date_with_no_usable_statement_date_drops_the_pair(self):
+        result = _extract(_sectioned(self._section(closing_balance_date="2025-06-30")))
+
+        assert result.sections[0].closing_balance is None
+        assert result.sections[0].closing_balance_date is None
+
+    def test_a_balance_with_no_date_uses_the_statement_date(self):
+        result = _extract(_sectioned(self._section(closing_balance_date=None), statement_date="2026-01-31"))
+
+        assert str(result.sections[0].closing_balance_date) == "2026-01-31"
+
+    def test_a_date_with_no_balance_is_dropped(self):
+        result = _extract(_sectioned(self._section(closing_balance=None, closing_balance_date="2026-01-31")))
+
+        assert result.sections[0].closing_balance is None
+        assert result.sections[0].closing_balance_date is None
+
+    def test_the_whole_document_swap_also_repairs_closing_dates(self):
+        # transactions printed with day and month transposed for the whole document (the real OCBC failure),
+        # and the closing date written the same way
+        result = _extract(
+            _sectioned(
+                {"closing_balance": 12.0, "closing_balance_date": "2026-31-01",
+                 "transactions": [_txn("2026-13-01"), _txn("2026-28-01")]}
+            )
+        )
+
+        assert [str(t.transaction_date) for t in result.transactions] == ["2026-01-13", "2026-01-28"]
+        assert str(result.sections[0].closing_balance_date) == "2026-01-31"
+
+    def test_a_lone_odd_closing_date_never_triggers_the_document_swap(self):
+        # only the closing date is malformed; the transaction dates are fine and must stay as they are
+        result = _extract(
+            _sectioned(
+                {"closing_balance": 12.0, "closing_balance_date": "2026-31-01",
+                 "transactions": [_txn("2026-01-13"), _txn("2026-01-28")]},
+                statement_date="2026-01-31",
+            )
+        )
+
+        assert [str(t.transaction_date) for t in result.transactions] == ["2026-01-13", "2026-01-28"]
+        assert str(result.sections[0].closing_balance_date) == "2026-01-31"  # fell back to the statement date
+
+
+class TestPerSectionDateCorrection:
+    """WR-46: the chronological ambiguous-date heuristic restarts at each account section."""
+
+    def test_the_second_sections_sequence_is_not_judged_against_the_first(self):
+        # Section 1 ends on 20 Jan; section 2 legitimately restarts at 3 Jan. Judged as ONE list,
+        # "2026-01-03" would look like a backwards jump and be "corrected" to 1 March.
+        result = _extract(
+            _sectioned(
+                {"transactions": [_txn("2026-01-02", "A1"), _txn("2026-01-20", "A2")]},
+                {"transactions": [_txn("2026-01-03", "B1"), _txn("2026-01-05", "B2")]},
+            )
+        )
+
+        by_description = {t.description: str(t.transaction_date) for t in result.transactions}
+        assert by_description == {"A1": "2026-01-02", "A2": "2026-01-20", "B1": "2026-01-03", "B2": "2026-01-05"}
