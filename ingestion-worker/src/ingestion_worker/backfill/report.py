@@ -125,6 +125,10 @@ def build_report(
             "applied": corrections.applied,
             "already_applied": corrections.already_applied,
             "unmatched": [asdict(c) | {"amount": str(c.amount)} for c in corrections.unmatched],
+            "placed_by_date_and_amount": [
+                asdict(p.correction) | {"amount": str(p.correction.amount), "new_description": p.new_description}
+                for p in corrections.loosely_placed
+            ],
             "carried_from_skipped_copies": corrections.carried,
             "carried_and_placed": corrections.carried_applied,
             "superseded_by_the_kept_copys_own": [asdict(c) | {"amount": str(c.amount)} for c in corrections.superseded],
@@ -184,6 +188,15 @@ def render_report(report: dict) -> str:
     if different:
         lines.append(f"  Pairs of clearly different sizes, left for the Review panel as information only ({len(different)}):")
         lines += [f"    - {' / '.join(d['files'])}: {d['reason']}" for d in different]
+    if c.get("placed_by_date_and_amount"):
+        lines.append(
+            f"  Manual corrections placed by date and amount because the re-read description differs slightly "
+            f"({len(c['placed_by_date_and_amount'])}; check by eye):"
+        )
+        lines += [
+            f"    - {u['transaction_date']} {u['amount']} {u['direction']} {u['description']!r} -> {u['new_description']!r} (category {u['category_id']})"
+            for u in c["placed_by_date_and_amount"]
+        ]
     if c["unmatched"]:
         lines.append("  UNMATCHED manual corrections (not re-applied):")
         lines += [f"    - {u['transaction_date']} {u['amount']} {u['direction']} {u['description']!r} (category {u['category_id']})" for u in c["unmatched"]]
