@@ -82,6 +82,26 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `CurrentActivityDTO`: `{ jobType: 'ingestion_run'|'recategorization_job', startedAt: datetime }` — present only while a job is `running` (AR-35); `null` `current` in the parent means idle (FR-BPV-4)
 - `RecentActivityEntryDTO`: `{ jobType: 'ingestion_run'|'recategorization_job', completedAt: datetime }` — up to 10 entries, most recent first (AR-36); an empty array means no recent activity, not an error
 
+## Duplicate Review (added 2026-10-04 — Probable Duplicate Statement Detection, Epic 14)
+
+*Field names are camelCase like every DTO here; enumerated values are the stored (or, for the comparison's `state`, the derived) snake_case strings, as the existing routers return an enum's `.value`.*
+
+- `StatementLabelDTO`: `{ contentHash, fileName: string | null, bankName: string | null, periodStart: date, periodEnd: date, transactionCount: int }` — read from the stored comparison (AR-41). `fileName` is null when the file name could not be resolved at detection time; the Frontend then falls back to bank and period.
+- `RemovalPreviewDTO`: `{ transactions, statementSections, recategorizationJobs, recategorizationProposals, categorizationDisagreements, recurringPaymentMatches, correctionsLost, onlyOnRemovedCopy }` — all integers (AR-41). Present only for a pending pair where removal is offered.
+- `RemovalStatusDTO`: `{ jobId, status: 'queued'|'running'|'embeddings_pending'|'embeddings_failed'|'completed'|'failed', failureReason: string | null, requestedAt, finishedAt: datetime | null, deletedCounts: object | null }` — the pair's latest removal job; null when none has been requested.
+- `PairDTO`: `{ id, comparisonId, status: 'pending'|'removed', removalOffered: bool, stale: bool, keep: StatementLabelDTO, remove: StatementLabelDTO, correctionsOnKept: int | null, correctionsOnRemoved: int | null, preview: RemovalPreviewDTO | null, removal: RemovalStatusDTO | null, foundAt }` — `removalOffered = false` means information only: dismiss, no remove (Question 1 = C). `stale` means a statement of the pair no longer exists; the counts are then null and removal is not offered (AR-41). `keep`/`remove` are the worker's stored proposal, never recomputed (AR-41).
+- `PairPage`: `{ items: PairDTO[], page, pageSize, totalCount }`
+- `PendingPairCountResponse`: `{ pendingCount: int }` — same shape as `PendingCountResponse` (AR-40).
+- `RemovalRequest`: `{ removeStatementHash: string, acknowledgedCorrectionsLost: int }` — what the user saw and confirmed (AR-42).
+- `ComparisonRowDTO`: `{ rank: int, transactionDate: date, description: string, outFlow: decimal | null, inFlow: decimal | null, currency: string, marker: 'also_on_other'|'only_on_this_one' }`
+- `ComparisonSideDTO`: `{ label: StatementLabelDTO, rows: ComparisonRowDTO[] }` — up to 10 rows, ranked largest first.
+- `ComparisonDTO`: `{ id, state: 'skipped'|'ingest_at_next_run'|'ingested_at_your_request'|'removed'|'pair_pending'|'pair_dismissed'|'pair_superseded', reason: string, matchedCount: int, matchRatio: decimal, earlier: ComparisonSideDTO, later: ComparisonSideDTO, thisFileSide: 'earlier'|'later'|null, canOverride: bool, pairId: uuid | null, removalOffered: bool | null, createdAt }` — `thisFileSide` is set only when the comparison belongs to a remembered file (AR-45); `pairId` and `removalOffered` only when it belongs to a held pair.
+- `OverrideResponse`: `{ comparisonId, state: 'ingest_at_next_run'|'ingested_at_your_request', note: string | null }` — `note` says that corrections lost with a removed copy are not restored (AR-44).
+- `ScanStatusDTO`: `{ lastCompletedAt: datetime | null, pairsFound: int | null, recheckRequested: bool, detectionEnabled: bool }` (AR-46).
+- **Endpoint paths (fixed at Frontend Functional Design, 2026-10-04, so the two units agree)**: `GET /duplicates/pairs` (query `page`, `page_size`), `GET /duplicates/pairs/pending-count`, `GET /duplicates/comparisons/{comparisonId}`, `POST /duplicates/pairs/{pairId}/remove` (body `RemovalRequest`), `POST /duplicates/pairs/{pairId}/dismiss`, `POST /duplicates/comparisons/{comparisonId}/override`, `GET /duplicates/scan-status`, `POST /duplicates/recheck`. Remove, dismiss, and re-check return the updated pair or the scan status so the Frontend can refresh without a second call.
+- **Run-file detail (addendum to `RunFileDetail`, Ingestion Trigger & Status)**: gains `duplicateComparisonId: uuid | null` and `matchedStatement: StatementLabelDTO | null`; `outcome` may now be `skipped_probable_duplicate` (the stored value, as for the other outcomes) (AR-47).
+- **Settings (addendum to Configurable Application Settings)**: the catalog gains `duplicate_detection_enabled` (enumerated `false`/`true`), `duplicate_match_ratio` (decimal), `duplicate_min_transactions` (whole number), category "Duplicate Statements" (AR-48).
+
 ## Error Shape (all endpoints)
 
 - `ErrorResponse`: `{ error: string, message: string, details?: object }` — consistent shape across all `400`/`401`/`404`/`409` responses so the Frontend has one error-handling code path.

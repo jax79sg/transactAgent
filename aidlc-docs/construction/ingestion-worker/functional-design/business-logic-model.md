@@ -355,3 +355,186 @@ An interrupted batch (worker restart, endpoint goes down mid-batch) simply leave
   `direction` is `"inflow"` or `"outflow"`, derived from whichever of `Transaction.in_flow`/`out_flow` is set (or the equivalent for a `RecurringPayment`'s `expected_amount`, which has no direction of its own today — Code Generation resolves how a `RecurringPayment` supplies this parameter, likely always `"outflow"` given recurring payments are overwhelmingly outgoing, or omitted for that call site if no natural direction exists). The stripping in `cleaned` only affects what gets embedded — `description` itself, as read/displayed/stored everywhere else, is untouched (WR-24's "raw, unmodified text" principle still holds for the persisted field; only this function's *output* changes).
 
   **Full re-embedding backfill, vectors only** (WR-39, following WR-32's exact precedent): a one-time migration resets every already-`completed` `Transaction`/`RecurringPayment` row back to `embedding_status = 'pending'`, so the unchanged `processNextEmbeddingBatch` above naturally re-embeds the full backlog under the new text format on subsequent poll cycles — no new code path. **Explicit constraint**: this touches `embedding_status` and the stored vector only; `category_id`/`category_source` and every other field are untouched, since `processNextEmbeddingBatch` never calls into categorization logic at all.
+
+## Statement Extraction, Account Resolver, Orchestrator, and Duplicate Detection: Account Sections (added 2026-10-03 — Account Balance at a Point in Time, Epic 13)
+
+**Statement Extraction addendum** (WR-44..WR-47). The parsed result is `{bank_name, statement_date, confidence, primary currency, sections: [{account_identifier?, account_type?, currency, closing_balance?, closing_balance_date?, transactions}]}`. Steps after the model replies: parse the JSON; if it has no sections but a flat transaction list, wrap it as one section; resolve each section's currency (own, else statement's, else the WR-2 failure); run the whole-document day/month swap check across every section's dates and closing dates; per section, run the chronological ambiguous-date correction; across the document, drop balance-restatement lines and future-dated rows and validate `statement_date`; validate each section's closing-balance date and drop its balance pair if untrustworthy (WR-47); then the existing failure checks (WR-1 schema, WR-2 bank/currency, WR-1c zero transactions across the whole statement, confidence gate). Nothing new can fail an extraction.
+
+**Account Resolver Component** (WR-48..WR-50): called by the orchestrator after extraction succeeds, once per section:
+```
+for each section:
+    key = (bank_key(statement.bank_name), identifier(section), section.currency)
+    account = lookup AccountKey(key)            -- BR-30
+    if none: create Account + first AccountKey  -- default name per WR-48, type = section.account_type or 'unknown'
+    else:    apply type rules                   -- unknown -> known upgrade only; known/known disagreement keeps the existing type + warning; user-set never changes
+collapse sections that resolved to the same account into one  -- BR-37; keep the first non-null closing balance, warn on a conflict
+return [(section, account)]
+```
+Each step writes a run-log line. Runs inside the file's database transaction.
+
+**Orchestrator and Duplicate Detection addendum** (WR-51): the per-file sequence becomes: download -> duplicate check -> extract -> **resolve sections** -> record the statement (`BankStatement`) and one `StatementAccount` per resolved section (with its closing balance pair if kept) -> convert each transaction with **its section's currency** -> classify in **one batch for the whole file** -> persist each transaction with its section id -> record the run file. The duplicate check and every failure outcome are unchanged; because resolution and recording happen after a successful extraction and inside the file's transaction, a failure at any later step leaves no account, section, or statement behind.
+
+## Vector Store Client: Recreate the Transactions Collection (added 2026-10-03 — Epic 13)
+
+New operation `recreateTransactionsCollection()`: drop the `transactions` collection and create it again empty with the same configuration `ensureCollections()` uses. Used only by the Backfill Tool, after the database wipe commits (WR-52). The `recurring_payment_names` collection is never touched. Returns success or failure; the caller retries and refuses to continue on failure.
+
+## Backfill Tool Component: `run`, `finish`, `restore` (added 2026-10-03 — Epic 13, Question 2 = A)
+
+A command-line entry point in the worker's package and image, run manually through `docker compose` (never from the poll loop, never triggered by a deploy, a migration, or a normal ingestion run). Three commands.
+
+**`run`**
+```
+pre-flight (WR-53)     refuse if: any run/job queued or running; Drive unreachable; vector store unreachable
+list Drive PDFs        and the existing statements; wipe set = statements with no sections AND whose PDF is in Drive
+dry-run report         counts to be wiped (statements, transactions, manual corrections, each dependent kind),
+                       statements kept (PDF missing), PDFs that would be ingested
+backup (WR-54)         export -> upload -> download back -> verify against manifest and live counts; refuse on any mismatch
+typed confirmation     operator types e.g. "WIPE 164 STATEMENTS"; anything else aborts, nothing changed
+wipe (WR-55)           one transaction: detach ingestion_run_files.bank_statement_id; delete in BR-36 order
+vector cleanup (WR-52) recreate the transactions collection; retry; refuse to continue until it succeeds
+reingest               create an ordinary ingestion run, already claimed (holds BR-10's slot); drive it through process_run in-process
+print progress, then tell the operator to run `finish --backup <subfolder>` once the reingest is complete
+```
+If the wipe set is empty (for example after an interruption, or a second invocation), `run` says so and goes straight to the reingest step, with no new backup.
+
+**`finish --backup <subfolder>`**
+```
+read the manifest and files from the backup subfolder in Drive (verified against the manifest before use)
+re-apply manual corrections (WR-55)       multiset match on (content hash, date, amount, direction, description); direct writes; no recategorization jobs
+build the completion report (WR-56)       including per-statement section counts; save it next to the backup; print it
+```
+Idempotent: running it again skips corrections already applied.
+
+**`restore --backup <subfolder>`**: verify the manifest, require a typed confirmation, then in one transaction delete the current contents of the backed-up tables in foreign-key order and re-insert the backup's rows in dependency order; then reset the restored transactions' `embedding_status` to `pending` and recreate the `transactions` vector collection so the existing mechanism re-embeds them (WR-54). Leaves `accounts`, `account_keys`, and `balance_anchors` alone.
+
+**Where each preserved item comes from**: manual corrections are read from the backup's `transactions` file (rows with `category_source = 'manual'`) and the statement content hash from its `bank_statements` file — never from the tool's memory, so an interrupted run cannot lose them (WR-55).
+
+**Expected effort** (stated for the operator, not a rule): the reingest re-runs Gemini extraction for every PDF in the wipe set and re-runs categorization for every transaction — at the time of writing 172 statements and 6,667 transactions — so it takes as long as the original ingestion and uses proportionate API quota.
+
+## Ingestion Orchestrator and Duplicate Detection: the Two Probable-Duplicate Checks (added 2026-10-04 — Probable Duplicate Statement Detection, Epic 14)
+
+The per-file sequence, with the Account Balance additions shown in place so it reads in order (WR-61, WR-62):
+
+```
+download file                                   hash it
+exact-bytes check          [yes] skipped_duplicate (existing, first, unchanged)
+check 1  lookupRememberedFile(hash)             always on
+   probable_duplicate | confirmed_duplicate -> run file skipped_probable_duplicate (stored comparison), counted as skipped, run-log line; next file; NO extraction
+   overridden                               -> continue; exempt from check 2
+   none                                     -> continue
+extract                    [failure] failed run file (existing)
+check 2  (detection on, or backfill reingest; file not overridden)
+   try judge(extracted) against held statements        -- WR-59
+     match, and (ordinary ingestion OR sizes comparable):
+        in the file's savepoint: write comparison + rows, remembered file `probable_duplicate`,
+        run file skipped_probable_duplicate, counted as skipped, run-log line with the reason; next file
+     no match / backfill reingest with different sizes -> continue
+   except any error -> warning + run-log line; continue (fails open)
+resolve sections (Account Resolver) ... record statement, sections, transactions ... processed      (Account Balance, unchanged)
+```
+
+**Duplicate Detection Component** gains `lookupRememberedFile(db, hash)`: one indexed lookup by content hash returning the state, matched hash, and comparison id, or nothing. It is called whether or not detection is on.
+
+## Probable Duplicate Detector Component (added 2026-10-04 — Epic 14)
+
+**Pure functions** (the property-based-testing targets, NFR-PD-7; no I/O):
+```
+matchTransactions(a, b):
+   group both sides' transactions by (date, amount, direction, currency)
+   for each group present on both sides:
+        pair descriptions one-to-one, best first:
+          1. pairs equal after case-fold + whitespace collapse
+          2. then the highest similarity at or above 0.85, repeatedly, in a fixed order
+   return the matched index pairs                      -- symmetric in a and b; each index used at most once
+matchRatio(matched, countA, countB) = matched / min(countA, countB)      (0 if either is 0)
+periodsOverlap(p, q) = p.start <= q.end and q.start <= p.end
+sizesComparable(countA, countB, ratio) = min(countA, countB) >= ratio * max(countA, countB)
+isProbableDuplicate(a, b, settings):
+   a.bank_key == b.bank_key and periodsOverlap
+   account_rule: both have identifiers -> shared | conflict ; else not_applicable ; conflict => not a duplicate
+   matched = matchTransactions ; ratio = matchRatio >= settings.match_ratio
+   if min(countA, countB) < settings.min_transactions: also need account_rule == shared
+        and a shared account with equal closing_balance and equal closing_balance_date
+   return Verdict(figures, sizes_comparable, reason per WR-60)
+selectSnapshot(transactions, matched_indexes, limit=10)   -- largest by amount, ties earlier date then description; each marked
+chooseKeptCopy(a, b)   -- manual corrections, else earlier ingested, else smaller hash; independent of argument order
+```
+Properties tested: the matched count never exceeds either side's size; matching and the verdict are symmetric; the ratio is within 0 to 1; the snapshot has at most 10 rows per side, they are the largest, and each marker agrees with the pairing; `chooseKeptCopy` ignores argument order.
+
+**Database-facing steps**
+```
+judge(db, extracted, content_hash)           [WR-59]      read-only
+   skip (return none) if: no bank name, no transactions, or the hash is overridden
+   candidates = held statements with the same bank key and an overlapping period, excluding pairs the user dismissed
+   best = the candidate with the most matched transactions that isProbableDuplicate (ties: earlier ingested)
+   return DuplicateMatch(held hash and label, verdict, comparison draft built by WR-60) or none
+recordSkippedDuplicate(db, match, drive_file, content_hash)  -> comparison id    [WR-62]
+   write the comparison and its rows; insert KnownFile(probable_duplicate, matched = held hash, comparison); nothing else
+```
+
+**The pair scan** (a new poll branch, WR-63, WR-64)
+```
+isPairScanDueNow(db):   detection on, and (no completed scan, or recorded ratio/minimum differ from the settings,
+                        or a re-check was requested after the last scan started, or a statement was added after it started)
+runPairScan(db):
+   record the scan's start
+   group held statements by bank key; for each pair with overlapping periods, skipping any pair with an overridden file:
+        verdict = isProbableDuplicate ; if a probable duplicate:
+            keep_hash = chooseKeptCopy ; removal_allowed = verdict.sizes_comparable
+            no pair row exists  -> insert pair + comparison
+            pair is pending     -> refresh keep_hash and removal_allowed
+            otherwise           -> leave alone (dismissed, removed, superseded)
+   pending pairs whose statements are no longer both held -> superseded
+   record completion, the settings used, the pairs found
+   (any exception: log; the scan stays due and is retried)
+```
+
+## Statement Removal Handler Component (added 2026-10-04 — Epic 14)
+
+A new poll branch (third; WR-65). One job per call:
+```
+processNextRemoval(db):
+   job = a queued job (claim it: running) or, if none, one in embeddings_pending
+   if the job was queued:
+      re-verify (WR-66): pair pending; removal_allowed; the statement to remove exists; the statement to keep exists;
+                         pair.keep_hash is the other hash; manual corrections on the copy to remove <= job.corrections_acknowledged
+         any failure -> job failed with a reason; nothing deleted; return
+      one transaction (WR-67, WR-68):
+         result = deleteStatements([statement to remove])      -- the shared helper; also detaches its run files
+         insert KnownFile(confirmed_duplicate, matched = kept hash, comparison = pair.comparison)
+         pair.status = removed ; pair.decided_at = now
+         job = embeddings_pending, removed_transaction_ids, deleted_counts
+      commit      (a failure before this rolls back everything; the job is failed with a reason)
+   cleanup (up to 5 attempts, waits 1, 2, 4, 8 s; each counted in embedding_attempts):
+      deleteEmbeddings(transactions, removed_transaction_ids)
+         ok     -> job completed, finished_at
+         5 fail -> job embeddings_failed with a reason, finished_at   (parked: the data is gone, only orphaned vectors remain)
+```
+At startup, a job left `running` is marked `failed` ("interrupted; nothing was deleted").
+
+## Vector Store Client: Delete Embeddings (added 2026-10-04 — Epic 14)
+
+New operation `deleteEmbeddings(collection, entityIds)`: remove the points whose ids are those transaction ids. Returns true or false and never raises, like the client's other operations; an id that is not present is not an error, so a retried removal is safe. Called only by the Statement Removal Handler.
+
+## Backfill Tool Component: Duplicate Handling (added 2026-10-04 — Epic 14)
+
+**`check-duplicates`** (new, read-only): over the held statements, run the pair rule (WR-58) with the current settings but whatever the switch says, and print each flagged pair (reason, counts, the copy to keep, whether removal is offered, manual corrections on each) and each near miss with the reason it was not flagged. No Drive, no Gemini, nothing written.
+
+**`run`** adds, around the existing steps:
+```
+pre-flight   also refuse while a removal job is queued, running or embeddings_pending
+dry run      also list: pairs it will skip (and which copy it keeps); different-size pairs it will NOT skip (left for the panel)
+backup       also exports remembered files, pairs, removal jobs and scan state
+(typed confirmation, wipe, vector recreation: unchanged; the wipe now calls the shared delete helper)
+before the reingest:  pre-register each skippable pair's copy-to-skip (WR-69) and mark that pair superseded
+reingest     ordinary run through process_run; check 1 skips the pre-registered files with no Gemini call;
+             check 2 is on, but a different-size match is never skipped
+```
+**`finish`** adds: re-key captured corrections of any skipped copy to the kept copy's hash and apply them without overriding a correction the kept copy already has; request a pair scan; list the skipped duplicates, corrections carried, superseded and unmatched, and the different-size pairs left for the panel.
+
+**`restore`** adds: replace the four mutable new tables' contents with the backup's; comparisons are left in place.
+
+## Settings (added 2026-10-04 — Epic 14)
+
+`duplicate_detection_enabled`, `duplicate_match_ratio`, `duplicate_min_transactions` (WR-57), validated at startup. The API Service's Configuration Component lists and edits them through its catalog (API Service Functional Design).
+
