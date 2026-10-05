@@ -11,7 +11,7 @@
 6. [x] **Tests** — worker: 17 new (`test_openrouter_client.py`, `test_config.py`); API: 9 new and the two count assertions (`test_settings_validation.py`, `test_api_settings.py`).
 7. [x] **Verification** — worker 691 pass, API 363 pass, `ruff` clean in both; mutation check: 11 deliberate defects (provider ignored; wrong key, model or endpoint for gemini; error naming the wrong endpoint; explicit model ignored; timeout dropped; value not validated; either default flipped; catalog accepting another value), each caught.
 8. [x] **Documentation and progress** — this plan, the requirements, the summary, `aidlc-state.md`, `audit.md`.
-9. [ ] **Deploy and verify on the live stack** — rebuild worker and API, set the setting to `gemini` through the app's own settings function, restart the worker, confirm a real categorisation request goes to Gemini.
+9. [x] **Deploy and verify on the live stack** — rebuilt worker and API and recreated them (migration head unchanged, data identical); set the setting to `gemini` through the app's own `update_setting` (history row recorded), restarted the worker; a one-off container from the deployed image with the live settings showed provider `gemini`, endpoint `https://generativelanguage.googleapis.com/v1beta/openai/`, model `gemini-3.5-flash-lite`, and correct categories for four test descriptions. Also (operational, reversible): `embedding_base_url` set to empty, the documented way to disable embedding-based matching, because the embedding model is not served and 6,667 pending embeddings would otherwise make the worker retry 50 failing calls every 5 seconds with a logged traceback each.
 
 ## Completion criteria
-All steps `[x]`; suites pass; the live worker categorises through Gemini and the local option is unchanged.
+All steps `[x]` (done 2026-10-05); suites pass; the live worker categorises through Gemini and the local option is unchanged.

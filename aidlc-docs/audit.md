@@ -3560,3 +3560,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Code Generation complete; deployment next.
 
 ---
+
+## Gemini Categorization Provider — Deployed and Verified on the Live Stack
+**Timestamp**: 2026-10-05T03:26:05Z
+**User Input**: (none; continuing the approved plan)
+**AI Response**: "Pushed to PR #25 (commit 24d7b9b). Pre-flight: nothing running; 172 statements, 6,667 transactions, 2 pending pairs. Rebuilt the API and worker images and recreated both containers: healthy, migration head 0020, data identical. Switched the live setting through the app's own update_setting inside the API container: categorization_provider local to gemini (override file line and one history row); restarted the worker. PROOF from a one-off container of the deployed worker image with the live settings: provider gemini, endpoint https://generativelanguage.googleapis.com/v1beta/openai/, model gemini-3.5-flash-lite, key set (not printed), and a real batch returned Groceries, Transport, Entertainment and Utilities bill for four test descriptions. ALSO CHANGED (operational, reversible, recorded in setting history): embedding_base_url set to empty. Reason, from the code: the embedding model is not served, and the reingest will queue 6,667 transactions for embedding; with the endpoint set but unavailable, each 5-second poll cycle would retry up to 50 failing calls and log a traceback for each, which would flood the logs; with it empty the worker treats embedding as disabled, silently, which is the documented behaviour of that setting (fuzzy-text matching only, no error). The previous value is still in .env and can be restored on the Settings page when an embedding model is served again; the pending embeddings will then be filled in by the worker. The backfill's pre-flight needs only Qdrant, not the embedding endpoint, so this does not block it."
+**Context**: Deployment complete. Next: resume rollout step 5, the real backfill, per the runbook.
+
+---
