@@ -3528,3 +3528,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Rollout step 5 blocked a second time, by a prerequisite outside the assistant's control. Not performed.
 
 ---
+
+## Correction to an earlier figure
+**Timestamp**: 2026-10-05T02:18:09Z
+**User Input**: "Why do i need the missing models."
+**AI Response**: "While answering, re-queried the live database (SELECT only): manual corrections number 794, not the 810 stated in the audit entry on the pre-run finding, the PR description and the worker summary — the per-bank counts had been mis-added. 794 manual, 5,322 by similarity, 529 by the LLM, 22 unsure (6,667 in all). The PR description and the worker summary are corrected; earlier audit entries are left as written, this being the correction."
+**Context**: No behaviour affected; the figure was only quoted.
+
+---
