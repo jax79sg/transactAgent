@@ -38,3 +38,12 @@ declare: field names, required/nullable, enumerated values (against the database
 strings, since the OpenAPI schema types those as plain strings), and all eight routes with their methods. Exits 1 and
 lists every mismatch. `FE_SRC=<dir>` points it at a modified copy of `frontend/src`, which is how it was shown to fail
 on a renamed field, enum typos and wrong routes.
+
+## 3. Embedding calibration (a tool, not a test)
+
+`embedding_calibration.py` picks the two similarity thresholds for an embedding model from your own labelled transactions.
+Cosine scores sit on a different scale for every model, so run it before switching `embedding_provider` or the embedding
+model; its docstring says how to export the labelled CSV and how to run it inside the worker image. On 2026-10-05 it
+chose `0.94` / `99` for `gemini-embedding-2` (768 dimensions, with the `task: classification | query:` prefix); see
+`aidlc-docs/construction/ingestion-worker/code/gemini-embedding-provider-summary.md`.
+

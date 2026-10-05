@@ -146,6 +146,13 @@ class Settings(BaseSettings):
     # local server would otherwise have to duplicate the same key under two names.
     embedding_api_key: str = ""
     embedding_model: str = "embeddinggemma-300m"
+    # Which provider computes embeddings (embedding/client.py). `local` is the OpenAI-compatible server above;
+    # `gemini` is Google's Gemini API through its OpenAI-compatible endpoint, reusing gemini_api_key. Gemini
+    # Embedding 2 is asked for embedding_dimensions-sized, already-normalised vectors, so it fits the existing
+    # collection; its scores sit on a different scale from embeddinggemma's, so the two thresholds below were
+    # re-calibrated for it on the user's own labelled transactions (2026-10-05).
+    embedding_provider: Literal["local", "gemini"] = "local"
+    gemini_embedding_model: str = "gemini-embedding-2"
     # Cosine similarity, 0.0-1.0 scale -- NOT the same scale as similarity_threshold
     # (0-100, fuzzy-text only). WR-23.
     # Matching Precision Refinement (WR-31): raised from the original Epic 9 default

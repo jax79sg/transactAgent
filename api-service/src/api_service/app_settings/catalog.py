@@ -1,4 +1,4 @@
-"""The settings allow-list (AR-28) -- the sole source of truth for which of the 48
+"""The settings allow-list (AR-28) -- the sole source of truth for which of the 50
 in-scope settings exist and what a valid value looks like. A name not in this dict
 has no code path to a value, secret or otherwise (NFR-CAS-2).
 
@@ -162,18 +162,37 @@ _SPECS: tuple[SettingSpec, ...] = (
         "float", 0.05, min=0.0,
     ),
     SettingSpec(
+        "embedding_provider", (_WORKER,), "standard", _EMBEDDING,
+        "Where embeddings are computed. `local` uses the endpoint and model below (embedding_base_url and "
+        "embedding_model: your own embedding server; leave the endpoint empty to turn embeddings off). `gemini` uses "
+        "Google's Gemini API with the same key as statement extraction and the model in gemini_embedding_model, at a "
+        "very small per-use cost (a full set of your transactions is a few cents); each transaction's description, "
+        "direction and price range is then sent to Google. Embeddings from different models cannot be compared: after "
+        "switching, existing transactions are re-embedded in the background, and the two thresholds "
+        "(embedding_similarity_threshold and recategorization_auto_apply_threshold) should be set for the new model "
+        "(calibrated values: local 0.92 / 97, gemini 0.94 / 99). Takes effect when the ingestion-worker restarts.",
+        "enum", "local", allowed_values=("local", "gemini"),
+    ),
+    SettingSpec(
+        "gemini_embedding_model", (_WORKER,), "advanced", _EMBEDDING,
+        "Used when embedding_provider is `gemini`: the Gemini embedding model. gemini-embedding-2 returns normalised "
+        "vectors at the size set in embedding_dimensions (768 recommended); the older gemini-embedding-001 does not "
+        "normalise reduced sizes. A model's vectors are not comparable with another's, so changing this re-embeds everything.",
+        "string", "gemini-embedding-2", format="non_empty",
+    ),
+    SettingSpec(
         "embedding_base_url", (_WORKER,), "advanced", _EMBEDDING,
-        "Your local embedding model server's endpoint. Leave empty to disable embedding-based matching entirely -- falls back to fuzzy-text matching only, with no error.",
+        "Used when embedding_provider is `local`: your local embedding model server's endpoint. Leave empty to disable embedding-based matching entirely -- falls back to fuzzy-text matching only, with no error.",
         "string", "", format="url_or_empty",
     ),
     SettingSpec(
         "embedding_model", (_WORKER,), "advanced", _EMBEDDING,
-        "Model name your embedding server is actually running -- must match embedding_dimensions below.",
+        "Used when embedding_provider is `local`: the model name your embedding server is actually running -- must match embedding_dimensions below.",
         "string", "embeddinggemma-300m", format="non_empty",
     ),
     SettingSpec(
         "embedding_dimensions", (_WORKER,), "advanced", _EMBEDDING,
-        "Output vector size of your embedding model -- must match it exactly; used when creating the Qdrant collections.",
+        "Output vector size of your embedding model -- must match it exactly; used when creating the Qdrant collections. With `gemini` it is also the size requested from the model (768 recommended).",
         "int", 768, min=1,
     ),
     SettingSpec(
@@ -348,4 +367,4 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 48, f"expected 48 settings, got {len(SETTINGS_BY_NAME)}"
+assert len(SETTINGS_BY_NAME) == 50, f"expected 50 settings, got {len(SETTINGS_BY_NAME)}"

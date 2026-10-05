@@ -154,3 +154,40 @@ class TestCategorizationProviderSetting:
         monkeypatch.setenv("CATEGORIZATION_PROVIDER", "local")
 
         assert Settings().categorization_provider == "gemini"
+
+
+class TestEmbeddingProviderSettings:
+    def test_defaults(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        for name in ("EMBEDDING_PROVIDER", "GEMINI_EMBEDDING_MODEL"):
+            monkeypatch.delenv(name, raising=False)
+
+        settings = Settings()
+
+        assert settings.embedding_provider == "local"
+        assert settings.gemini_embedding_model == "gemini-embedding-2"
+
+    @pytest.mark.parametrize("value", ["local", "gemini"])
+    def test_accepts_the_two_values(self, tmp_path, monkeypatch, value):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("EMBEDDING_PROVIDER", value)
+
+        assert Settings().embedding_provider == value
+
+    @pytest.mark.parametrize("value", ["openai", "Gemini", "", "true"])
+    def test_anything_else_stops_startup(self, tmp_path, monkeypatch, value):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("EMBEDDING_PROVIDER", value)
+
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_the_settings_page_override_wins_over_the_deployed_value(self, tmp_path, monkeypatch):
+        override_file = tmp_path / "settings.env"
+        override_file.write_text("EMBEDDING_PROVIDER=gemini\nGEMINI_EMBEDDING_MODEL=gemini-embedding-3\n")
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(override_file))
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "local")
+
+        settings = Settings()
+
+        assert (settings.embedding_provider, settings.gemini_embedding_model) == ("gemini", "gemini-embedding-3")
