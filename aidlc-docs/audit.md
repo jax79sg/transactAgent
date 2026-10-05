@@ -3600,3 +3600,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Deployment of the embedding provider in progress; rebuilding and restarting the worker with the fix next.
 
 ---
+
+## Outage: OrbStack Stopped the Docker VM When the Mac Slept; Recovered
+**Timestamp**: 2026-10-05T17:34:24Z
+**User Input**: (none)
+**AI Response**: "About two hours after the worker was restarted with the detection-scan fix, the background watcher timed out without reporting and the Docker CLI stopped answering; the API (7878) and the frontend (8787) returned no response, so the user's app was DOWN. Evidence: OrbStack's VM manager log shows 'sleep' at 21:30:47 local time and, eight minutes later (21:38), 'stopping container docker' and the engine's services exiting; nothing started it again, although the Mac itself stayed up and awake enough to run commands for hours (uptime 3:30), and the caffeinate hold I had set for two hours had expired by the time it was noticed. OrbStack's configuration has power.pause_in_sleep = true; the user's setting, NOT changed. A hung 'orbctl stop' was killed (the engine was already stopped), then 'orbctl start' brought the stack back: all five containers healthy, API and frontend 200. DATA CHECK after the abrupt stop: migration head 0020; 188 statements, 7,230 transactions, all 794 manual corrections, 20 accounts, nothing missing; no recovery errors. The outage lasted from about 21:38 to 01:23 (about 3 hours 45 minutes). Before it, the embeddings had reached 1,300 of 7,230 (the 14 recurring payments done). The detection-scan fix is confirmed on real data: the daily scan, which had been running for tens of minutes, finished within about a minute of the restart. A bounded caffeinate (90 minutes) and the host keep-awake hold were re-established so the remaining embeddings can finish. Lessons recorded: the Docker CLI ignores SIGALRM, so 'perl alarm' does not bound it and a stuck docker command must be killed with SIGKILL; the same goes for orbctl. NOT DONE by the assistant and left for the user: deciding how to keep the stack running when the Mac sleeps."
+**Context**: Outage recovered; embeddings completing.
+
+---
