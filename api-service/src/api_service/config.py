@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     duplicate_detection_enabled: bool = False
     duplicate_match_ratio: float = 0.80
     duplicate_min_transactions: int = 3
+    categorization_provider: str = "local"  # display-only mirror of the worker's (2026-10-05)
     openrouter_model: str = "openrouter/free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     backup_schedule_hour: int = 2

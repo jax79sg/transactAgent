@@ -3552,3 +3552,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Assessment delivered; awaiting the user's choice of how to switch (config-only versus a provider toggle reusing GEMINI_API_KEY) and a go-ahead to resume the backfill.
 
 ---
+
+## Gemini Categorization Provider — Requirements Accepted and Code Generation Complete
+**Timestamp**: 2026-10-05T03:23:21Z
+**User Input**: "Ok go ahead."
+**AI Response**: "Taken as acceptance of the recommended design (a provider setting reusing GEMINI_API_KEY and gemini_model) and of the steps proposed with it: implement with tests, add to PR #25, deploy, then resume the real backfill (the standing authorisation for the backfill, given on 2026-10-04 and renewed by the Drive reconnection, stands). The proposed answers to the paused questions were recorded as Q2-Q6 = A (categorisation only; explicit provider setting; reuse gemini_model; a failed call leaves the transaction UNSURE; one global setting). Workflow stages kept proportionate: minimal requirements document; user stories, application design, functional design and NFR stages skipped as a one-setting change. Implemented: categorization_provider (local | gemini, default local) in the worker config; openrouter_client._provider() choosing endpoint, key and model, same request for both; the API catalog entry (48 settings), the two openrouter_* descriptions marked local-only, the display mirror; CATEGORIZATION_PROVIDER in docker-compose.yml and .env.example. Frontend unchanged. Tests: worker 691 pass (17 new), API 363 pass (9 new, two count assertions), ruff clean; 11 mutations each caught. The scratch API environment had been cleared by the earlier machine restart and was rebuilt. NEXT: commit and push to PR #25, rebuild and redeploy the worker and API, switch the live setting to gemini through the app's own update_setting, restart the worker and prove a real request goes to Gemini; then resume the backfill per the runbook."
+**Context**: Code Generation complete; deployment next.
+
+---

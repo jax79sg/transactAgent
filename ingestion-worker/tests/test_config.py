@@ -124,3 +124,33 @@ class TestDuplicateDetectionSettings:
         assert settings.duplicate_detection_enabled is True
         assert settings.duplicate_match_ratio == 0.9
 
+
+class TestCategorizationProviderSetting:
+    def test_defaults_to_local(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.delenv("CATEGORIZATION_PROVIDER", raising=False)
+
+        assert Settings().categorization_provider == "local"
+
+    @pytest.mark.parametrize("value", ["local", "gemini"])
+    def test_accepts_the_two_values(self, tmp_path, monkeypatch, value):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("CATEGORIZATION_PROVIDER", value)
+
+        assert Settings().categorization_provider == value
+
+    @pytest.mark.parametrize("value", ["openai", "Gemini", "", "true"])
+    def test_anything_else_stops_startup_rather_than_silently_using_the_wrong_provider(self, tmp_path, monkeypatch, value):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        monkeypatch.setenv("CATEGORIZATION_PROVIDER", value)
+
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_the_settings_page_override_wins_over_the_deployed_value(self, tmp_path, monkeypatch):
+        override_file = tmp_path / "settings.env"
+        override_file.write_text("CATEGORIZATION_PROVIDER=gemini\n")
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(override_file))
+        monkeypatch.setenv("CATEGORIZATION_PROVIDER", "local")
+
+        assert Settings().categorization_provider == "gemini"

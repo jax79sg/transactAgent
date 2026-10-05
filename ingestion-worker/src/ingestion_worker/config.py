@@ -1,5 +1,7 @@
 """Environment-sourced configuration (NFR-4.1)."""
 
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import (
     BaseSettings,
@@ -43,6 +45,10 @@ class Settings(BaseSettings):
     # after hitting OpenRouter's free-tier rate limits). Override alongside
     # openrouter_api_key/openrouter_model when pointing elsewhere.
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Which provider categorizes transactions (openrouter_client.py). `local` is the OpenAI-compatible endpoint above
+    # (OpenRouter or your own model server); `gemini` is Google's Gemini API through its OpenAI-compatible endpoint,
+    # reusing gemini_api_key and gemini_model (the statement-extraction ones) -- no second key to manage (2026-10-05).
+    categorization_provider: Literal["local", "gemini"] = "local"
 
     # Needed to refresh the Drive access token via the refresh token Unit 2 obtained
     # (Google's token-refresh request requires client_id + client_secret, not just the

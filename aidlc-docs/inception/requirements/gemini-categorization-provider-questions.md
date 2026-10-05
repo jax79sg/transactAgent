@@ -28,7 +28,7 @@ B) Embedding/semantic-matching only — the step used for recategorization simil
 
 C) Both categorization and embedding
 
-D) Other (please describe after [Answer]: tag below)
+D) Other (please describe after [Answer]: A  (2026-10-05, proposed by the assistant and accepted by the user: "Ok go ahead.")
 
 [Answer]:
 
@@ -41,7 +41,7 @@ B) No new setting or code — just document that pointing `openrouter_base_url` 
 
 C) A fully separate, independent set of Gemini-specific settings for the in-scope step(s) (its own model field), not reusing the extraction ones at all
 
-D) Other (please describe after [Answer]: tag below)
+D) Other (please describe after [Answer]: A  (2026-10-05, proposed by the assistant and accepted by the user: "Ok go ahead.")
 
 [Answer]:
 
@@ -52,7 +52,7 @@ A) Reuse the existing `gemini_model` setting — the same model already used for
 
 B) A new, separate setting for the categorization-specific Gemini model — text classification is a much lighter task than vision extraction and may warrant a different (e.g. cheaper/faster) model
 
-C) Other (please describe after [Answer]: tag below)
+C) Other (please describe after [Answer]: A  (2026-10-05, proposed by the assistant and accepted by the user: "Ok go ahead.")
 
 [Answer]:
 
@@ -63,7 +63,7 @@ A) Same rule as today: exhausted retries → that transaction is marked UNSURE, 
 
 B) Automatically fall back to the local oMLX endpoint (if one is configured) before giving up on that transaction
 
-C) Other (please describe after [Answer]: tag below)
+C) Other (please describe after [Answer]: A  (2026-10-05, proposed by the assistant and accepted by the user: "Ok go ahead.")
 
 [Answer]:
 
@@ -74,6 +74,6 @@ A) Yes — one global setting for the whole deployment, same as every other Sett
 
 B) No — configurable per-ingestion-run (e.g. chosen at statement-upload time)
 
-C) Other (please describe after [Answer]: tag below)
+C) Other (please describe after [Answer]: A  (2026-10-05, proposed by the assistant and accepted by the user: "Ok go ahead.")
 
 [Answer]:

@@ -1,4 +1,4 @@
-"""The settings allow-list (AR-28) -- the sole source of truth for which of the 47
+"""The settings allow-list (AR-28) -- the sole source of truth for which of the 48
 in-scope settings exist and what a valid value looks like. A name not in this dict
 has no code path to a value, secret or otherwise (NFR-CAS-2).
 
@@ -112,13 +112,22 @@ _SPECS: tuple[SettingSpec, ...] = (
         "int", 5, min=1,
     ),
     SettingSpec(
+        "categorization_provider", (_WORKER,), "standard", _MATCHING,
+        "Where transactions are categorized. `local` uses the endpoint and model below (openrouter_base_url and "
+        "openrouter_model: OpenRouter or your own local model server). `gemini` uses Google's Gemini API with the same "
+        "key and model as statement extraction (gemini_model), at a small per-use cost; each transaction's description "
+        "and SGD amount is then sent to Google (statement PDFs already are, for extraction). A call that fails after "
+        "retries leaves the transaction UNSURE under either. Takes effect when the ingestion-worker restarts.",
+        "enum", "local", allowed_values=("local", "gemini"),
+    ),
+    SettingSpec(
         "openrouter_base_url", (_WORKER,), "advanced", _MATCHING,
-        "OpenAI-compatible endpoint used for transaction categorization -- OpenRouter's hosted API by default, or your own local model server (e.g. via host.docker.internal).",
+        "Used when categorization_provider is `local`: the OpenAI-compatible endpoint used for transaction categorization -- OpenRouter's hosted API by default, or your own local model server (e.g. via host.docker.internal).",
         "string", "https://openrouter.ai/api/v1", format="url",
     ),
     SettingSpec(
         "openrouter_model", (_WORKER,), "advanced", _MATCHING,
-        "The model your categorization endpoint actually serves -- e.g. a specific local model name when openrouter_base_url points at your own server.",
+        "Used when categorization_provider is `local`: the model your categorization endpoint actually serves -- e.g. a specific local model name when openrouter_base_url points at your own server.",
         "string", "openrouter/free", format="non_empty",
     ),
     SettingSpec(
@@ -339,4 +348,4 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 47, f"expected 47 settings, got {len(SETTINGS_BY_NAME)}"
+assert len(SETTINGS_BY_NAME) == 48, f"expected 48 settings, got {len(SETTINGS_BY_NAME)}"

@@ -1,6 +1,8 @@
 """Pure unit tests for app_settings/validation.py (AR-28/AR-29) -- no DB, no file I/O."""
 
 
+import pytest
+
 from api_service.app_settings.catalog import SETTINGS_BY_NAME
 from api_service.app_settings.validation import check_cross_field, parse_and_validate
 
@@ -167,8 +169,8 @@ class TestCrossFieldValidation:
         assert check_cross_field(spec, 90.0, None) is None
 
 
-def test_catalog_has_exactly_47_settings():
-    assert len(SETTINGS_BY_NAME) == 47
+def test_catalog_has_exactly_48_settings():
+    assert len(SETTINGS_BY_NAME) == 48
 
 
 def test_every_setting_has_a_category_and_description():
@@ -183,3 +185,28 @@ def test_every_setting_has_a_parseable_default():
     for spec in SETTINGS_BY_NAME.values():
         _parsed, error = parse_and_validate(spec, str(spec.default))
         assert error is None, f"{spec.name}'s default {spec.default!r} fails its own validation: {error}"
+
+
+class TestCategorizationProviderEntry:
+    def test_is_an_enumerated_standard_worker_setting_defaulting_to_local(self):
+        spec = SETTINGS_BY_NAME["categorization_provider"]
+        assert (spec.type, spec.default, spec.allowed_values, spec.classification) == ("enum", "local", ("local", "gemini"), "standard")
+        assert [o.name if hasattr(o, "name") else o for o in spec.owning_services] == [o.name if hasattr(o, "name") else o for o in SETTINGS_BY_NAME["openrouter_model"].owning_services]
+
+    def test_the_description_says_what_gemini_means_for_cost_and_privacy(self):
+        text = SETTINGS_BY_NAME["categorization_provider"].description
+        assert "gemini_model" in text and "Google" in text and "UNSURE" in text and "restart" in text
+
+    def test_the_local_endpoint_settings_say_they_apply_only_to_local(self):
+        for name in ("openrouter_base_url", "openrouter_model"):
+            assert "categorization_provider" in SETTINGS_BY_NAME[name].description
+
+    @pytest.mark.parametrize("value", ["local", "gemini"])
+    def test_accepts_the_two_values(self, value):
+        parsed, error = parse_and_validate(SETTINGS_BY_NAME["categorization_provider"], value)
+        assert error is None and parsed == value
+
+    @pytest.mark.parametrize("value", ["openai", "Gemini", "", "true"])
+    def test_rejects_anything_else(self, value):
+        _parsed, error = parse_and_validate(SETTINGS_BY_NAME["categorization_provider"], value)
+        assert error is not None
