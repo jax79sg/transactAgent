@@ -3568,3 +3568,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Deployment complete. Next: resume rollout step 5, the real backfill, per the runbook.
 
 ---
+
+## Rollout Step 5 — Backfill Dry Run and Verified Backup Done; Waiting for the Human's Typed Confirmation
+**Timestamp**: 2026-10-05T03:30:40Z
+**User Input**: (none; continuing the authorised step 5)
+**AI Response**: "Pre-flight: nothing running; 172 statements, 6,667 transactions, 2 pending pairs; fresh full pg_dump taken (data/backups/pre-backfill-*.dump, 29 tables with data); worker stopped per the runbook. Settings in effect: categorization_provider gemini, embedding_base_url empty (embedding disabled), duplicate detection on. The backfill's typed confirmation requires an interactive terminal (a deliberate guard: it raises 'a typed confirmation is required, but this is not an interactive terminal' otherwise). Piping the phrase or faking a terminal would defeat that guard, so it was NOT done; the command was started instead in the user's Terminal panel (tab c1), where a person can type. DRY RUN as printed: 171 statements to wipe and re-ingest, 6,568 transactions in them (794 manual corrections preserved), dependents to be discarded: 862 recategorisation jobs, 1,978 proposals, 35 disagreements, 4 recurring-payment matches; 1 statement kept because its PDF is missing from Drive (GXS Bank, file 1AYRiVSQ...); 224 PDFs in the Drive folder (35 more than at the last ingestion in September, so the reingest will also ingest any never ingested); probable-duplicate skips exactly the two expected (Trust26savings.pdf [b253a5cf] keeping TrustDjun26.pdf [36c9f258], 8 of 8; JUN 2026_20260828174121571.pdf [1aa11944] keeping JUN 2026_20260728074739457.pdf [ce417348], 5 of 5); the CIMB look-alikes not skipped. BACKUP: 'Backup verified by download and checksum: Drive backup folder pre-backfill-20261005T032853Z'. All criteria set beforehand are met. The process is idle at the prompt 'To proceed, type exactly: WIPE 171 STATEMENTS'. NOTHING HAS BEEN WIPED. Awaiting the user to type that phrase in tab c1 (or Ctrl-C to abandon; the Drive backup folder would remain and the worker must then be started again)."
+**Context**: Step 5 paused at the tool's human-confirmation gate.
+
+---
