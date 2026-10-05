@@ -62,3 +62,30 @@ class TestCosineSimilarityEdgeCases:
 
     def test_empty_vectors_score_zero_not_a_crash(self):
         assert cosine_similarity([], []) == 0.0
+
+
+def _reference_cosine(a, b):
+    """The definition the function had before it moved to math.sumprod (kept here as the oracle)."""
+    if len(a) != len(b) or not a:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(y * y for y in b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+class TestCosineSimilarityMatchesTheDefinition:
+    @given(a=_vectors, b=_vectors)
+    def test_agrees_with_the_pure_python_definition(self, a, b):
+        assert math.isclose(cosine_similarity(a, b), _reference_cosine(a, b), rel_tol=1e-9, abs_tol=1e-9)
+
+    def test_agrees_at_the_real_embedding_size(self):
+        import random
+
+        rng = random.Random(7)
+        for _ in range(25):
+            a = [rng.uniform(-1, 1) for _ in range(768)]
+            b = [x + rng.uniform(-0.3, 0.3) for x in a]  # similar but not identical, like neighbouring merchants
+            assert math.isclose(cosine_similarity(a, b), _reference_cosine(a, b), rel_tol=1e-9, abs_tol=1e-9)

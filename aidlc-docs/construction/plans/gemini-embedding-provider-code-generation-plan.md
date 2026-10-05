@@ -13,7 +13,7 @@
 8. [x] **Verification** — worker 711 pass, API 373 pass, `ruff` clean in both; 13 mutations each caught (provider ignored; another key, model name, dimension or prefix; prefix not applied; wrong-size vector accepted; Gemini switched off by the empty local endpoint; timeout not applied; value not validated; either default flipped).
 9. [x] **Tool** — the calibration script kept as `integration-tests/embedding_calibration.py` with instructions.
 10. [x] **Documentation and progress** — this plan, the requirements, the summary, `aidlc-state.md`, `audit.md`.
-11. [ ] **Deploy** (after the backfill finishes, because a worker restart would fail its in-progress run): rebuild, recreate, set `embedding_provider` = gemini and both thresholds through the app's own settings function, restore `embedding_base_url`, restart the worker, confirm that a real embedding reaches Gemini and the pending transactions are embedded.
+11. [x] **Deploy** (after the backfill finished): API recreated, `embedding_provider` = gemini and both thresholds set through the app's own settings function, `embedding_base_url` restored, the old-model recurring-payment vectors dropped and re-queued, worker started. Two findings during deployment led to a fix (summary, "Found while deploying"): a slow nightly detection scan that blocked the worker, now concurrent and C-speed. Verification of the finished embedding run is in the audit log.
 
 ## Completion criteria
 All steps `[x]`; suites pass; every transaction embedded through Gemini; the local option unchanged.

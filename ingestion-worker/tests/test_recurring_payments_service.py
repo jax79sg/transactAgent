@@ -428,6 +428,62 @@ class TestRunDetectionScanEmbeddingMerge:
         assert db_session.query(DetectionSuggestion).count() == 0  # correctly stayed separate
 
 
+class TestMergePassEmbedsRepresentativesConcurrently:
+    """The detection scan embeds one representative per distinct merchant pattern. With a cloud endpoint (~0.5 s a call) doing
+    that one at a time held the whole single-threaded worker for ~20 minutes a scan, so the calls are concurrent."""
+
+    def _two_similar_groups(self, db_session):
+        category = _make_category(db_session, "Subscriptions")
+        _make_transaction(db_session, "NETFLIX.COM", "15.00", date(2026, 6, 5), category=category)
+        _make_transaction(db_session, "NETFLIX SG PTE", "15.00", date(2026, 7, 5), category=category)
+
+    def test_calls_overlap_in_time(self, db_session):
+        import threading
+
+        self._two_similar_groups(db_session)
+        barrier = threading.Barrier(2, timeout=5)  # both calls must be in flight together, or the barrier breaks
+
+        def compute(_text):
+            barrier.wait()
+            return [1.0, 0.0]
+
+        with patch("ingestion_worker.recurring_payments.service.embedding_client.compute_embedding", side_effect=compute):
+            service.run_detection_scan(db_session)  # a sequential implementation raises BrokenBarrierError here
+
+        from transactagent_db.models import DetectionSuggestion
+
+        assert db_session.query(DetectionSuggestion).count() == 1  # identical vectors merged the two groups
+
+    def test_each_vector_stays_with_its_own_pattern_whatever_order_the_calls_finish_in(self, db_session):
+        import time
+
+        category = _make_category(db_session, "Subscriptions")
+        _make_transaction(db_session, "NETFLIX.COM", "15.00", date(2026, 6, 5), category=category)
+        _make_transaction(db_session, "NETFLIX SG PTE", "15.00", date(2026, 7, 5), category=category)
+        _make_transaction(db_session, "SPOTIFY PREMIUM", "9.90", date(2026, 6, 6), category=category)
+        _make_transaction(db_session, "SPOTIFY AB", "9.90", date(2026, 7, 6), category=category)
+        vectors = {  # the two Netflix texts alike, the two Spotify texts alike, the families orthogonal
+            "NETFLIX.COM | $10 to $20 | outflow": [1.0, 0.0], "NETFLIX SG PTE | $10 to $20 | outflow": [1.0, 0.0],
+            "SPOTIFY PREMIUM | $5 to $10 | outflow": [0.0, 1.0], "SPOTIFY AB | $5 to $10 | outflow": [0.0, 1.0],
+        }
+        delays = {text: 0.15 * (3 - i) for i, text in enumerate(vectors)}  # the first-submitted call finishes LAST
+
+        def compute(text):
+            time.sleep(delays[text])
+            return vectors[text]
+
+        with patch("ingestion_worker.recurring_payments.service.embedding_client.compute_embedding", side_effect=compute):
+            service.run_detection_scan(db_session)
+
+        from transactagent_db.models import DetectionSuggestion
+
+        # Each family merged with ITSELF: two occurrences at one amount each. A vector attached to the wrong pattern would
+        # merge Netflix with Spotify, the 15.00 and 9.90 charges would fall into separate amount clusters of one occurrence, and
+        # no suggestion would be made at all.
+        suggestions = db_session.query(DetectionSuggestion).all()
+        assert sorted((float(x.suggested_amount), x.occurrence_count) for x in suggestions) == [(9.9, 2), (15.0, 2)]
+
+
 class TestNormalizeDescription:
     def test_strips_trailing_reference_number(self):
         assert service._normalize_description("NTUC FAIRPRICE #1000") == "NTUC FAIRPRICE"
