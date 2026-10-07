@@ -2363,10 +2363,10 @@ class TestModelUsage:
 
     @staticmethod
     def _row(**overrides) -> ModelUsage:
-        fields = dict(
-            purpose="categorization", provider="gemini", model="gemini-3.5-flash-lite",
-            input_tokens=1200, output_tokens=40, cost_usd=Decimal("0.00046000"),
-        )
+        fields = {
+            "purpose": "categorization", "provider": "gemini", "model": "gemini-3.5-flash-lite",
+            "input_tokens": 1200, "output_tokens": 40, "cost_usd": Decimal("0.00046000"),
+        }
         fields.update(overrides)
         return ModelUsage(**fields)
 
@@ -2397,7 +2397,7 @@ class TestModelUsage:
         assert row.cost_usd == Decimal("0.00000400")
 
     def test_a_free_call_with_zero_cost_is_valid(self, db_session):
-        db_session.add(self._row(input_tokens=0, output_tokens=0, cost_usd=Decimal("0")))
+        db_session.add(self._row(input_tokens=0, output_tokens=0, cost_usd=Decimal(0)))
         db_session.flush()  # should not raise
 
     @pytest.mark.parametrize("field", ["input_tokens", "output_tokens"])
