@@ -3632,3 +3632,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Epics 13 (Account Balance) and 14 (Probable Duplicate Statement Detection) are on main and deployed. Open for the user: the 1,093 changed automatic categories, the Mac's power settings, the SEEEDSTUDIO amount, 16 zero-transaction PDFs, the pending duplicate pairs.
 
 ---
+
+## Classifier Work Discarded
+**Timestamp**: 2026-10-07T04:56:45Z
+**User Input**: "Let's discard the classifier work for now, it's not getting us anywhere."
+**AI Response**: "Looked at every target before touching it. Tracked edits (never committed): model-training/pyproject.toml (moved mlx-tune and clearml out of the core dependencies into a lora group and added a classifier group) and model-training/src/model_training/repository.py (added find_all_confidently_categorized_transactions). Untracked: classifier_dataset.py, classifier_train.py, classifier_dataset, classifier_dataset_v2, classifier_dataset_v3, classifier_output_v1 to v4 (about 510 MB each), dataset_backups (a 631 KB baseline export of transactions from 2026-08-30) and the .venv-classifier virtual environment (1.3 GB). DONE: moved all of those to ~/.Trash/transactagent-classifier-work-2026-10-07 together with a patch of the two tracked edits (tracked-changes.patch), then restored the two tracked files to the committed (main) versions. Nothing was permanently deleted: the Trash holds 3.3 GB and the work is recoverable until it is emptied. NOT touched: deploy/helm/transactagent/values-local.yaml, because it is unrelated to the classifier (a local Helm override file from 2026-08-22); it is untracked yet its own header says it is gitignored, so a stray commit of it is possible. No tracked file or committed code referenced the classifier files. The memory note on the shelved classifier was updated."
+**Context**: Housekeeping; the working tree now has only the unrelated deploy/ file as untracked. Recorded on the docs branch of PR #26 (not merged).
+
+---
