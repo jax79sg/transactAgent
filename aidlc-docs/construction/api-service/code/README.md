@@ -40,3 +40,5 @@ api-service/src/api_service/
   categories/             # whitelist CRUD
   health.py               # /health
 ```
+
+Epic 14 (Probable Duplicate Statement Detection) is described in [probable-duplicate-summary.md](probable-duplicate-summary.md).

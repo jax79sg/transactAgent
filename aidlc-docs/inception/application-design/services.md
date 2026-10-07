@@ -29,6 +29,10 @@ Steps 3-5 are synchronous, direct writes/reads within the same request (same pre
 
 **Addendum (2026-08-18, Background Process Visibility feature — see `background-process-visibility-application-design-plan.md`)**: The new **Background Activity Component** is a sixth, independent, read-only orchestration point — same shape as Backup Status: a single-method component that only queries the Shared DB (`ingestion_runs`/`recategorization_jobs`), polled frequently by the Frontend (NFR-BPV-1) rather than on-demand like the others. No write path — all writes to those tables happen in the Ingestion Worker Service, as they already do today.
 
+**Addendum (2026-10-02, Account Balance at a Point in Time feature — Epic 13, see `account-balance-application-design-plan.md`)**: Two new independent orchestration points, the seventh and eighth: the **Account Management Component** (synchronous direct DB writes — rename, merge, correct type, set/replace anchor — the same shape as Recategorization Review's approve/reject and the Configuration Component's `updateSetting`) and the **Balance Component** (synchronous, read-only). Neither involves the Ingestion Worker Service during the request, and neither uses the Run/Job Queue: balances are **computed on request** from accounts, anchors, statements, transactions, and `fx_rate_cache`, with nothing precomputed or stored, because a replaced anchor or an account merge would invalidate any stored result. Discrepancy checks (`listDiscrepancies`) are likewise computed on request, so a corrected anchor clears its warning with no further action (US-13.6). The Balance Component's FX lookup is **cache-only** (Question 1 = A) — it reads `fx_rate_cache` rows the Ingestion Worker already wrote and never calls an external FX service, so this feature adds no new external dependency to API Service. Orchestration for a lookup: (1) resolve the requested date or month; (2) read each deposit account's anchor and net flow; (3) apply the pure `balanceFromAnchor`; (4) convert to SGD via `lookupFxRateAsOf`, marking approximate or unavailable as appropriate; (5) assemble per-account rows, the combined total, and the named exclusions.
+
+**Addendum (2026-10-03, Probable Duplicate Statement Detection feature — Epic 14, see `probable-duplicate-application-design-plan.md`)**: One new independent orchestration point, the ninth: the **Duplicate Review Component**. Its dismiss, override, and re-check actions are synchronous direct row writes (the same shape as Recategorization Review's approve/reject). **Confirming a removal** is the one action that does not finish inside the request: it writes a removal job row and returns; the Ingestion Worker executes it (below) and the Frontend polls the pair's status. That split exists because deleting a statement must also delete its embeddings, and the API Service never connects to the vector store.
+
 ## Service: Ingestion Worker Service
 
 **Responsibility**: All heavy/slow/external-integration work: Drive access, OCR, LLM-assisted extraction, categorization, FX conversion, and persisting the results. Runs asynchronously relative to any user-facing request (Question 2 = A).
@@ -110,6 +114,86 @@ poll_once():
   else: nothing to do this cycle
 ```
 
+**Addendum (2026-10-02, Account Balance at a Point in Time feature — Epic 13, see `account-balance-application-design-plan.md`)**: The per-file pipeline gains one step: after Statement Extraction succeeds, the **Account Resolver Component** resolves (or creates) the statement's account, and the processed-statement record is then written carrying the account reference and the printed closing balance. A file whose extraction fails never reaches the resolver, so no account is created from a failed extraction. Extraction itself gains three optional statement-level fields; every existing safety net is unchanged (NFR-AB-3). No new `poll_once()` branch, no new poll-loop work: account resolution runs inline within the existing per-file step. *Scope change (2026-10-03)*: a statement can hold several accounts, so that step runs once per account section, and each section's transactions are converted with the section's own currency and linked to the section.
+
+**Addendum (2026-10-03, Probable Duplicate Statement Detection feature — Epic 14, see `probable-duplicate-application-design-plan.md`)**: The per-file pipeline gains **two** checks, at two different moments, for two different reasons. The first exists so a file already judged is never read by Gemini again (NFR-PD-2); the second exists so a skipped file creates nothing (FR-PD-1). The Account Balance additions are shown in place so the whole sequence reads in order:
+
+```
+Drive Connector.downloadFile
+  -> Duplicate Detection.isAlreadyProcessed(hash)?            [exact bytes, unchanged]
+       -> [yes] mark file "skipped_duplicate", next file
+  -> Duplicate Detection.lookupRememberedFile(hash)           [NEW check 1, always on, before extraction]
+       -> probable_duplicate | confirmed_duplicate:
+            mark file "skipped_probable_duplicate" (link to its stored comparison), no Gemini call, next file
+       -> overridden: continue, exempt from check 2
+       -> none: continue
+  -> Statement Extraction.parseTransactions
+       -> [failure] mark file "failed" with reason, next file
+       -> [success]
+            if detection is on and the file was not overridden:   [NEW check 2, before anything is created]
+              Probable Duplicate Detector.findProbableDuplicateOf(extracted, hash)
+                -> [match] recordSkippedDuplicate (comparison + remembered file "probable_duplicate")
+                           mark file "skipped_probable_duplicate", next file
+            per account section: Account Resolver.resolveAccount ...        [Account Balance, unchanged]
+            classifyBatch, convert, persist each transaction, recordProcessed
+            mark file "processed"
+```
+
+A remembered probable duplicate is a **record of a past comparison and is never re-evaluated**; only the user's override changes it. That is what lets the Backfill Tool pre-register a skip by hash and have the reingest honour it whichever file Drive lists first. If two new files in one run duplicate each other, the first is persisted before the second is judged, so the second is flagged against it (A-PD-7); the per-file SAVEPOINT already makes the first visible to the second.
+
+`poll_once()` gains two branches. Final order (each branch runs only when every branch before it found nothing, the existing one-thing-per-cycle invariant, WR-8/NFR-1; no new locking):
+
+```
+poll_once():
+  1. queued IngestionRun                                  -> process it; return
+  2. queued RecategorizationJob                           -> process it; return
+  3. pending statement removal job            [NEW]       -> Statement Removal Handler.processNextRemoval(); return
+  4. Backup Manager.isBackupDueNow()                      -> runBackup(); return
+  5. Recurring Payment Manager.isDetectionScanDueNow()    -> runDetectionScan(); return
+  6. Probable Duplicate Detector.isPairScanDueNow() [NEW] -> runPairScan(); return
+  7. embedding backlog                                    -> processNextEmbeddingBatch()
+```
+
+Placement is by who is waiting. A removal (3) is a user-requested action with the user watching its status, so it follows the run and job a user can also be waiting on and precedes the housekeeping branches. The pair scan (6) is not time-sensitive, but it must come **before** the embedding backlog (7): that branch has work on every cycle while any embedding is pending, so anything placed after it could starve during the one-time historical backfill. Because branch 3 sits above backup and the scans, a removal that can never finish would starve them; the Statement Removal Handler therefore bounds its retries and parks a job that exhausts them (a Functional Design requirement).
+
+**Removal flow** (the one cross-service flow in this feature):
+
+```
+Frontend --confirm--> API: Duplicate Review.confirmRemoval
+                        writes a removal job row (carries what the user acknowledged); returns
+Worker poll_once branch 3: Statement Removal Handler.processNextRemoval
+  1. claim the job; re-verify (target exists; its manual corrections not above the acknowledged count)
+       -> [fails] job "failed" with reason; nothing deleted; user may retry
+  2. ONE database transaction: delete the statement, its statement-account rows, its transactions
+     and every dependent row (shared helper), record the transaction ids on the job; commit
+       -> [fails] rolled back; job "failed"; nothing deleted
+  3. Vector Store Client.deleteEmbeddings(transaction ids)
+       -> [fails] job "embeddings pending"; retried (bounded); only orphaned vectors remain
+  4. record the removed file's hash as "confirmed_duplicate"; mark the pair removed; job "done"
+API: the panel polls the pair's removal status (pending -> done | failed)
+```
+
+**Pair scan**: `Probable Duplicate Detector.runPairScan` applies the same rule as the ingestion check to the stored statements and writes the pairs the Review panel lists. It runs when none has run, when the settings the last scan used have changed, or when a re-check is requested (by the user in the panel, or by the Backfill Tool when it finishes, since new account identifiers can make previously unflaggable small statements flaggable). New duplicates cannot arise through ingestion once detection is on (they are skipped), so the scan finds only statements that were already held. With detection switched off, neither check 2 nor the scan runs; check 1 and the Review panel's handling of pairs already found keep working, because they honour decisions the user has already made.
+
+## Service: Backfill Tool *(new, 2026-10-02, Account Balance at a Point in Time feature — not a docker-compose "service" — see `account-balance-application-design-plan.md`)*
+
+**Responsibility**: The one-time, safety-gated wipe-and-reingest that gives every existing statement an account, an account type, and a closing balance (US-13.7). Documented here alongside the real services for consistency, but like Model Training it has no persistent process, no `poll_once()` participation, no docker-compose entry, no REST endpoints, and no UI (Question 2 = A). It ships in the Ingestion Worker Service's package and image because it needs exactly what that service has: Drive access, the extraction pipeline, and the shared database package.
+
+**Orchestration pattern**: a single manually-invoked command that runs these steps in order, stopping at the first failed gate:
+
+1. **Dry run**: report what would be affected (statements, transactions, manual corrections, dependent rows); change nothing.
+2. **Verified backup**: take and verify a backup of the affected data; report its location; refuse to continue if verification fails (NFR-AB-2).
+3. **Typed confirmation**: nothing is wiped without an explicit confirmation from the operator.
+4. **Capture** manual category corrections, keyed by statement content hash, transaction date, amount, and description.
+5. **Wipe** statements, their account sections (`statement_accounts`), transactions, and the rows that depend on them.
+6. **Reingest** every Drive PDF by creating an ordinary ingestion run record and driving it through the existing `processRun` in-process, so each statement follows the identical per-file path (including account resolution) and the run appears in the existing run history.
+7. **Re-apply** captured corrections best-effort; report each unmatched one individually.
+8. **Completion report**: unmatched corrections, failed PDFs with reasons, recurring-payment matches re-derived, dependent row kinds discarded.
+
+**Constraints handed to Functional Design** (see `components.md`'s Backfill Tool Component): the tool must not interleave with the worker's own poll loop (one run is processed at a time today), and the pre-wipe backup mechanism is open — the existing nightly backup covers only the `transactions` table as CSV in Drive, and the worker image has neither `pg_dump` nor a host-mounted output directory — so Functional Design may need to reopen Infrastructure Design, which the execution plan skipped on the condition that no new runtime path was needed.
+
+**Addendum (2026-10-03, Probable Duplicate Statement Detection feature — Epic 14)**: The Backfill Tool's step list changes in three places. **Dry run** (step 1) also lists the probable-duplicate pairs it will skip and the copy it keeps. **Between capture and reingest** (steps 4–6) it pre-registers each pair's copy-to-skip as a remembered probable duplicate by content hash, so the reingest, which is an ordinary run through `processRun`, skips those files at check 1 with no Gemini call. **Re-apply** (step 7) carries corrections captured from any file skipped as a probable duplicate during the reingest onto the kept copy before reporting any as unmatched, and the **completion report** (step 8) lists the skipped duplicates and the corrections carried. It also gains a read-only `check-duplicates` command alongside `check-extraction`. This feature is built and in place before the backfill is run (FR-PD-18); the tool refuses to start while a removal job or pair scan is pending, as it already does for runs and jobs.
+
 ## Cross-Service Coordination: The Run/Job Queue
 
 Because the two services are separately deployable (Question 1 = B) but must coordinate asynchronously (Question 2 = A), a **Run/Job record** in the shared database is the coordination mechanism — chosen over a message broker to keep the docker-compose stack simple (final tech choice — DB-polling vs. a lightweight broker like Redis — is confirmed in NFR Requirements):
@@ -120,6 +204,8 @@ Because the two services are separately deployable (Question 1 = B) but must coo
 4. On completion, Worker sets status to `completed` or `completed_with_failures`
 
 This keeps the two services decoupled: the API Service never blocks on or directly calls the Worker Service, and the Worker Service never needs to know anything about HTTP/the Frontend.
+
+*Addendum (2026-10-03, Probable Duplicate Statement Detection feature)*: a **statement removal job** is a third kind of queued row in the same mechanism (alongside ingestion runs and recategorization jobs): the API Service inserts it as requested, the Ingestion Worker claims and executes it, and the API Service reads its status from the same row. No new coordination mechanism. Likewise the user's **override** and **dismissal** decisions and a **re-check** request are plain rows the worker reads on its next cycle or next run.
 
 ## Cross-Service Coordination: Settings Override File *(added 2026-08-16, Configurable Application Settings feature)*
 
@@ -149,3 +235,7 @@ $ python -m model_training.train    # Fine-Tuning Trainer Component.train() -> e
 ```
 Frontend --REST--> API Service --reads/writes--> Shared DB <--reads/writes-- Ingestion Worker Service --calls--> Google Drive API, LLM API, FX Rate API, OCR
 ```
+
+*Addendum (2026-10-02, Account Balance at a Point in Time feature)*: no new edges. The new Account Management and Balance Components talk only to the Shared DB (the Balance Component reads `fx_rate_cache` rather than calling the FX Rate API, per Question 1 = A), and the new Account Resolver Component talks only to the Shared DB. The Backfill Tool is a command-line entry point inside the Ingestion Worker Service's image, so it adds no edge of its own: it uses the same Shared DB and Google Drive API connections that service already has.
+
+*Addendum (2026-10-03, Probable Duplicate Statement Detection feature)*: no new edges. The new Duplicate Review Component talks only to the Shared DB; the new Probable Duplicate Detector and Statement Removal Handler talk to the Shared DB, and the Removal Handler additionally to the existing Vector Store Client (the Ingestion Worker's existing edge to the Vector DB). Nothing new reaches Google Drive, the LLM, or oMLX: a skipped file is judged from the transactions Gemini already extracted, and a file recognized by its content hash is not extracted at all.

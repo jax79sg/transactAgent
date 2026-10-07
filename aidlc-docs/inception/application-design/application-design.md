@@ -14,8 +14,8 @@ This document consolidates `components.md`, `component-methods.md`, `services.md
 ## Services
 
 1. **Frontend SPA** — the only UI surface; talks to API Service only
-2. **API Service** — Auth, Transaction Management, Dashboard/Insights, Ingestion Trigger & Status, Configuration, **Recategorization Review** *(added 2026-08-02, extended 2026-08-16 for disagreement review)*, **Backup Status** *(added 2026-08-08)*, **Recurring Payments** *(added 2026-08-08, Epic 8)*
-3. **Ingestion Worker Service** — Ingestion Orchestrator, Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine *(extended 2026-08-16 — always-on batch LLM classification, disagreement detection, price-bucket + boosted embedding matching)*, Currency Conversion, **Backup Manager** *(added 2026-08-08)*, **Recurring Payment Manager** *(added 2026-08-08, Epic 8; extended 2026-08-16)*, **Vector Store Client** *(added 2026-08-11, Epic 9)*, **Embedding Manager** *(added 2026-08-11, Epic 9)*
+2. **API Service** — Auth, Transaction Management, Dashboard/Insights, Ingestion Trigger & Status, Configuration, **Recategorization Review** *(added 2026-08-02, extended 2026-08-16 for disagreement review)*, **Backup Status** *(added 2026-08-08)*, **Recurring Payments** *(added 2026-08-08, Epic 8)*; **Duplicate Review** *(added 2026-10-03, Epic 14)*
+3. **Ingestion Worker Service** — Ingestion Orchestrator, Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine *(extended 2026-08-16 — always-on batch LLM classification, disagreement detection, price-bucket + boosted embedding matching)*, Currency Conversion, **Backup Manager** *(added 2026-08-08)*, **Recurring Payment Manager** *(added 2026-08-08, Epic 8; extended 2026-08-16)*, **Vector Store Client** *(added 2026-08-11, Epic 9)*, **Embedding Manager** *(added 2026-08-11, Epic 9)*; **Probable Duplicate Detector** and **Statement Removal Handler** *(added 2026-10-03, Epic 14)*
 4. **Shared Database** — the only integration point between API Service and Worker Service (data contract, not code contract)
 5. **Vector DB** *(added 2026-08-11, Epic 9)* — a second, separate datastore, accessed only by the Ingestion Worker Service (never the API Service); not a new integration point between the two services
 6. **oMLX** *(added 2026-08-11, Epic 9)* — a new external dependency, but a user-managed, host-native one, unlike every other external API this project calls; explicitly outside `docker-compose`
@@ -33,6 +33,8 @@ Manual category correction (US-3.4) is handled entirely in the API Service, but 
 **Addendum (2026-08-11, Local Embedding-Based Semantic Similarity — Epic 9)**: Two new Worker-side components — **Vector Store Client** (all interaction with the new, separate Vector DB, mirroring Drive Connector's role for Google Drive) and **Embedding Manager** (owns *when* a transaction's own embedding gets persisted — the async/batched storage-time computation, plus the one-time historical backfill, unified into a single poll-cycle mechanism that just keeps consuming a `pending` backlog). Critically, this is separate from *query-time* embedding computation: the Categorization Engine and Recurring Payment Manager each compute a transient, non-persisted embedding of whatever they're matching *right now* and query the Vector Store Client directly — this is what actually makes FR-3/FR-4's "embedding-first" promise true at match time, and it's not a new orchestration hook since it's just an internal step of methods that already exist. Both the existing fuzzy-text matcher (WR-3/WR-20) and the amount-range gate (NFR-1) are kept exactly as-is as the fallback and safety net respectively — nothing about them changes; embedding similarity is a new candidate-finding method layered in front of them, not a replacement. See `embedding-similarity-application-design-plan.md` for the full reasoning, including why this doesn't conflict with FR-6's async-computation requirement.
 
 **Addendum (2026-08-16, Matching Precision Refinement, see `matching-precision-refinement-application-design-plan.md`)**: No new component or service, but three cross-cutting changes to how the Categorization Engine works. (1) The LLM Classifier moves from a last-resort fallback to an always-on step (FR-MPR-1): a new `classifyBatch` method fires concurrently for a whole file's transactions, called once upfront by the Ingestion Orchestrator, before the existing per-transaction loop — `categorize()` now takes the already-known classification as an input rather than computing it internally. (2) `categorize()`'s decision logic changes: agreement between similarity and LLM auto-assigns as before; only one signal being confident still auto-assigns directly (not treated as disagreement); both confident and differing is a genuine disagreement, recorded as a new **`CategorizationDisagreement`** entity (deliberately not an extension of `RecategorizationProposal` — different trigger, needs two candidate categories, not one) and surfaced on the existing Review page via the **Recategorization Review Component**, extended with pick-one-or-reject actions rather than a new API Service component. (3) Embedded text gains a price-range bucket and candidate scoring gains a small LLM-agreement boost, applied to the Categorization Engine's own matching *and* the Recurring Payment Manager's (reusing the same Epic 9 embedding infrastructure, price bucket and boost logic are the only things that change there). Each transaction's own LLM classification is now persisted (`Transaction.llm_suggested_category_id`) so the retroactive re-scan can use it as a boost signal for transactions ingested earlier.
+
+**Addendum (2026-10-03, Probable Duplicate Statement Detection — Epic 14, see `probable-duplicate-application-design-plan.md`)**: Two new Worker-side components and one API-side component. The **Probable Duplicate Detector** judges an extracted statement against the held ones (a pure matching rule plus database steps) and scans the stored statements for pairs; it is separate from the byte-checksum Duplicate Detection because it compares extracted transactions after extraction rather than bytes before. The **Statement Removal Handler** executes a confirmed removal, because deleting a statement must also delete its embeddings and the API Service never connects to the vector store: the API writes a removal job row, the worker deletes the database rows in one transaction and then the embeddings. The **Duplicate Review Component** shows the worker's findings and records the user's decisions, and never recomputes a proposal. Every remembered decision is keyed by content hash, so it stays valid across the Account Balance backfill, which recreates every statement with a new id. Detection ships switched off and is enabled after an accuracy evaluation on the live statements. `poll_once()` becomes seven branches: removal sits third (a user is waiting), the pair scan sixth (ahead of the embedding backlog, which would otherwise starve it).
 
 ## Story Traceability Validation (Step 10)
 
@@ -172,3 +174,95 @@ See `background-process-visibility-application-design-plan.md`. Traced to Epic 1
 | US-11.3 | Background Activity Component (`recent` history list), Frontend SPA (detail panel) |
 
 **Result (Background Process Visibility)**: Complete — no gaps, no new speculative components. All 3 stories map to one new, narrowly-scoped API Service component and the existing Frontend SPA convention (one component, no new component for the indicator/panel). No Database or Ingestion Worker Service changes — the two in-scope job types (ingestion runs, recategorization jobs) already write everything this feature reads. Scope deliberately excludes the other 3 job types (backup runs, detection scans, embedding batches) per FR-BPV-1 — they have no real in-progress DB status today, and adding one is out of scope for this phase.
+
+### Addendum (2026-10-02): Epic 13 — Account Balance at a Point in Time
+
+See `account-balance-application-design-plan.md`. Traced to Epic 13's stories and `account-balance-requirements.md`'s FRs. Two design questions were asked and answered: **Question 1 = A** (the Balance Component's FX as-of-date lookup is cache-only: nearest earlier cached rate, marked approximate, else unavailable; no new external dependency for API Service) and **Question 2 = A** (the Backfill Tool is a single command-line tool in the Ingestion Worker's image: no new endpoints, no UI).
+
+| Story | Component(s) |
+|---|---|
+| US-13.1 | Statement Extraction (new optional fields), Account Resolver (new), Ingestion Orchestrator (new call), Duplicate Detection (`recordProcessed` stores account reference), Account Management (`listAccounts`) |
+| US-13.2 | Account Management (new: rename, merge, correct type), Frontend SPA (account management UI) |
+| US-13.3 | Account Management (new: `setAnchor`), Frontend SPA (anchor entry, "anchor required" prompt) |
+| US-13.4 | Balance Component (new: `balanceFromAnchor`, `getBalances`, `lookupFxRateAsOf`), Frontend SPA (Dashboard lookup) |
+| US-13.5 | Balance Component (`getBalanceSeries`), Frontend SPA (Dashboard chart) |
+| US-13.6 | Statement Extraction + Duplicate Detection (closing-balance capture), Balance Component (`listDiscrepancies`), Frontend SPA (warnings) |
+| US-13.7 | Backfill Tool Component (new, command-line only) |
+
+| Requirement | Component(s) |
+|---|---|
+| FR-AB-1, FR-AB-2 | Shared DB (`accounts`), Account Resolver, Statement Extraction (account identifier) |
+| FR-AB-3 | Account Management |
+| FR-AB-4 | Statement Extraction (account type), Account Resolver, Balance Component (deposit accounts only) |
+| FR-AB-5 | Statement Extraction (closing balance), Duplicate Detection `recordProcessed`, Shared DB (`bank_statements` columns) |
+| FR-AB-6 | Account Management (`setAnchor`), Shared DB (anchors) |
+| FR-AB-7 | Balance Component (`balanceFromAnchor`, the pure function) |
+| FR-AB-8 | Balance Component (`listDiscrepancies`) |
+| FR-AB-9 | Balance Component (`lookupFxRateAsOf`, cache-only per Question 1 = A) |
+| FR-AB-10, FR-AB-11, FR-AB-14 | Balance Component (`getBalances`: month resolution, named exclusions, ingested-through date), Frontend SPA |
+| FR-AB-12 | Balance Component (`getBalanceSeries`), Frontend SPA |
+| FR-AB-13 | Frontend SPA (Dashboard) |
+| FR-AB-15, FR-AB-16, FR-AB-17 | Backfill Tool Component |
+| NFR-AB-1, NFR-AB-4 | Balance Component (exact decimals; pure function separated from I/O wrapper) |
+| NFR-AB-2 | Backfill Tool Component (dry run, verified backup, typed confirmation) |
+| NFR-AB-3 | Statement Extraction (new fields optional, existing safety nets untouched) |
+| NFR-AB-5, NFR-AB-6, NFR-AB-7, NFR-AB-8 | Balance/Account Management (compute on request, existing auth on new routers), Frontend SPA (theme/responsive), Categorization Engine (unchanged) |
+
+**Result (Epic 13)**: Complete — no gaps; every FR-AB, US-13.x, and NFR-AB lands on a named component. Three new components in two existing services (Account Resolver; Account Management and Balance) plus one new command-line entry point (Backfill Tool), no new container, no new external integration, and no new edge between `api-service` and `ingestion-worker` (both depend only on the Shared DB). Architecturally new elements: balances computed on request and never stored (so replaced anchors and merges cannot leave stale results), and the second command-line entry point in the project after Model Training.
+
+**Consequences to carry forward** (not decided here):
+1. **FR-AB-9 is refined by Question 1 = A.** The requirement said balances convert at "the FX rate for the requested date"; the cache-only design converts at the nearest earlier cached rate, marks the figure approximate when that rate's date differs, and shows the account as unavailable when none exists. `account-balance-requirements.md` carries a dated note on FR-AB-9. Practical effect: a foreign-currency savings account may show approximate or unavailable balances for dates far from any cached rate, since `fx_rate_cache` is populated only by the Ingestion Worker and only for dates of foreign-currency transactions that needed converting. SGD accounts are unaffected.
+2. **Backfill backup mechanism (NFR-AB-2)** — the existing nightly backup covers only the `transactions` table as CSV in Drive; the worker image has no `pg_dump` and no host-mounted output directory. Functional Design must choose a mechanism and may reopen Infrastructure Design (the execution plan's stated trigger).
+3. **Backfill vs. the worker's poll loop** — the tool must not interleave with a normal ingestion run; Functional Design decides the guard.
+4. **Open items already listed in the requirements** still go to Functional Design: chart point granularity, cross-check tolerance, the account-identifier storage shape, and the rule that user-corrected account names/types survive later extractions.
+5. **Scope change (2026-10-03): a statement may hold several accounts** (Ingestion Worker Functional Design clarification Q1 = B). Every component above that said "the statement's account" now means "each account section's account": Statement Extraction returns sections, the Account Resolver runs per section (collapsing duplicates), recording a statement writes one statement-account row per section (carrying the closing balance, which moves off the statement) and each transaction links to its section, the Balance Component reaches an account's transactions and closing balances through that link, Account Management refuses to merge two accounts that appear together in a statement, and the backfill's wipe set gains `statement_accounts`. No new component and no new edge between services; the dated notes under each component in `components.md`, `component-methods.md`, and `services.md` carry the detail, and the diagram in `component-dependency.md` lists the new `statement-accounts` entity. The traceability above still holds: US-13.1 gains the multi-account criteria, US-13.2 the merge refusal, US-13.6 the per-account closing balance, US-13.7 the section-count report.
+
+### Addendum (2026-10-03): Epic 14 — Probable Duplicate Statement Detection
+
+See `probable-duplicate-application-design-plan.md`. Traced to Epic 14's stories and `probable-duplicate-statements-requirements.md`'s FRs. No design question was asked: two rounds of requirements questions (8) and eight documented assumptions had resolved the product decisions, and the 14 technical decisions followed from the project's conventions. Approved together with the plan: detection ships switched off, and remembered records are keyed by content hash.
+
+| Story | Component(s) |
+|---|---|
+| US-14.1 | Probable Duplicate Detector (pure rule: `isProbableDuplicate`, `matchTransactions`, `matchRatio`, `periodsOverlap`; `findProbableDuplicateOf`, `recordSkippedDuplicate`), Ingestion Orchestrator (check 2, before account resolution), Account Resolver (normalized bank key reused), Configuration (on/off, ratio, minimum) |
+| US-14.2 | Probable Duplicate Detector (`selectSnapshot`), Shared DB (comparisons), Duplicate Review (`getComparison`), Ingestion Trigger & Status (comparison link on the run file), Frontend SPA (comparison view) |
+| US-14.3 | Duplicate Review (`overrideSkippedFile`), Shared DB (remembered files, state `overridden`), Duplicate Detection (`lookupRememberedFile`), Frontend SPA (override action) |
+| US-14.4 | Duplicate Detection (`lookupRememberedFile`, before extraction, always on), Statement Removal Handler (records the removed hash), Ingestion Orchestrator (check 1) |
+| US-14.5 | Probable Duplicate Detector (`scanHeldStatements`, `isPairScanDueNow`, `runPairScan`, `chooseKeptCopy`), Duplicate Review (`listProbablePairs`, `getPendingPairCount`, `dismissPair`, `requestRecheck`), Shared DB (pairs, scan state), Frontend SPA (panel, badge) |
+| US-14.6 | Duplicate Review (`confirmRemoval`, removal preview, status), Statement Removal Handler (`processNextRemoval`, `deleteStatementCascade`), Vector Store Client (`deleteEmbeddings`), Shared DB (removal jobs), Frontend SPA (confirmation, status) |
+| US-14.7 | Backfill Tool (`checkDuplicates`, dry-run listing, `preRegisterSkips`, corrections carried, report), Probable Duplicate Detector (compute-only scan), Duplicate Detection (the pre-registered skip is honoured at check 1) |
+
+| Requirement | Component(s) |
+|---|---|
+| FR-PD-1 | Ingestion Orchestrator (check 2 placed before the Account Resolver), Probable Duplicate Detector (`recordSkippedDuplicate` writes nothing else) |
+| FR-PD-2 | Shared DB (new run-file outcome, comparison link), Ingestion Trigger & Status (DTO), Frontend SPA (label) |
+| FR-PD-3, FR-PD-4 | Probable Duplicate Detector (`isProbableDuplicate`, small-statement gate), Configuration (ratio, minimum) |
+| FR-PD-5, FR-PD-6 | Probable Duplicate Detector (`selectSnapshot`), Shared DB (comparisons), Duplicate Review (`getComparison`), Frontend SPA (comparison view) |
+| FR-PD-7 | Duplicate Review (`overrideSkippedFile`), Duplicate Detection / Orchestrator (overridden hash proceeds and is exempt) |
+| FR-PD-8, FR-PD-13 | Shared DB (remembered files), Duplicate Detection (`lookupRememberedFile`), Statement Removal Handler (records `confirmed_duplicate`) |
+| FR-PD-9 | Probable Duplicate Detector (`scanHeldStatements`), Duplicate Review, Frontend SPA (panel, badge) |
+| FR-PD-10 | Duplicate Review (`confirmRemoval`, `dismissPair`: nothing removed without explicit confirmation) |
+| FR-PD-11 | Probable Duplicate Detector (`chooseKeptCopy`, computed once by the worker and stored on the pair), Duplicate Review (displays it) |
+| FR-PD-12, FR-PD-14 | Statement Removal Handler, Vector Store Client (`deleteEmbeddings`), Shared DB (removal jobs), Duplicate Review (preview and status) |
+| FR-PD-15, FR-PD-16, FR-PD-17 | Backfill Tool (`checkDuplicates`, `preRegisterSkips`, corrections carried across, report) |
+| FR-PD-18 | Workflow ordering (this feature is built and enabled before the Account Balance backfill is run); Backfill Tool refuses to start while removal or scan work is pending |
+| NFR-PD-1 | Backfill Tool (`check-duplicates` is the read-only evaluation), Configuration (detection ships off) |
+| NFR-PD-2 | Duplicate Detection (check 1), Shared DB (remembered files) |
+| NFR-PD-3 | Statement Removal Handler (re-verification, one transaction, embeddings after the commit), Duplicate Review (confirmation states counts and corrections lost) |
+| NFR-PD-4 | Statement Removal Handler and Duplicate Review (no API-to-vector-store path; job row coordination) |
+| NFR-PD-5 | Backfill Tool (report), Duplicate Review (override of a skipped file) |
+| NFR-PD-6 | Duplicate Detection (exact-bytes check untouched and first), Ingestion Orchestrator (existing branches and review flows untouched) |
+| NFR-PD-7 | Probable Duplicate Detector (the five pure functions are the property-based-testing targets) |
+| NFR-PD-8 | Duplicate Review (existing auth on the new router), Frontend SPA (theme, responsive) |
+
+**Result (Epic 14)**: Complete — no gaps; every FR-PD, US-14.x, and NFR-PD lands on a named component. Three new components (Probable Duplicate Detector and Statement Removal Handler in the Ingestion Worker, Duplicate Review in the API Service), five new entities and one enum value, one new vector-store operation, two new `poll_once()` branches, and extensions to the Backfill Tool, the Frontend SPA, Configuration, Duplicate Detection, the Orchestrator, and Ingestion Trigger & Status. No new container, no new external integration, and no new edge between `api-service` and `ingestion-worker` (both depend only on the Shared DB).
+
+**Consequences to carry forward** (not decided here; each goes to the named Functional Design or later stage):
+1. **Matching specifics (IW FD)**: the description-wording tolerance, the period-overlap definition, and the threshold values, calibrated with `check-duplicates` against the live statements (NFR-PD-1); how a **multi-account statement** is compared (all its transactions together, and what "same account" means when each side has several identifiers).
+2. **Entity shapes (DB FD)**: columns, constraints, and state transitions for the five entities (uniqueness by content hash for remembered files, by unordered hash pair for pairs); what a removal job keeps (the removed transaction ids until their embeddings are confirmed gone); whether scan state is its own row or folded into one; the migration (0020); the run-file outcome enum value and comparison link; backup and restore coverage of the new tables.
+3. **Statement label (DB/IW FD)**: `bank_statements` has no file name; the label (file name, bank, period, A-PD-3) is resolved from the run file that processed the statement (`ingestion_run_files.bank_statement_id`) and **stored inside the comparison**, so it survives the statement being changed or removed.
+4. **Removal safety (IW FD)**: the re-verification at execution (target present; manual corrections not above the acknowledged count); bounded retries and parking for a removal that cannot finish, because branch 3 outranks backup and the scans; what the API shows for "embeddings pending".
+5. **One list of what depends on a transaction (DB/IW/API FD)**: the removal helper, the Backfill Tool's wipe, and the API's removal preview must agree. The wipe order moves into one shared helper, and a guard test derived from the foreign-key metadata fails if a new table ever depends on `transactions` without being listed.
+6. **Backfill interaction (IW FD)**: the tool refuses while a removal job or scan is pending; `run` clears the pending pairs the reingest resolves, honours dismissed pairs, pre-registers the rest, carries corrections for every probable-duplicate skip made during the reingest (pre-registered or inline), and requests a re-scan when it finishes; `restore` reverts the new tables.
+7. **Scan-due conditions and settings (IW FD / API FD)**: exactly which setting changes make a scan due; the three setting names, bounds, and defaults (off, 0.80, 3) and the catalog's asserted entry count (44 today).
+8. **Frontend (FE FD)**: separate versus combined nav badge, the comparison view's route or modal, and the empty and failed states.
+9. **Accuracy gate (Build and Test, first)**: before detection is switched on or the Account Balance backfill is run, `check-duplicates` must show both June pairs flagged, the CIMB look-alikes not, and nothing else unreviewed (NFR-PD-1).

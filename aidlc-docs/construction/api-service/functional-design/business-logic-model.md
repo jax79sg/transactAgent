@@ -83,3 +83,35 @@ Technology-agnostic business logic for each of Unit 2's 5 components. Builds on 
   2. **Recent**: `SELECT` the 10 most-recently-completed rows across both tables (`completed_at IS NOT NULL ORDER BY completed_at DESC LIMIT 10`, AR-36) — a `UNION`-style combine-then-sort-then-limit, not two separate top-10s merged (so, e.g., 10 ingestion runs completed after the last recategorization job correctly crowds it out, rather than always reserving slots per type).
 - **No write path**: same "deliberately dumb, read-only" shape as Backup Status and Recurring Payments' status summary — this component only ever reads what the Ingestion Worker's Ingestion Orchestrator / Categorization Engine already wrote via their existing `status`/`completed_at` transitions. No new writes anywhere in this feature.
 - **No caching**: each call re-queries live, matching every other polling-backed endpoint in this codebase (`PendingReviewBadge`, `RecurringPaymentsBadge`) — NFR-BPV-1's fast cadence is achieved by polling frequently, not by adding a cache layer for a query this cheap (two small indexed lookups).
+
+## Duplicate Review Component: Pairs, Comparisons, and Decisions (added 2026-10-04 — Probable Duplicate Statement Detection, Epic 14)
+
+"Dumb" in the same sense as the recategorization review: it reads what the worker wrote and records the user's decisions; it never decides whether two statements match and never calls Unit 3. The router sits behind the login requirement (AR-1, AR-38).
+
+- **List pairs** (AR-39, AR-41): the three groups, paginated; for each pair, labels from the stored comparison mapped to keep and remove by the stored `keep_hash`; the live manual-correction count on each copy; the preview (pending and removal offered only); the latest removal job as `removal`; `stale` when a statement is gone.
+- **Pending count** (AR-40): one `COUNT(*)` of pending pairs with no active job.
+- **Get comparison** (AR-45): the stored comparison with its rows by side, the derived state, `thisFileSide`, `canOverride`, and for a pair `pairId` and `removalOffered`.
+- **Confirm removal** (AR-42):
+```
+pair = find(pairId)                                  -> 404
+pair.status == pending                               -> 409 pair_not_pending
+pair.removal_allowed                                 -> 409 removal_not_offered
+no active job for the pair                           -> 409 removal_already_requested
+both statements (by hash) exist                      -> 409 statement_missing
+request.removeStatementHash == the non-keep hash     -> 409 confirmation_out_of_date
+live manual corrections on that copy == request.acknowledgedCorrectionsLost   -> 409 confirmation_out_of_date
+insert StatementRemovalJob(queued, pair, hash, corrections_acknowledged)       (unique-index conflict -> 409 removal_already_requested)
+return the pair view (removal = the new job)
+```
+- **Dismiss** (AR-43): conditional update of a `pending` pair with no active job to `dismissed` with `decided_at`; otherwise the typed error.
+- **Override** (AR-44): find the remembered file for the comparison in `probable_duplicate` or `confirmed_duplicate`; set `overridden` and `decided_at`; idempotent; a note for a removed copy.
+- **Scan status and re-check** (AR-46): read the single scan-state row and the effective detection setting; the re-check sets its re-check time.
+
+## Ingestion Trigger & Status Component: Run-File Detail Addendum (added 2026-10-04 — Epic 14)
+
+Listing a run's files also returns, for a file whose outcome is `skipped_probable_duplicate`, its `duplicateComparisonId` and the structured `matchedStatement` label (AR-47). One extra join from the run file to its comparison (and to the remembered file for the matched side); a file with another outcome returns nulls. No change to run enqueueing, status, history, cancellation, or the log tail.
+
+## Configuration Component: Detection Settings Addendum (added 2026-10-04 — Epic 14)
+
+Three catalog entries and a lowercase-boolean display fix (AR-48). Everything else about Configurable Application Settings is unchanged: validation by the existing enumerated, decimal, and whole-number rules; the override-file write; the restart guidance (owning service: the Ingestion Worker); and the history row. The effective value of `duplicate_detection_enabled` is also read by the scan-status endpoint (AR-46).
+

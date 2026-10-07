@@ -20,9 +20,11 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     """
     if len(a) != len(b) or not a:
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = math.sqrt(sum(x * x for x in a))
-    norm_b = math.sqrt(sum(y * y for y in b))
+    # math.sumprod runs in C: the group-merge pass compares every pair of merchant patterns (millions of pairs
+    # for a few thousand patterns), which with three Python-level generator sums per pair took tens of minutes.
+    dot = math.sumprod(a, b)
+    norm_a = math.sqrt(math.sumprod(a, a))
+    norm_b = math.sqrt(math.sumprod(b, b))
     if norm_a == 0.0 or norm_b == 0.0:
         return 0.0
     return dot / (norm_a * norm_b)

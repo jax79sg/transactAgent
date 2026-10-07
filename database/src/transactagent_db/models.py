@@ -3,8 +3,14 @@
 Implements the entities in aidlc-docs/construction/database/functional-design/domain-entities.md
 and the constraints in aidlc-docs/construction/database/functional-design/business-rules.md.
 Business rules that cannot be expressed as a standing SQL constraint (BR-5 exactly-one-reserved-row,
-BR-6 inactive-category-not-selectable, BR-8's cross-table date comparison, BR-11, BR-12) are
-enforced at the application layer (Units 2/3) and noted inline below.
+BR-6 inactive-category-not-selectable, BR-8's cross-table date comparison, BR-11, BR-12, and, from
+Epic 13, BR-31 account currency fixed, BR-32's anchor-date-not-in-the-future rule, BR-34 user-set
+account type never overwritten, BR-35's merge all-or-nothing/anchor-choice, BR-36 backfill data
+handling; and, from Epic 14, BR-41 remembered-file changes are one-way, BR-44 decided pairs are never
+reopened, the single-transaction ordering half of BR-46, BR-47 removal jobs are never deleted, BR-52 a
+probable-duplicate skip is not a failure) are enforced at the application layer (Units 2/3) and noted
+inline below. BR-50 (Epic 14 tables refer to statements by content hash, never by row id) and BR-51
+(the one list of what depends on a statement) are enforced by tests over this module's metadata.
 """
 
 import enum
@@ -19,14 +25,17 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 MONEY = Numeric(18, 2)  # BR-13: fixed-point decimal, 2 decimal places
@@ -72,6 +81,7 @@ class IngestionRunStatus(str, enum.Enum):
 class IngestionRunFileOutcome(str, enum.Enum):
     PROCESSED = "processed"
     SKIPPED_DUPLICATE = "skipped_duplicate"
+    SKIPPED_PROBABLE_DUPLICATE = "skipped_probable_duplicate"  # Epic 14, BR-49
     FAILED = "failed"
 
 
@@ -165,6 +175,63 @@ class SettingOwningService(str, enum.Enum):
     API_SERVICE = "api-service"
 
 
+class AccountType(str, enum.Enum):
+    """Epic 13 (Account Balance at a Point in Time). Only DEPOSIT accounts (savings or
+    current, A-1) take part in balances (FR-AB-4). UNKNOWN is treated as non-deposit
+    (A-3) until the user corrects it, which sets Account.type_user_set (BR-34)."""
+
+    DEPOSIT = "deposit"
+    CREDIT_CARD = "credit_card"
+    UNKNOWN = "unknown"
+
+
+class KnownFileState(str, enum.Enum):
+    """Epic 14 (Probable Duplicate Statement Detection), BR-41. A file's remembered
+    decision. Inserted as PROBABLE_DUPLICATE (skipped at ingestion, or pre-registered by
+    the Backfill Tool) or CONFIRMED_DUPLICATE (a removal completed); the only change after
+    that is to OVERRIDDEN, which is final."""
+
+    PROBABLE_DUPLICATE = "probable_duplicate"
+    OVERRIDDEN = "overridden"
+    CONFIRMED_DUPLICATE = "confirmed_duplicate"
+
+
+class DuplicatePairStatus(str, enum.Enum):
+    """Epic 14, BR-44. DISMISSED, REMOVED and SUPERSEDED are final."""
+
+    PENDING = "pending"
+    DISMISSED = "dismissed"
+    REMOVED = "removed"
+    SUPERSEDED = "superseded"
+
+
+class StatementRemovalJobStatus(str, enum.Enum):
+    """Epic 14, BR-45/BR-46. The two EMBEDDINGS_* states exist because a removal deletes
+    and commits the database rows first and the vector-store embeddings after."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    EMBEDDINGS_PENDING = "embeddings_pending"
+    EMBEDDINGS_FAILED = "embeddings_failed"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ComparisonSide(str, enum.Enum):
+    """Epic 14. EARLIER is the earlier-ingested statement (the original); LATER is the
+    skipped file, or the later-ingested copy of a held pair."""
+
+    EARLIER = "earlier"
+    LATER = "later"
+
+
+class ComparisonRowMarker(str, enum.Enum):
+    """Epic 14, FR-PD-5."""
+
+    ALSO_ON_OTHER = "also_on_other"
+    ONLY_ON_THIS_ONE = "only_on_this_one"
+
+
 class User(Base):
     """Single-user login credential (FR-9.1/9.2, US-5.1)."""
 
@@ -232,8 +299,14 @@ class BankStatement(Base):
     pdf_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # sha256 hex digest
     bank_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="bank_statement")
+    # Epic 13 (Scope Change: several accounts per PDF): a statement holds one or more
+    # accounts, so the account link and each account's closing balance live on
+    # StatementAccount, not here. passive_deletes="all": the database's RESTRICT foreign
+    # keys, not the ORM, decide whether a statement can be deleted (BR-36's wipe order).
+    statement_accounts: Mapped[list["StatementAccount"]] = relationship(
+        back_populates="bank_statement", passive_deletes="all"
+    )
 
 
 class Transaction(Base):
@@ -261,6 +334,17 @@ class Transaction(Base):
         Index("ix_transactions_category_id", "category_id"),
         Index("ix_transactions_bank_name", "bank_name"),
         Index("ix_transactions_bank_statement_id", "bank_statement_id"),
+        # BR-38 (Epic 13): a transaction's statement section must belong to the transaction's
+        # OWN statement, or it would silently be attributed to the wrong account. Composite
+        # foreign key; inert while statement_account_id is null (the pre-backfill state),
+        # since a null column in a composite FK skips the check.
+        ForeignKeyConstraint(
+            ["bank_statement_id", "statement_account_id"],
+            ["statement_accounts.bank_statement_id", "statement_accounts.id"],
+            name="fk_transactions_statement_account_same_statement",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_transactions_statement_account_id", "statement_account_id"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -292,6 +376,13 @@ class Transaction(Base):
     llm_suggested_category_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("categories.id"), nullable=True
     )
+    # Epic 13 (Scope Change): which account section of its statement this transaction was
+    # printed under, and so which account it belongs to (a transaction has no direct
+    # account reference). Nullable only because transactions ingested before the one-time
+    # backfill (US-13.7) have no section until it re-ingests them; every transaction
+    # ingested afterward always gets one (Units 3's ingestion, application layer). The
+    # foreign key is the composite one in __table_args__ (BR-38), so no ForeignKey here.
+    statement_account_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
     bank_statement: Mapped["BankStatement"] = relationship(back_populates="transactions")
     category: Mapped["Category"] = relationship(back_populates="transactions", foreign_keys=[category_id])
@@ -370,6 +461,18 @@ class IngestionRunFile(Base):
             name="ck_ingestion_run_files_failed_requires_reason",
         ),
         Index("ix_ingestion_run_files_ingestion_run_id", "ingestion_run_id"),
+        # BR-49 (Epic 14): a file skipped as a probable duplicate carries its stored
+        # comparison, and only such a file does; it created no statement, so it has no
+        # bank_statement_id (unlike an exact-duplicate skip, BR-12).
+        CheckConstraint(
+            "(outcome = 'skipped_probable_duplicate') = (duplicate_comparison_id IS NOT NULL)",
+            name="ck_ingestion_run_files_probable_duplicate_iff_comparison",
+        ),
+        CheckConstraint(
+            "outcome != 'skipped_probable_duplicate' OR bank_statement_id IS NULL",
+            name="ck_ingestion_run_files_probable_duplicate_has_no_statement",
+        ),
+        Index("ix_ingestion_run_files_duplicate_comparison_id", "duplicate_comparison_id"),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -381,6 +484,9 @@ class IngestionRunFile(Base):
     raw_extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     bank_statement_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("bank_statements.id"), nullable=True)
     transactions_extracted_count: Mapped[int | None] = mapped_column(nullable=True)
+    duplicate_comparison_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("duplicate_comparisons.id", ondelete="RESTRICT"), nullable=True
+    )  # Epic 14, BR-49
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     ingestion_run: Mapped["IngestionRun"] = relationship(back_populates="files")
@@ -768,3 +874,430 @@ class SettingChange(Base):
     previous_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     new_value: Mapped[str] = mapped_column(Text, nullable=False)
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Account(Base):
+    """Epic 13 (Account Balance at a Point in Time, added 2026-10-02) -- a real-world
+    account the user holds, created automatically from statement headers (FR-AB-1/2)
+    and tidied by the user (rename, merge, correct type -- FR-AB-3). Only DEPOSIT
+    accounts take part in balances (FR-AB-4).
+
+    The names an account is *recognized by* on statements live in AccountKey, not here,
+    so a merge (BR-35) can carry forward to future statements.
+
+    Enforced at the application layer, not here: BR-31 (currency never changes after
+    creation, and every key of an account carries it), BR-34 (once `type_user_set` is
+    true no extraction may change `account_type`), BR-35 (a merge is all-or-nothing).
+    The three relationships below (keys, anchor, statement sections) use passive_deletes="all" so the ORM never silently
+    nulls or cascades children when an Account is deleted -- the database's
+    ON DELETE RESTRICT foreign keys are the authority (BR-35's schema half).
+    """
+
+    __tablename__ = "accounts"
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    name: Mapped[str] = mapped_column(String(255), nullable=False)  # user-editable display name
+    bank_name: Mapped[str] = mapped_column(String(255), nullable=False)  # display form, as first seen
+    account_type: Mapped[AccountType] = mapped_column(
+        _enum_type(AccountType),
+        nullable=False,
+        default=AccountType.UNKNOWN,
+        server_default=AccountType.UNKNOWN.value,
+    )
+    type_user_set: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)  # BR-34
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)  # BR-31
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    keys: Mapped[list["AccountKey"]] = relationship(back_populates="account", passive_deletes="all")
+    anchor: Mapped["BalanceAnchor | None"] = relationship(
+        back_populates="account", uselist=False, passive_deletes="all"
+    )
+    statement_accounts: Mapped[list["StatementAccount"]] = relationship(
+        back_populates="account", passive_deletes="all"
+    )
+
+
+class AccountKey(Base):
+    """Epic 13 -- one name an Account has been recognized by on statements: (normalized
+    bank name, account identifier, currency). An account starts with one key and gains
+    more only when a merge re-points an absorbed account's keys to the survivor (BR-35),
+    which is what makes a merge permanent for future statements.
+
+    BR-30: at most one key per (bank_key, account_identifier, currency), where a MISSING
+    identifier counts as its own distinct value -- hence NULLS NOT DISTINCT (PostgreSQL
+    15+; this project runs 16). An ordinary unique constraint would let two
+    identifier-less keys for the same bank and currency coexist, since NULL != NULL.
+    Declared on the model (not as migration-only raw SQL, unlike BR-10/BR-14/BR-21) so
+    the test suite, which builds its schema from these models, exercises the real
+    constraint.
+    """
+
+    __tablename__ = "account_keys"
+    __table_args__ = (
+        UniqueConstraint(
+            "bank_key",
+            "account_identifier",
+            "currency",
+            name="uq_account_keys_bank_identifier_currency",
+            postgresql_nulls_not_distinct=True,
+        ),  # BR-30
+        Index("ix_account_keys_account_id", "account_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False)
+    bank_key: Mapped[str] = mapped_column(String(255), nullable=False)  # normalized by the application
+    # As printed on the statement, normalized only for spacing/hyphens (Question 1 = B);
+    # null when the statement prints none (A-2).
+    account_identifier: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    account: Mapped["Account"] = relationship(back_populates="keys")
+
+
+class BalanceAnchor(Base):
+    """Epic 13 (FR-AB-6) -- the user's manual starting point for every balance
+    computation on one account: a known real balance as of a specific date, in the
+    account's own currency (A-7).
+
+    BR-32: at most one per account (unique account_id), replaced in place -- no history
+    (A-6). `as_of_date` must not be in the future when set: enforced at the application
+    layer, since "not in the future" depends on today's date, which a CHECK constraint
+    cannot evaluate reliably. An anchor on an account that is not a deposit account is
+    kept but ignored. `balance` may be negative (an overdrawn account).
+    """
+
+    __tablename__ = "balance_anchors"
+    __table_args__ = (UniqueConstraint("account_id", name="uq_balance_anchors_account_id"),)  # BR-32
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False)
+    balance: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    as_of_date: Mapped[date] = mapped_column(Date, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    account: Mapped["Account"] = relationship(back_populates="anchor")
+
+
+class StatementAccount(Base):
+    """Epic 13 (Scope Change, 2026-10-03: several accounts per PDF) -- one row per account
+    a statement holds: "this statement contained this account, and printed this closing
+    balance for it". A single-account PDF has exactly one. It carries the account's
+    closing balance (FR-AB-5), is what a Transaction links to (BR-38), and is how an
+    account is tied to the statements it appears in.
+
+    BR-33: `closing_balance` and `closing_balance_date` are present together or absent
+    together -- a balance with no date (or a date with no balance) can't be cross-checked
+    (FR-AB-8). `closing_balance` may be negative (an overdrawn account) and is only ever
+    read for deposit accounts.
+
+    BR-37: an account appears at most once per statement. The Account Resolver collapses
+    two sections of one PDF that resolve to the same account before anything is stored;
+    this unique constraint is the backstop. It is also why merging two accounts that
+    appear together in a statement is refused (BR-35).
+
+    The second unique constraint, on (bank_statement_id, id), is redundant for uniqueness
+    (id alone is unique) but PostgreSQL requires a unique constraint on exactly the
+    columns a foreign key references -- here, Transaction's composite foreign key (BR-38).
+
+    Both foreign keys are ON DELETE RESTRICT: a statement or an account that still has
+    sections cannot be deleted (BR-35, BR-36's wipe order).
+    """
+
+    __tablename__ = "statement_accounts"
+    __table_args__ = (
+        UniqueConstraint("bank_statement_id", "account_id", name="uq_statement_accounts_statement_account"),  # BR-37
+        UniqueConstraint("bank_statement_id", "id", name="uq_statement_accounts_statement_id_id"),  # target of BR-38
+        CheckConstraint(
+            "(closing_balance IS NULL AND closing_balance_date IS NULL) OR "
+            "(closing_balance IS NOT NULL AND closing_balance_date IS NOT NULL)",
+            name="ck_statement_accounts_closing_balance_and_date_together",
+        ),  # BR-33
+        Index("ix_statement_accounts_account_id", "account_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    bank_statement_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("bank_statements.id", ondelete="RESTRICT"), nullable=False
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False)
+    closing_balance: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    closing_balance_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    bank_statement: Mapped["BankStatement"] = relationship(back_populates="statement_accounts")
+    account: Mapped["Account"] = relationship(back_populates="statement_accounts")
+
+
+class DuplicateComparison(Base):
+    """Epic 14 (Probable Duplicate Statement Detection) -- the stored evidence for a flagged
+    file or pair, written once at detection time (BR-42). A skipped file's transactions
+    exist nowhere else (FR-PD-5), and storing the snapshot means the comparison view
+    stays correct after the original is changed or removed (US-14.2).
+
+    The two sides are named EARLIER (the earlier-ingested statement, the original) and
+    LATER (the skipped file, or the later copy of a held pair), which works for both
+    uses. Each side's file name is nullable because `bank_statements` stores none: it is
+    resolved from the run file that processed the statement when the comparison is made.
+
+    Statements are identified by content hash, never by row id (BR-50): the backfill
+    recreates every statement with a new id, and a removal deletes one outright.
+
+    BR-42 bounds are DB-enforced: counts at least 0, `matched_count` no more than the
+    smaller side, `match_ratio` within 0 to 1. The write-once property is enforced by
+    the application. Several records may point at one comparison (a pair, the KnownFile
+    made from it, a run file), so those foreign keys are ON DELETE RESTRICT.
+    """
+
+    __tablename__ = "duplicate_comparisons"
+    __table_args__ = (
+        CheckConstraint(
+            "earlier_transaction_count >= 0 AND later_transaction_count >= 0",
+            name="ck_duplicate_comparisons_counts_non_negative",
+        ),
+        CheckConstraint(
+            "matched_count >= 0 AND matched_count <= LEAST(earlier_transaction_count, later_transaction_count)",
+            name="ck_duplicate_comparisons_matched_within_counts",
+        ),
+        CheckConstraint("match_ratio >= 0 AND match_ratio <= 1", name="ck_duplicate_comparisons_ratio_range"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    earlier_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    earlier_file_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    earlier_bank_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    earlier_period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    earlier_period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    earlier_transaction_count: Mapped[int] = mapped_column(nullable=False)
+    later_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    later_file_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    later_bank_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    later_period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    later_period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    later_transaction_count: Mapped[int] = mapped_column(nullable=False)
+    matched_count: Mapped[int] = mapped_column(nullable=False)
+    match_ratio: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    rows: Mapped[list["DuplicateComparisonRow"]] = relationship(
+        back_populates="comparison", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class DuplicateComparisonRow(Base):
+    """Epic 14 -- one of the (at most 10) largest transactions on one side of a
+    comparison, with whether the other side also has it (FR-PD-5). A table rather than a
+    stored list so the database itself guarantees "at most 10 per side" (BR-42): `rank`
+    is 1 to 10 and unique per comparison and side. Rank 1 is the largest amount; ties
+    are ranked earlier date first (Clarification Q1 = A). Amounts are in the statement
+    section's own currency, as printed -- not converted. Deleted with its comparison.
+    """
+
+    __tablename__ = "duplicate_comparison_rows"
+    __table_args__ = (
+        # BR-42, in BR-2's form: exactly one flow direction, positive.
+        CheckConstraint(
+            "(out_flow IS NOT NULL AND out_flow > 0 AND in_flow IS NULL) OR "
+            "(in_flow IS NOT NULL AND in_flow > 0 AND out_flow IS NULL)",
+            name="ck_duplicate_comparison_rows_exactly_one_flow_direction",
+        ),
+        CheckConstraint("rank >= 1 AND rank <= 10", name="ck_duplicate_comparison_rows_rank_range"),
+        UniqueConstraint("comparison_id", "side", "rank", name="uq_duplicate_comparison_rows_comparison_side_rank"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    comparison_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("duplicate_comparisons.id", ondelete="CASCADE"), nullable=False
+    )
+    side: Mapped[ComparisonSide] = mapped_column(_enum_type(ComparisonSide), nullable=False)
+    rank: Mapped[int] = mapped_column(nullable=False)
+    transaction_date: Mapped[date] = mapped_column(Date, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    out_flow: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    in_flow: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    marker: Mapped[ComparisonRowMarker] = mapped_column(_enum_type(ComparisonRowMarker), nullable=False)
+
+    comparison: Mapped["DuplicateComparison"] = relationship(back_populates="rows")
+
+
+class KnownFile(Base):
+    """Epic 14 -- the remembered decision about one file, keyed by its content so renaming
+    or re-uploading the same file changes nothing (A-PD-8). One row per content hash
+    (BR-39). Every row carries its evidence: the matched statement's hash (never the
+    file's own) and a comparison (BR-40).
+
+    `probable_duplicate`: judged a duplicate at ingestion, or pre-registered by the
+    Backfill Tool, and skipped without being read again (FR-PD-8, NFR-PD-2).
+    `confirmed_duplicate`: a copy the user confirmed for removal, so its Drive file is
+    never re-ingested (FR-PD-13). `overridden`: the user said "not a duplicate" (FR-PD-7).
+    BR-41 (one-way changes) is enforced by the application. A probable_duplicate is never
+    re-evaluated by a later run, which is what makes the backfill's pre-registered skips
+    independent of the order Drive lists files.
+
+    Refers to a statement by content hash, with no foreign key to bank_statements (BR-50).
+    """
+
+    __tablename__ = "known_files"
+    __table_args__ = (
+        UniqueConstraint("pdf_content_hash", name="uq_known_files_pdf_content_hash"),  # BR-39
+        CheckConstraint(
+            "matched_statement_hash <> pdf_content_hash", name="ck_known_files_matched_hash_differs"
+        ),  # BR-40
+        Index("ix_known_files_comparison_id", "comparison_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    pdf_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # sha256 hex digest
+    state: Mapped[KnownFileState] = mapped_column(_enum_type(KnownFileState), nullable=False)
+    matched_statement_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    comparison_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("duplicate_comparisons.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DuplicatePair(Base):
+    """Epic 14 -- a probable-duplicate pair among statements already held (FR-PD-9),
+    written by the worker's scan and listed in the Review page's panel.
+
+    BR-43: the pair is unordered and unique. `hash_a` is always the smaller hash, compared
+    with COLLATE "C" so the database and the application agree on the order whatever the
+    server's locale. `keep_hash` is the worker's proposal (FR-PD-11), computed once and
+    only displayed by the API; manual-correction counts are not stored because they
+    change as the user works.
+
+    BR-44 (the scan's insert/refresh/supersede rules; dismissed, removed and superseded
+    are final) is enforced by the application. `superseded` rather than a delete keeps
+    the history and avoids a foreign-key knot with a failed removal job. `removed` means
+    the database deletion for the pair's removal job committed (refined 2026-10-04), not
+    that the whole job, including the embedding cleanup, completed.
+
+    BR-53 (added 2026-10-04, Ingestion Worker Functional Design Question 1 = C):
+    `removal_allowed` is false for a pair of clearly different sizes, which is listed for
+    information only (dismiss, no remove).
+
+    Refers to statements by content hash, with no foreign key to bank_statements (BR-50).
+    """
+
+    __tablename__ = "duplicate_pairs"
+    __table_args__ = (
+        UniqueConstraint("hash_a", "hash_b", name="uq_duplicate_pairs_hashes"),
+        CheckConstraint('hash_a COLLATE "C" < hash_b COLLATE "C"', name="ck_duplicate_pairs_hashes_ordered"),
+        CheckConstraint("keep_hash IN (hash_a, hash_b)", name="ck_duplicate_pairs_keep_is_a_member"),
+        Index("ix_duplicate_pairs_status", "status"),
+        Index("ix_duplicate_pairs_comparison_id", "comparison_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    hash_a: Mapped[str] = mapped_column(String(64), nullable=False)
+    hash_b: Mapped[str] = mapped_column(String(64), nullable=False)
+    comparison_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("duplicate_comparisons.id", ondelete="RESTRICT"), nullable=False
+    )
+    keep_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # BR-53: whether the Review panel offers removal for this pair -- true only when the two
+    # statements are of comparable size. Required with no default so the writer (the
+    # worker's scan) must decide it; the API displays it and never recomputes it.
+    removal_allowed: Mapped[bool] = mapped_column(nullable=False)
+    status: Mapped[DuplicatePairStatus] = mapped_column(
+        _enum_type(DuplicatePairStatus), nullable=False, default=DuplicatePairStatus.PENDING
+    )
+    found_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    removal_jobs: Mapped[list["StatementRemovalJob"]] = relationship(back_populates="pair")
+
+
+class StatementRemovalJob(Base):
+    """Epic 14 -- a user-confirmed removal handed from the API Service to the Ingestion
+    Worker (FR-PD-12/14, NFR-PD-4). Records what the user acknowledged so the worker can
+    refuse if the situation changed, and the removed transactions' ids so their
+    embeddings can be deleted after the database rows are gone (BR-46).
+
+    BR-45: at most one ACTIVE job (queued, running, embeddings_pending) per pair -- a
+    partial unique index. A failed or embeddings_failed job does not count, which is what
+    lets the user retry. BR-46: embeddings_pending/embeddings_failed require
+    `removed_transaction_ids`, and failed/embeddings_failed require `failure_reason`
+    (BR-9's family). The single-transaction ordering (the deletion and the move to
+    embeddings_pending commit together) is enforced by the application. BR-47: jobs are
+    never deleted after they finish -- the permanent record of a permanent deletion.
+
+    `removed_transaction_ids` (an array) has no foreign key: the rows are gone. It and
+    `deleted_counts` (JSONB, keyed by the BR-51 dependents list, which may grow) are
+    audit data, written once and never queried by value.
+    """
+
+    __tablename__ = "statement_removal_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status NOT IN ('embeddings_pending', 'embeddings_failed') OR removed_transaction_ids IS NOT NULL",
+            name="ck_statement_removal_jobs_embedding_states_need_ids",
+        ),
+        CheckConstraint(
+            "status NOT IN ('failed', 'embeddings_failed') OR failure_reason IS NOT NULL",
+            name="ck_statement_removal_jobs_failed_states_need_reason",
+        ),
+        CheckConstraint(
+            "corrections_acknowledged >= 0 AND embedding_attempts >= 0",
+            name="ck_statement_removal_jobs_counts_non_negative",
+        ),
+        Index(
+            "uq_statement_removal_jobs_one_active_per_pair",
+            "pair_id",
+            unique=True,
+            postgresql_where=text("status IN ('queued', 'running', 'embeddings_pending')"),
+        ),  # BR-45
+        Index("ix_statement_removal_jobs_status", "status"),
+        Index("ix_statement_removal_jobs_pair_id", "pair_id"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    pair_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("duplicate_pairs.id", ondelete="RESTRICT"), nullable=False)
+    remove_statement_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    corrections_acknowledged: Mapped[int] = mapped_column(nullable=False, default=0)
+    status: Mapped[StatementRemovalJobStatus] = mapped_column(
+        _enum_type(StatementRemovalJobStatus), nullable=False, default=StatementRemovalJobStatus.QUEUED
+    )
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    removed_transaction_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    deleted_counts: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    embedding_attempts: Mapped[int] = mapped_column(nullable=False, default=0)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    pair: Mapped["DuplicatePair"] = relationship(back_populates="removal_jobs")
+
+
+class DuplicateScanState(Base):
+    """Epic 14 -- the single row backing the worker's "is a pair scan due" check and the
+    panel's "last checked" line (BR-48: `id` is fixed at 1, so a second row cannot
+    exist). The recorded ratio and minimum are how the worker notices that a detection
+    setting has changed; which exact conditions make a scan due is Ingestion Worker
+    Functional Design. `recheck_requested_at` is set by the API Service when the user
+    asks for a re-check, or by the Backfill Tool when it finishes.
+    """
+
+    __tablename__ = "duplicate_scan_state"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_duplicate_scan_state_single_row"),)  # BR-48
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
+    last_scan_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_scan_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_scan_match_ratio: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
+    last_scan_min_transactions: Mapped[int | None] = mapped_column(nullable=True)
+    last_scan_pairs_found: Mapped[int | None] = mapped_column(nullable=True)
+    recheck_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

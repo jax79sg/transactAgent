@@ -151,3 +151,60 @@ App
 - **Empty recent list**: shows a brief "No recent activity" message rather than an empty-looking blank area, per US-11.3's edge case.
 - **Visible on every page** (US-11.1) — lives in `NavBar.tsx` itself, not per-page, same placement precedent as the two existing badges.
 - **API**: `GET /background-activity/summary`
+
+## Shared: Types, API Module, and Formatting Helpers (Addendum 2026-10-04 — Probable Duplicate Statement Detection, Epic 14)
+
+- **Types** (mirroring the API design's DTOs; field names camelCase, enumerated values the API's snake_case strings): `StatementLabel`, `RemovalPreview`, `RemovalStatus`, `DuplicatePair`, `DuplicatePairPage`, `PendingPairCountResponse`, `RemovalRequest`, `ComparisonRow`, `ComparisonSide`, `DuplicateComparison`, `OverrideResponse`, `ScanStatus`. `RunFileOutcome` gains `"skipped_probable_duplicate"` (it is a closed union and would otherwise reject the new value); `RunFileDetail` gains `duplicateComparisonId: string | null` and `matchedStatement: StatementLabel | null`.
+- **API module `api/duplicates.ts`** (one function per endpoint; paths fixed here so both units agree):
+  - `GET /duplicates/pairs` (query `page`, `page_size`) -> `DuplicatePairPage`
+  - `GET /duplicates/pairs/pending-count` -> `PendingPairCountResponse`
+  - `GET /duplicates/comparisons/{comparisonId}` -> `DuplicateComparison`
+  - `POST /duplicates/pairs/{pairId}/remove` (body `RemovalRequest`) -> `DuplicatePair`
+  - `POST /duplicates/pairs/{pairId}/dismiss` -> `DuplicatePair`
+  - `POST /duplicates/comparisons/{comparisonId}/override` -> `OverrideResponse`
+  - `GET /duplicates/scan-status` -> `ScanStatus`
+  - `POST /duplicates/recheck` -> `ScanStatus`
+- **`formatStatementLabel(label)`**: "<file name> (<bank>, <period>)"; with no file name, "<bank> (<period>)"; with neither, "a statement (<period>)". **`formatPeriod(start, end)`**: "2 Jun to 30 Jun 2026" when both dates are in one year, "28 Dec 2025 to 3 Jan 2026" otherwise; month names are written out in the helper, not taken from the browser's locale, so the text is identical everywhere and in tests. Used by the Ingestion results, the panel, and the comparison page (A-PD-3).
+- **`duplicateErrorMessage(error)`**: maps the API's stable error codes (`pair_not_pending`, `removal_not_offered`, `removal_already_requested`, `statement_missing`, `confirmation_out_of_date`, `not_a_skipped_file`) to plain sentences; any other error shows the server's message.
+
+## NavBar / PendingDuplicatesBadge (Addendum 2026-10-04 — Epic 14)
+
+- **PendingDuplicatesBadge**: a second count badge next to the "Review" link, beside the existing `PendingReviewBadge`, in a different colour (violet, with a dark-mode variant) so the two are told apart without reading; hidden when the count is 0 (US-14.5 "no badge when empty"); `aria-label` "N duplicate statements awaiting review"; `data-testid="pending-duplicates-badge"`. Polls `GET /duplicates/pairs/pending-count` every 30 seconds, mounted once at `NavBar`. Its count follows AR-40 (pending pairs with no removal in flight, information-only pairs included until dismissed).
+- It does **not** change `PendingReviewBadge` or what its number means (NFR-PD-6).
+- **API**: `GET /duplicates/pairs/pending-count`
+
+## ReviewPage / DuplicateStatementsPanel / DuplicatePairRow / RemovalConfirmDialog (Addendum 2026-10-04 — Epic 14)
+
+- **DuplicateStatementsPanel**: a bordered section (the backup panel's convention) on the Review page **below `DisagreementTable` and above the proposals table**, titled "Probable duplicate statements". Always rendered; its height depends on its state:
+  - *Header line* (always): "Last checked <time>; <n> found" with a **Check again** button (`POST /duplicates/recheck`; afterwards "Re-check requested; the worker will look shortly").
+  - *Detection off* (`scanStatus.detectionEnabled` false, nothing listed): "Duplicate detection is switched off." with a link to Settings.
+  - *Nothing found* (detection on, nothing listed): "No probable duplicate statements."
+  - *Groups*, each with its own heading and shown only when non-empty, from `GET /duplicates/pairs`: **Awaiting your decision** (pending pairs, information-only ones included), **Being removed** (removal queued, running, or cleaning up embeddings), **Removed in the last 24 hours** (done, or "removed; cleaning up search data failed, harmless").
+  - Paginated (20 per page, Previous/Next) like the other review lists.
+- **DuplicatePairRow**: shows the copy to **keep** and the copy proposed for **removal** (each: file name, bank, period, transaction count) and the manual corrections on each; a "View comparison" link to `/duplicates/<comparisonId>`; and:
+  - *Removal offered*: **Remove duplicate…** (opens `RemovalConfirmDialog`) and **Not a duplicate — dismiss**.
+  - *Information only* (`removalOffered` false): the note "These statements differ in size, so this is listed for information only." with **View comparison** and **Not a duplicate — dismiss** only; **no remove action** (Question 1 = C).
+  - *Stale* (`stale` true): "One of these statements no longer exists." with dismiss only.
+  - *Removal status* (when `removal` is present): queued, "Removing…", "Cleaning up…", "Removed" with the counts deleted, "Removed; cleaning up search data failed (harmless)", or "Removal failed: <reason>" with the actions available again so it can be retried.
+  - A failed action shows its message inline on the row (`duplicateErrorMessage`).
+- **RemovalConfirmDialog**: the app's existing dialog component (as the Settings page's confirmations), opened from a row. It states, from `pair.preview`: the transactions, statement sections, recategorization jobs and proposals, categorization disagreements and recurring-payment matches that will be **permanently deleted**; that the removed transactions' **embeddings are removed too**; how many transactions exist **only on this copy** and will be lost (`onlyOnRemovedCopy`); how many **manual corrections** on it will be lost (`correctionsLost`); and that the Drive file is left alone. Buttons **Cancel** and **Delete permanently** (disabled while the request is in flight). On confirm it sends `{removeStatementHash, acknowledgedCorrectionsLost}` from what the dialog showed. On an `confirmation_out_of_date`, `pair_not_pending`, `removal_not_offered`, or `statement_missing` answer the dialog closes, the list refreshes, and a message explains; nothing was deleted.
+- After remove, dismiss, or "Check again": the pair list, the pending count (badge), and the scan status are refreshed together.
+- **API**: `GET /duplicates/pairs`, `POST /duplicates/pairs/{id}/remove`, `POST /duplicates/pairs/{id}/dismiss`, `GET /duplicates/scan-status`, `POST /duplicates/recheck`
+
+## ComparisonPage / ComparisonSidePanel / OverrideAction (Addendum 2026-10-04 — Epic 14)
+
+- **ComparisonPage**: a route, `/duplicates/:comparisonId`, inside the same protected layout as every page, loading `GET /duplicates/comparisons/{id}`. A "Back" link returns to where the user came from (the Ingestion run results or the Review panel). It shows: a heading; a **state banner** (`skipped`: "Skipped as a probable duplicate"; `removed`: "Removed at your confirmation; the file is still in Google Drive"; `ingest_at_next_run`: "Will be ingested on the next ingestion run" with a link to the Ingestion page; `ingested_at_your_request`: "Ingested at your request"; `pair_pending`, `pair_dismissed`, `pair_superseded`: the pair's state in words); the stored **reason** (which already states a size difference prominently); the **headline figures** (both transaction counts, both periods, how many matched).
+- **ComparisonSidePanel** (two of them): titled by role. For a skipped or removed file, `thisFileSide` makes the titles "This file" and "The statement it matches"; for a held pair, "Earlier ingested" and "Later ingested". Shows the statement label and a table of up to 10 rows (date, description, amount, currency), largest first (US-14.2). Each row carries a **text marker**, "Also on the other statement" or "Only on this one", plus a subtle tint, so meaning never depends on colour alone. A statement with 10 or fewer transactions shows all of them. Wide screens place the two panels side by side; narrow screens stack them; each table scrolls horizontally if needed.
+- **OverrideAction**: shown only when `canOverride`. Button **Not a duplicate — ingest it** (`POST /duplicates/comparisons/{id}/override`). For `skipped` it is **one click**. For `removed` it first shows an inline warning ("This file will be ingested on the next run. The manual corrections that sat on this copy are not restored.") and needs a second click. On success the page re-reads the comparison, so the banner changes to "Will be ingested on the next ingestion run". A failure shows `duplicateErrorMessage`.
+- For a held pair, the page also shows whether removal is offered and a link back to the Review panel; it offers no remove action itself (removal is confirmed only from the panel, where the preview is).
+- **API**: `GET /duplicates/comparisons/{id}`, `POST /duplicates/comparisons/{id}/override`
+
+## IngestionPage: RunFiles Outcome Cell (Addendum 2026-10-04 — Epic 14)
+
+- In the per-file table of a run, a file whose outcome is `skipped_probable_duplicate` shows "Probable duplicate of <`formatStatementLabel(matchedStatement)`>" as a **link to `/duplicates/<duplicateComparisonId>`** (US-14.1/14.2). A file remembered from an earlier run appears the same way in a later run (US-14.4). Every other outcome renders as before; sorting by outcome still sorts on the stored value. Nothing else on the page changes.
+
+## SettingsPage: Enumerated Settings as a Dropdown, and the New Category (Addendum 2026-10-04 — Epic 14)
+
+- **Enumerated settings** (`type === "enum"` with `allowedValues`) are edited with a **dropdown** of those values instead of a free-text box, keeping the existing `data-testid` (`setting-input-<name>`); every other type keeps its text box. This corrects an earlier statement that a dropdown already existed. It also benefits the one existing enumerated setting (`low`, `medium`, `high`).
+- **CATEGORY_ORDER** gains "Duplicate Statements", after "Ingestion". The three new settings (`duplicate_detection_enabled`, `duplicate_match_ratio`, `duplicate_min_transactions`) otherwise appear through the existing catalog-driven rendering, with the existing save confirmation and restart guidance (owning service: the Ingestion Worker). The switch's own description (from the API) says to enable it only after the accuracy check and that it takes effect when the worker restarts.
+

@@ -12,6 +12,7 @@ from ingestion_worker.clients.drive_client import (
     DriveFileRef,
     delete_file,
     ensure_backup_folder_exists,
+    ensure_subfolder,
     list_backup_folder_files,
     list_folder_pdf_files,
     upload_file,
@@ -173,3 +174,44 @@ class TestDeleteFile:
             delete_file(db=MagicMock(), file_ref=DriveFileRef(id="to-delete-id", name="old.csv"))
 
         service.files.return_value.delete.assert_called_once_with(fileId="to-delete-id")
+
+
+class TestEnsureSubfolder:
+    """Epic 13 (WR-54): the backfill's timestamped backup subfolder."""
+
+    def test_returns_existing_subfolder_id_without_creating(self):
+        service = MagicMock()
+        service.files.return_value.list.return_value.execute.return_value = {
+            "files": [{"id": "existing-sub-id", "name": "pre-backfill-20261003T081500Z"}]
+        }
+        with patch("ingestion_worker.clients.drive_client._load_credentials", return_value=MagicMock()), patch(
+            "ingestion_worker.clients.drive_client.build", return_value=service
+        ):
+            folder_id = ensure_subfolder(MagicMock(), "parent-id", "pre-backfill-20261003T081500Z")
+
+        assert folder_id == "existing-sub-id"
+        service.files.return_value.create.assert_not_called()
+
+    def test_creates_the_named_subfolder_under_the_parent_when_missing(self):
+        service = MagicMock()
+        service.files.return_value.list.return_value.execute.return_value = {"files": []}
+        service.files.return_value.create.return_value.execute.return_value = {"id": "new-sub-id"}
+        with patch("ingestion_worker.clients.drive_client._load_credentials", return_value=MagicMock()), patch(
+            "ingestion_worker.clients.drive_client.build", return_value=service
+        ):
+            folder_id = ensure_subfolder(MagicMock(), "parent-id", "pre-backfill-X")
+
+        assert folder_id == "new-sub-id"
+        body = service.files.return_value.create.call_args.kwargs["body"]
+        assert body["name"] == "pre-backfill-X" and body["parents"] == ["parent-id"]
+
+    def test_a_quote_in_the_name_is_escaped_in_the_query(self):
+        service = MagicMock()
+        service.files.return_value.list.return_value.execute.return_value = {"files": [{"id": "x", "name": "n"}]}
+        with patch("ingestion_worker.clients.drive_client._load_credentials", return_value=MagicMock()), patch(
+            "ingestion_worker.clients.drive_client.build", return_value=service
+        ):
+            ensure_subfolder(MagicMock(), "parent-id", "o'brien")
+
+        query = service.files.return_value.list.call_args.kwargs["q"]
+        assert "name = 'o\\'brien'" in query

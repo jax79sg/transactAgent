@@ -160,7 +160,7 @@ export interface RunHistoryPage {
   totalCount: number;
 }
 
-export type RunFileOutcome = "processed" | "skipped_duplicate" | "failed";
+export type RunFileOutcome = "processed" | "skipped_duplicate" | "skipped_probable_duplicate" | "failed";
 
 export interface RunFileDetail {
   id: string;
@@ -169,6 +169,10 @@ export interface RunFileDetail {
   failureReason: string | null;
   transactionsExtractedCount: number | null;
   processedAt: string;
+  // Epic 14 (AR-47): set only for a file skipped as a probable duplicate. Optional so a run-file object built
+  // without them (older fixtures) still type-checks; the API always sends them (null when not applicable).
+  duplicateComparisonId?: string | null;
+  matchedStatement?: StatementLabel | null;
 }
 
 export interface RunLogLine {
@@ -409,3 +413,130 @@ export interface ActivitySummaryResponse {
   current: CurrentActivity | null;
   recent: RecentActivityEntry[];
 }
+
+// ---- Probable Duplicate Statement Detection (Epic 14) -- mirrors api-service's duplicates/schemas.py ----
+
+export interface StatementLabel {
+  contentHash: string;
+  fileName: string | null;
+  bankName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  transactionCount: number;
+}
+
+export interface RemovalPreview {
+  transactions: number;
+  statementSections: number;
+  recategorizationJobs: number;
+  recategorizationProposals: number;
+  categorizationDisagreements: number;
+  recurringPaymentMatches: number;
+  correctionsLost: number;
+  onlyOnRemovedCopy: number;
+}
+
+export type RemovalJobStatus =
+  | "queued"
+  | "running"
+  | "embeddings_pending"
+  | "embeddings_failed"
+  | "completed"
+  | "failed";
+
+export interface RemovalStatus {
+  jobId: string;
+  status: RemovalJobStatus;
+  failureReason: string | null;
+  requestedAt: string;
+  finishedAt: string | null;
+  deletedCounts: Record<string, number> | null;
+}
+
+export type DuplicatePairStatus = "pending" | "removed" | "dismissed" | "superseded";
+
+export interface DuplicatePair {
+  id: string;
+  comparisonId: string;
+  status: DuplicatePairStatus;
+  removalOffered: boolean;
+  stale: boolean;
+  keep: StatementLabel;
+  remove: StatementLabel;
+  correctionsOnKept: number | null;
+  correctionsOnRemoved: number | null;
+  preview: RemovalPreview | null;
+  removal: RemovalStatus | null;
+  foundAt: string;
+}
+
+export interface DuplicatePairPage {
+  items: DuplicatePair[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+
+export interface PendingPairCountResponse {
+  pendingCount: number;
+}
+
+export interface RemovalRequest {
+  removeStatementHash: string;
+  acknowledgedCorrectionsLost: number;
+}
+
+export type ComparisonMarker = "also_on_other" | "only_on_this_one";
+
+export interface ComparisonRow {
+  rank: number;
+  transactionDate: string;
+  description: string;
+  outFlow: string | null;
+  inFlow: string | null;
+  currency: string;
+  marker: ComparisonMarker;
+}
+
+export interface ComparisonSide {
+  label: StatementLabel;
+  rows: ComparisonRow[];
+}
+
+export type ComparisonState =
+  | "skipped"
+  | "ingest_at_next_run"
+  | "ingested_at_your_request"
+  | "removed"
+  | "pair_pending"
+  | "pair_dismissed"
+  | "pair_superseded";
+
+export interface DuplicateComparison {
+  id: string;
+  state: ComparisonState;
+  reason: string;
+  matchedCount: number;
+  matchRatio: string;
+  earlier: ComparisonSide;
+  later: ComparisonSide;
+  thisFileSide: "earlier" | "later" | null;
+  canOverride: boolean;
+  pairId: string | null;
+  removalOffered: boolean | null;
+  createdAt: string;
+}
+
+export interface OverrideResponse {
+  comparisonId: string;
+  state: "ingest_at_next_run" | "ingested_at_your_request";
+  note: string | null;
+}
+
+export interface ScanStatus {
+  lastCompletedAt: string | null;
+  pairsFound: number | null;
+  recheckRequested: boolean;
+  detectionEnabled: boolean;
+}
+

@@ -19,8 +19,10 @@ import httpx
 import pytest
 from openai import APIConnectionError, APITimeoutError
 
+from ingestion_worker.clients import openrouter_client
 from ingestion_worker.clients.openrouter_client import (
     _REQUEST_TIMEOUT_SECONDS,
+    GEMINI_OPENAI_BASE_URL,
     _client,
     classify_description,
     classify_descriptions_batch,
@@ -161,3 +163,84 @@ class TestAmountInPrompt:
         prompt = fake_client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
         assert "45.20 SGD" in prompt
         assert "unknown" in prompt
+
+
+class TestCategorizationProvider:
+    """`categorization_provider` chooses where categorization goes: `local` is the configurable OpenAI-compatible
+    endpoint (unchanged); `gemini` reuses the extraction key and model against Google's OpenAI-compatible endpoint."""
+
+    @pytest.fixture(autouse=True)
+    def _distinct_values(self, monkeypatch):
+        for name, value in (
+            ("openrouter_base_url", "http://host.docker.internal:8000/v1"), ("openrouter_api_key", "local-key"),
+            ("openrouter_model", "local-model"), ("gemini_api_key", "gemini-key"), ("gemini_model", "gemini-model"),
+        ):
+            monkeypatch.setattr(openrouter_client.settings, name, value)
+
+    def _fake(self, content='["Groceries"]'):
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value.choices = [MagicMock(message=MagicMock(content=content))]
+        return fake_client
+
+    def test_local_is_the_default_and_uses_the_configured_endpoint_key_and_model(self, monkeypatch):
+        monkeypatch.setattr(openrouter_client.settings, "categorization_provider", "local")
+        with patch("ingestion_worker.clients.openrouter_client.OpenAI") as openai_cls:
+            _client()
+        assert openai_cls.call_args.kwargs["base_url"] == "http://host.docker.internal:8000/v1"
+        assert openai_cls.call_args.kwargs["api_key"] == "local-key"
+
+    def test_gemini_uses_googles_endpoint_with_the_extraction_key(self, monkeypatch):
+        monkeypatch.setattr(openrouter_client.settings, "categorization_provider", "gemini")
+        with patch("ingestion_worker.clients.openrouter_client.OpenAI") as openai_cls:
+            _client()
+        assert openai_cls.call_args.kwargs["base_url"] == GEMINI_OPENAI_BASE_URL
+        assert GEMINI_OPENAI_BASE_URL == "https://generativelanguage.googleapis.com/v1beta/openai/"
+        assert openai_cls.call_args.kwargs["api_key"] == "gemini-key"
+        assert openai_cls.call_args.kwargs["timeout"] == _REQUEST_TIMEOUT_SECONDS  # the bounded timeout applies to both
+
+    @pytest.mark.parametrize(("provider", "model"), [("local", "local-model"), ("gemini", "gemini-model")])
+    def test_a_batch_request_names_the_providers_model(self, monkeypatch, provider, model):
+        monkeypatch.setattr(openrouter_client.settings, "categorization_provider", provider)
+        fake_client = self._fake()
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            classify_descriptions_batch([("NTUC", Decimal("1.00"))], ["Groceries"])
+        assert fake_client.chat.completions.create.call_args.kwargs["model"] == model
+
+    @pytest.mark.parametrize(("provider", "model"), [("local", "local-model"), ("gemini", "gemini-model")])
+    def test_a_single_request_names_the_providers_model(self, monkeypatch, provider, model):
+        monkeypatch.setattr(openrouter_client.settings, "categorization_provider", provider)
+        fake_client = self._fake("Groceries")
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            classify_description("NTUC", Decimal("1.00"), ["Groceries"])
+        assert fake_client.chat.completions.create.call_args.kwargs["model"] == model
+
+    def test_an_explicit_model_argument_still_wins(self, monkeypatch):
+        monkeypatch.setattr(openrouter_client.settings, "categorization_provider", "gemini")
+        fake_client = self._fake()
+        with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+            classify_descriptions_batch([("NTUC", None)], ["Groceries"], model="something-else")
+        assert fake_client.chat.completions.create.call_args.kwargs["model"] == "something-else"
+
+    def test_the_request_is_the_same_prompt_and_temperature_for_both_providers(self, monkeypatch):
+        sent = {}
+        for provider in ("local", "gemini"):
+            monkeypatch.setattr(openrouter_client.settings, "categorization_provider", provider)
+            fake_client = self._fake()
+            with patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client):
+                classify_descriptions_batch([("NTUC", Decimal("1.00"))], ["Groceries"])
+            kwargs = fake_client.chat.completions.create.call_args.kwargs
+            sent[provider] = (kwargs["messages"], kwargs["temperature"], sorted(set(kwargs) - {"model"}))
+        assert sent["local"] == sent["gemini"]  # swapping the provider changes where, never what
+
+    def test_an_error_names_the_endpoint_that_was_actually_called(self, monkeypatch):
+        monkeypatch.setattr(openrouter_client.settings, "categorization_provider", "gemini")
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.side_effect = APIConnectionError(
+            request=httpx.Request("POST", GEMINI_OPENAI_BASE_URL + "chat/completions")
+        )
+        with (
+            patch("ingestion_worker.clients.openrouter_client._client", return_value=fake_client),
+            patch("ingestion_worker.clients.retry.time.sleep"),
+            pytest.raises(TransientError, match=r"generativelanguage\.googleapis\.com"),
+        ):
+            classify_description("NTUC", Decimal("1.00"), ["Groceries"])

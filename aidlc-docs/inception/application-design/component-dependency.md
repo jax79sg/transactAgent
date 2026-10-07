@@ -14,12 +14,19 @@
 | Backup Status Component *(added 2026-08-08)* | Shared DB (`backup_runs` table) | In-process DB query — no dependency on Ingestion Worker Service |
 | Recurring Payments Component *(added 2026-08-08)* | Shared DB (recurring-payments register, match, and detection-suggestion tables; transactions table for match display context) | In-process DB query — no dependency on Ingestion Worker Service |
 | Background Activity Component *(added 2026-08-18)* | Shared DB (`ingestion_runs`, `recategorization_jobs` tables — read-only) | In-process DB query — no dependency on Ingestion Worker Service |
-| Ingestion Orchestrator Component | Drive Connector, Duplicate Detection, Statement Extraction, Categorization Engine, Currency Conversion (all same service); Shared DB (ingestion-runs/jobs table, transactions table) | In-process method calls; in-process DB query |
+| Account Management Component *(added 2026-10-02)* | Shared DB (`accounts`, balance-anchor tables; `bank_statements` account reference on merge) | In-process DB query — no dependency on Ingestion Worker Service |
+| Balance Component *(added 2026-10-02)* | Shared DB (`accounts`, balance-anchor, `bank_statements`, `transactions`, and `fx_rate_cache` tables — all **read-only**); Account Management Component's data only via the DB, not by call | In-process DB query — no dependency on Ingestion Worker Service, and no external FX call (Question 1 = A, cache-only) |
+| Duplicate Review Component *(added 2026-10-03)* | Shared DB (remembered-files, comparisons, duplicate-pairs, removal-jobs, scan-state tables — read and write; `bank_statements`, `statement_accounts`, `transactions` and the transaction-dependent tables — **read-only**, for correction counts and the removal preview) | In-process DB query — no dependency on Ingestion Worker Service, and **no dependency on the vector store** (NFR-PD-4) |
+| Ingestion Orchestrator Component | Drive Connector, Duplicate Detection, Statement Extraction, Account Resolver *(added 2026-10-02)*, Categorization Engine, Currency Conversion (all same service); Shared DB (ingestion-runs/jobs table, transactions table) | In-process method calls; in-process DB query |
 | Backup Manager Component *(added 2026-08-08)* | Drive Connector Component (same service); Shared DB (transactions table for export, `backup_runs` table for status) | In-process method calls; in-process DB query |
 | Recurring Payment Manager Component *(added 2026-08-08)* | Categorization Engine's similarity matcher (same service, reused per NFR-1); Shared DB (transactions table, recurring-payments register/match/detection-suggestion tables); Vector Store Client Component *(added 2026-08-11)* | In-process method calls; in-process DB query |
 | Drive Connector Component | Google Drive API (external) — read scopes (existing) + write scopes (new, for the dedicated backup folder) | OAuth 2.0 + REST (external) |
 | Duplicate Detection Component | Shared DB (processed-statements table) | In-process DB query |
 | Statement Extraction Component | OCR engine/library (external or embedded); LLM API (external, for layout-adaptive parsing) | Library call; REST (external) |
+| Account Resolver Component *(added 2026-10-02)* | Shared DB (`accounts` table — read and write). No external dependency. | In-process DB query; called in-process by the Ingestion Orchestrator |
+| Probable Duplicate Detector Component *(added 2026-10-03)* | Shared DB (`bank_statements`, `statement_accounts`, `transactions` — read; remembered-files, comparisons, duplicate-pairs, scan-state tables — read and write); the Account Resolver's pure bank-key normalizer (same service); the settings (detection on/off, match ratio, small-statement minimum). No external call. | In-process DB query; in-process function call |
+| Statement Removal Handler Component *(added 2026-10-03)* | Shared DB (removal-jobs, duplicate-pairs, remembered-files — read and write; `bank_statements`, `statement_accounts`, `transactions` and every transaction-dependent table — delete); Vector Store Client Component (same service) | In-process DB query; in-process method call. Invoked only by `poll_once()`, never by the API Service |
+| Backfill Tool Component *(added 2026-10-02)* | Ingestion Orchestrator Component's `processRun` (same package, reused not copied); Drive Connector Component (same package); Shared DB (statements, transactions, and their dependent tables — read, delete, and re-insert via the normal ingestion path); backup target (mechanism open — Functional Design) | Command-line entry point; in-process method calls; in-process DB query |
 | Categorization Engine Component | Shared DB (transactions table, for similarity search; `transactions.llm_suggested_category_id` *(added 2026-08-16)*; `categorization_disagreements` table, write-only *(added 2026-08-16)*); LLM API (external); Vector Store Client Component *(added 2026-08-11)* | In-process DB query; REST (external); in-process method call |
 | Currency Conversion Component | Shared DB (fx-rate-cache table); FX Rate API (external) | In-process DB query; REST (external) |
 | Vector Store Client Component *(added 2026-08-11)* | Vector DB (external, dedicated service — not the Shared DB) | REST/gRPC (external, product TBD at NFR Requirements) |
@@ -27,6 +34,8 @@
 | Configuration Loading *(both services, added 2026-08-16, Configurable Application Settings feature — cross-cutting, not a business-logic component)* | Shared override-settings volume, read side — both services' `Settings` classes read it via `env_file` at process start | Filesystem read at startup, not a DB query, not a call to the other service |
 | Dataset Curator Component *(added 2026-08-17, Model Training unit)* | Shared DB (transactions, recategorization_proposals, categorization_disagreements tables) — **read-only** | Direct DB query via the shared `transactagent_db` package, not a new data-access layer |
 | Fine-Tuning Trainer Component *(added 2026-08-17, Model Training unit)* | Dataset Curator Component's output (same unit, filesystem hand-off); HuggingFace Hub (external, base model download); ClearML SaaS (external, run tracking); the oMLX server (`evaluate()` only, for the agreement-rate comparison — see Functional Design MTR-7 correction: an independent HTTP call replicating the live prompt template, not a call into API Service/Ingestion Worker Service code, since no such endpoint exists) | Filesystem read; REST (external) x3, all direct HTTP, no dependency on either existing service |
+
+*Addendum (2026-10-03, Probable Duplicate Statement Detection feature — Epic 14)*: the rows above are new; these existing rows gain dependencies and are otherwise unchanged. **Frontend SPA** also depends on the Duplicate Review Component (REST). **Ingestion Trigger & Status Component** and **Configuration Component**: no new dependency (an extra DTO field set; three more catalog entries). **Duplicate Detection Component** also reads the remembered-files table. **Ingestion Orchestrator Component** also depends on the Probable Duplicate Detector Component (same service, in-process). **Vector Store Client Component**: no new dependency (a new delete operation; its one new caller is the Statement Removal Handler). **Backfill Tool Component** also depends on the Probable Duplicate Detector Component (`check-duplicates`, dry-run listing) and on the Shared DB's remembered-files and duplicate-pairs tables (pre-registration, clearing resolved pairs, backup and restore). **Nothing new depends on Google Drive, the LLM, or oMLX.**
 
 ## Communication Patterns Summary
 
@@ -44,6 +53,12 @@
 - **Model Training ↔ API Service / Ingestion Worker Service**: **no dependency in either direction, full stop** — corrected during Functional Design (MTR-7): `evaluate()`'s "compare against the live model" step does not call into either service's code or any endpoint (none exists for on-demand classification) — it independently replicates WR-34's prompt template and calls the same oMLX server directly. Nothing on the API Service/Ingestion Worker Service side is aware Model Training exists, and nothing in Model Training imports or calls either service's package.
 - **Model Training ↔ External Services** *(new)*: HuggingFace Hub (download the base model), ClearML SaaS (run tracking), and the oMLX server (`evaluate()`'s live-model comparison, MTR-7 — the same server `ingestion-worker` talks to, but reached independently, not through it) — three external dependencies, all isolated to this one unit (NFR-CFT-1/NFR-CFT-3).
 - **API Service ↔ Ingestion Worker Service** *(addendum, 2026-08-18, Background Process Visibility feature)*: the new Background Activity Component holds to the same "no direct call" rule as every read-only component above — it only reads `ingestion_runs`/`recategorization_jobs` rows the Worker's Ingestion Orchestrator/Categorization Engine already write, polled frequently by the Frontend rather than by the Worker pushing anything.
+- **API Service ↔ Ingestion Worker Service** *(addendum, 2026-10-02, Account Balance at a Point in Time feature)*: the new Account Management and Balance Components hold to the same "no direct call" rule. The Account Resolver (Worker) creates `accounts` rows and the Account Management Component (API) edits them, with no call in either direction. The Balance Component reads the `fx_rate_cache` rows the Worker's Currency Conversion Component wrote and **never calls an external FX service** (Question 1 = A), so API Service gains no new external dependency; the tradeoff, accepted explicitly, is that an as-of-date rate is the nearest *earlier* cached one (marked approximate) or unavailable.
+- **Backfill Tool** *(addendum, 2026-10-02)*: a command-line entry point inside the Ingestion Worker Service's package and image, not a new service or container. It adds no edge to the diagram below — it reuses the Worker's own Shared DB and Google Drive connections — and offers no REST surface to the Frontend or API Service (Question 2 = A).
+
+- **API Service ↔ Ingestion Worker Service** *(addendum, 2026-10-03, Probable Duplicate Statement Detection feature — Epic 14)*: the new Duplicate Review Component holds to the same "no direct call" rule. It reads pairs and comparisons the worker's Probable Duplicate Detector wrote and writes decisions (override, dismissal, re-check) and removal jobs as rows; the worker's Statement Removal Handler reads and executes them. Removal is the one flow that needs the Vector DB, so it is executed on the worker's side of the line, which is the only reason it is a job rather than a synchronous delete.
+- **Ingestion Worker Service ↔ Vector DB** *(addendum, 2026-10-03)*: the Statement Removal Handler becomes a second caller of the Vector Store Client Component (alongside the Categorization Engine, Recurring Payment Manager, and Embedding Manager), using its new delete operation. **API Service still never connects to the Vector DB.**
+- **Backfill Tool** *(addendum, 2026-10-03)*: still no new edge. It also calls the Probable Duplicate Detector in-process and writes remembered-file records through the Shared DB connection it already has.
 
 ## Data Flow Diagram
 
@@ -64,6 +79,9 @@
           | - Recateg. Review         |
           | - Backup Status           |
           | - Recur. Payments         |
+          | - Account Mgmt            |
+          | - Balance                 |
+          | - Duplicate Review        |
           +---------------------------+
                         |
                         v
@@ -73,6 +91,7 @@
           | - transactions            |
           |   (+embedding_status)     |
           | - processed-stmts         |
+          | - statement-accounts      |
           | - categories              |
           | - ingestion-runs          |
           | - fx-rate-cache           |
@@ -81,6 +100,13 @@
           | - recur-payments          |
           | - categ-disagreements     |
           | - setting-changes         |
+          | - accounts                |
+          | - balance-anchors         |
+          | - remembered-files        |
+          | - dup-comparisons         |
+          | - dup-pairs               |
+          | - removal-jobs            |
+          | - dup-scan-state          |
           +---------------------------+
                         ^
                         |
@@ -96,6 +122,10 @@
           | - Recur. Pmt Mgr          |
           | - Embedding Mgr           |
           | - Vector Store Client     |
+          | - Account Resolver        |
+          | - Prob. Dup Detector      |
+          | - Removal Handler         |
+          | - Backfill Tool (CLI)     |
           +---------------------------+
                     |         |
                     |         +----------------------------+
@@ -109,7 +139,7 @@
           +---------------------------+
 ```
 
-**Text validation**: All lines are ASCII-only (`+ - | v ^`), no unicode box-drawing characters; every box's border and content lines are a consistent width within that box (programmatically verified), consistent with `common/ascii-diagram-standards.md`. Re-verified after the 2026-08-08 Nightly Transaction Backup addenda (Backup Status, Backup Manager, backup-runs lines), again after the 2026-08-08 Recurring Payments addenda (Recur. Payments, Recur. Pmt Mgr, recur-payments lines), again after the 2026-08-11 Local Embedding-Based Semantic Similarity addenda (Embedding Mgr, Vector Store Client, oMLX, and the new Vector DB box — the Worker now branches to two downstream boxes instead of one, per `ascii-diagram-standards.md`'s Horizontal Flow pattern), again after the 2026-08-16 Matching Precision Refinement addendum (`- categ-disagreements` line added to the Shared DB box; no new component box needed — `Transaction.llm_suggested_category_id` is a field addition, not a new box; every content line still 39 chars, matching every existing line in that box, verified programmatically above), and again after the 2026-08-16 Configurable Application Settings addendum (`- setting-changes` line added to the Shared DB box, still 39 chars; the genuinely new coordination channel is deliberately shown as its own small diagram below, not merged into this one, since two of its three participants — API Service and Ingestion Worker Svc — are already separated by the Shared DB box in this vertical layout, and forcing a diagonal/bypass arrow through an existing, already-verified diagram was judged higher-risk than a second, self-contained one).
+**Text validation**: All lines are ASCII-only (`+ - | v ^`), no unicode box-drawing characters; every box's border and content lines are a consistent width within that box (programmatically verified), consistent with `common/ascii-diagram-standards.md`. Re-verified after the 2026-08-08 Nightly Transaction Backup addenda (Backup Status, Backup Manager, backup-runs lines), again after the 2026-08-08 Recurring Payments addenda (Recur. Payments, Recur. Pmt Mgr, recur-payments lines), again after the 2026-08-11 Local Embedding-Based Semantic Similarity addenda (Embedding Mgr, Vector Store Client, oMLX, and the new Vector DB box — the Worker now branches to two downstream boxes instead of one, per `ascii-diagram-standards.md`'s Horizontal Flow pattern), again after the 2026-08-16 Matching Precision Refinement addendum (`- categ-disagreements` line added to the Shared DB box; no new component box needed — `Transaction.llm_suggested_category_id` is a field addition, not a new box; every content line still 39 chars, matching every existing line in that box, verified programmatically above), and again after the 2026-08-16 Configurable Application Settings addendum (`- setting-changes` line added to the Shared DB box, still 39 chars; the genuinely new coordination channel is deliberately shown as its own small diagram below, not merged into this one, since two of its three participants — API Service and Ingestion Worker Svc — are already separated by the Shared DB box in this vertical layout, and forcing a diagonal/bypass arrow through an existing, already-verified diagram was judged higher-risk than a second, self-contained one). Re-verified after the 2026-10-03 Probable Duplicate Statement Detection addenda (Duplicate Review, remembered-files / dup-comparisons / dup-pairs / removal-jobs / dup-scan-state, Prob. Dup Detector, Removal Handler lines): every box is still the same width on every line, ASCII-only.
 
 ### Data Flow Diagram: Settings Override Channel *(new, 2026-08-16, Configurable Application Settings feature)*
 

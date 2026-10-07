@@ -1,4 +1,4 @@
-"""The settings allow-list (AR-28) -- the sole source of truth for which of the 40
+"""The settings allow-list (AR-28) -- the sole source of truth for which of the 50
 in-scope settings exist and what a valid value looks like. A name not in this dict
 has no code path to a value, secret or otherwise (NFR-CAS-2).
 
@@ -70,6 +70,7 @@ _EMBEDDING = "Embedding & Semantic Matching"
 _RECURRING = "Recurring Payments"
 _BACKUP = "Backup"
 _INGESTION = "Ingestion"
+_DUPLICATES = "Duplicate Statements"
 _API_ACCESS = "API & Access"
 _ASK_AI = "Ask AI"
 
@@ -111,13 +112,22 @@ _SPECS: tuple[SettingSpec, ...] = (
         "int", 5, min=1,
     ),
     SettingSpec(
+        "categorization_provider", (_WORKER,), "standard", _MATCHING,
+        "Where transactions are categorized. `local` uses the endpoint and model below (openrouter_base_url and "
+        "openrouter_model: OpenRouter or your own local model server). `gemini` uses Google's Gemini API with the same "
+        "key and model as statement extraction (gemini_model), at a small per-use cost; each transaction's description "
+        "and SGD amount is then sent to Google (statement PDFs already are, for extraction). A call that fails after "
+        "retries leaves the transaction UNSURE under either. Takes effect when the ingestion-worker restarts.",
+        "enum", "local", allowed_values=("local", "gemini"),
+    ),
+    SettingSpec(
         "openrouter_base_url", (_WORKER,), "advanced", _MATCHING,
-        "OpenAI-compatible endpoint used for transaction categorization -- OpenRouter's hosted API by default, or your own local model server (e.g. via host.docker.internal).",
+        "Used when categorization_provider is `local`: the OpenAI-compatible endpoint used for transaction categorization -- OpenRouter's hosted API by default, or your own local model server (e.g. via host.docker.internal).",
         "string", "https://openrouter.ai/api/v1", format="url",
     ),
     SettingSpec(
         "openrouter_model", (_WORKER,), "advanced", _MATCHING,
-        "The model your categorization endpoint actually serves -- e.g. a specific local model name when openrouter_base_url points at your own server.",
+        "Used when categorization_provider is `local`: the model your categorization endpoint actually serves -- e.g. a specific local model name when openrouter_base_url points at your own server.",
         "string", "openrouter/free", format="non_empty",
     ),
     SettingSpec(
@@ -152,18 +162,37 @@ _SPECS: tuple[SettingSpec, ...] = (
         "float", 0.05, min=0.0,
     ),
     SettingSpec(
+        "embedding_provider", (_WORKER,), "standard", _EMBEDDING,
+        "Where embeddings are computed. `local` uses the endpoint and model below (embedding_base_url and "
+        "embedding_model: your own embedding server; leave the endpoint empty to turn embeddings off). `gemini` uses "
+        "Google's Gemini API with the same key as statement extraction and the model in gemini_embedding_model, at a "
+        "very small per-use cost (a full set of your transactions is a few cents); each transaction's description, "
+        "direction and price range is then sent to Google. Embeddings from different models cannot be compared: after "
+        "switching, existing transactions are re-embedded in the background, and the two thresholds "
+        "(embedding_similarity_threshold and recategorization_auto_apply_threshold) should be set for the new model "
+        "(calibrated values: local 0.92 / 97, gemini 0.94 / 99). Takes effect when the ingestion-worker restarts.",
+        "enum", "local", allowed_values=("local", "gemini"),
+    ),
+    SettingSpec(
+        "gemini_embedding_model", (_WORKER,), "advanced", _EMBEDDING,
+        "Used when embedding_provider is `gemini`: the Gemini embedding model. gemini-embedding-2 returns normalised "
+        "vectors at the size set in embedding_dimensions (768 recommended); the older gemini-embedding-001 does not "
+        "normalise reduced sizes. A model's vectors are not comparable with another's, so changing this re-embeds everything.",
+        "string", "gemini-embedding-2", format="non_empty",
+    ),
+    SettingSpec(
         "embedding_base_url", (_WORKER,), "advanced", _EMBEDDING,
-        "Your local embedding model server's endpoint. Leave empty to disable embedding-based matching entirely -- falls back to fuzzy-text matching only, with no error.",
+        "Used when embedding_provider is `local`: your local embedding model server's endpoint. Leave empty to disable embedding-based matching entirely -- falls back to fuzzy-text matching only, with no error.",
         "string", "", format="url_or_empty",
     ),
     SettingSpec(
         "embedding_model", (_WORKER,), "advanced", _EMBEDDING,
-        "Model name your embedding server is actually running -- must match embedding_dimensions below.",
+        "Used when embedding_provider is `local`: the model name your embedding server is actually running -- must match embedding_dimensions below.",
         "string", "embeddinggemma-300m", format="non_empty",
     ),
     SettingSpec(
         "embedding_dimensions", (_WORKER,), "advanced", _EMBEDDING,
-        "Output vector size of your embedding model -- must match it exactly; used when creating the Qdrant collections.",
+        "Output vector size of your embedding model -- must match it exactly; used when creating the Qdrant collections. With `gemini` it is also the size requested from the model (768 recommended).",
         "int", 768, min=1,
     ),
     SettingSpec(
@@ -268,6 +297,27 @@ _SPECS: tuple[SettingSpec, ...] = (
         "The currency every transaction's converted amount is reported in across dashboards and exports.",
         "string", "SGD", format="currency_code",
     ),
+    # --- Duplicate Statements (Epic 14) ---
+    SettingSpec(
+        "duplicate_detection_enabled", (_WORKER,), "standard", _DUPLICATES,
+        "Whether the same statement saved as a different file is detected and skipped, and stored statements are "
+        "scanned for existing duplicates. Ships off: switch it on only after running the `check-duplicates` accuracy "
+        "check on your real statements. Decisions you have already made (a removed copy, an override) are honoured "
+        "either way. Takes effect when the ingestion-worker restarts.",
+        "enum", "false", allowed_values=("false", "true"),
+    ),
+    SettingSpec(
+        "duplicate_match_ratio", (_WORKER,), "standard", _DUPLICATES,
+        "A pair is a probable duplicate when at least this fraction of the SMALLER statement's transactions match "
+        "(0.50-1.00). Also decides whether two statements are the same size: removal is offered only for those.",
+        "float", 0.80, min=0.50, max=1.00,
+    ),
+    SettingSpec(
+        "duplicate_min_transactions", (_WORKER,), "advanced", _DUPLICATES,
+        "A statement with fewer transactions than this is never flagged on its transactions alone: its account "
+        "identifier and closing balance must match too.",
+        "int", 3, min=1, max=50,
+    ),
     # --- API & Access ---
     SettingSpec(
         "jwt_expiry_minutes", (_API,), "standard", _API_ACCESS,
@@ -317,4 +367,4 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 44, f"expected 44 settings, got {len(SETTINGS_BY_NAME)}"
+assert len(SETTINGS_BY_NAME) == 50, f"expected 50 settings, got {len(SETTINGS_BY_NAME)}"

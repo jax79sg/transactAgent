@@ -7,6 +7,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from transactagent_db.models import IngestionRun, IngestionRunStatus
 
+from api_service.duplicates import repository as duplicates_repository
+from api_service.duplicates import service as duplicates_service
 from api_service.errors import (
     IngestionRunAlreadyActiveError,
     NotFoundError,
@@ -60,6 +62,21 @@ def list_run_files(db: Session, run_id: UUID):
     if run is None:
         raise NotFoundError(f"Ingestion run {run_id} not found")
     return repository.list_files_for_run(db, run_id)
+
+
+def matched_statements_for(db: Session, files) -> dict:
+    """Epic 14 (AR-47): for each file skipped as a probable duplicate, the label of the statement it was
+    judged a duplicate of, keyed by comparison id. The matched side is the comparison side whose hash is the
+    remembered file's matched hash; the earlier side is the fallback when no remembered file is found."""
+    labels = {}
+    for comparison_id in {f.duplicate_comparison_id for f in files if f.duplicate_comparison_id is not None}:
+        comparison = duplicates_repository.get_comparison(db, comparison_id)
+        if comparison is None:
+            continue
+        known = duplicates_service.remembered_file(db, comparison)
+        matched_hash = known.matched_statement_hash if known is not None else comparison.earlier_content_hash
+        labels[comparison_id] = duplicates_service.label_for_hash(comparison, matched_hash)
+    return labels
 
 
 _MAX_LOG_LINES_PER_POLL = 500

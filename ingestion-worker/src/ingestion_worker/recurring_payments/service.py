@@ -7,6 +7,7 @@ lowest-priority branch (services.md addendum).
 import logging
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -258,16 +259,20 @@ def _merge_groups_via_embedding(groups: dict[str, list[Transaction]]) -> dict[st
         return groups
 
     representative: dict[str, Transaction] = {key: max(groups[key], key=lambda t: t.transaction_date) for key in keys}
-    representative_vector: dict[str, list[float] | None] = {
-        key: embedding_client.compute_embedding(
-            embedding_text.build_embedding_text(
-                representative[key].description,
-                _transaction_amount(representative[key]),
-                _transaction_direction(representative[key]),
-            )
+    texts = [
+        embedding_text.build_embedding_text(
+            representative[key].description,
+            _transaction_amount(representative[key]),
+            _transaction_direction(representative[key]),
         )
         for key in keys
-    }  # WR-29: price-bucketed text; WR-36: direction token
+    ]  # WR-29: price-bucketed text; WR-36: direction token
+    # One call per distinct merchant pattern (thousands after a backfill). Concurrent, bounded by embedding_concurrency
+    # like the backlog batch: with a cloud embedding endpoint (~0.5 s a call) one-at-a-time held the whole single-threaded
+    # worker for ~20 minutes every scan. executor.map preserves order, so vectors line up with `keys`.
+    with ThreadPoolExecutor(max_workers=settings.embedding_concurrency) as executor:
+        vectors = list(executor.map(embedding_client.compute_embedding, texts))
+    representative_vector: dict[str, list[float] | None] = dict(zip(keys, vectors, strict=True))
 
     parent = {key: key for key in keys}
 
