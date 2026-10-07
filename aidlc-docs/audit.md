@@ -3625,6 +3625,27 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 
 ---
 
+## Epics 13 and 14 Merged (PR #25)
+**Timestamp**: 2026-10-07T04:54:25Z
+**User Input**: "Ok. Merge, commit and push."
+**AI Response**: "Checked PR #25 first: not a draft, mergeable, merge state CLEAN, all 17 checks green (lint and tests for API, worker, database, frontend and model training; Docker builds; CodeQL; gitleaks; GitGuardian; dependency scan), and the branch head (af7652b) equal to the pushed head. Merged with a merge commit, the repository's convention (merge commit f72fa89 on main, 2026-10-07T04:54:01Z). Everything of this work was already committed and pushed; the local main branch was fast-forwarded to f72fa89 without switching branches. NOT committed, deliberately: the unrelated working-tree changes from the shelved classifier work (model-training/pyproject.toml, model-training/src/model_training/repository.py, classifier_dataset.py, classifier_train.py, deploy/, and large generated datasets, outputs, backups and a virtual environment under model-training/); they are not part of this PR, and the generated data and venv do not belong in the repository. This record is committed on its own branch (docs/record-epic-13-14-merge) for a small docs PR, not merged, because main takes changes through pull requests only."
+**Context**: Epics 13 (Account Balance) and 14 (Probable Duplicate Statement Detection) are on main and deployed. Open for the user: the 1,093 changed automatic categories, the Mac's power settings, the SEEEDSTUDIO amount, 16 zero-transaction PDFs, the pending duplicate pairs.
+
+---
+
+## Classifier Work Discarded
+**Timestamp**: 2026-10-07T04:56:45Z
+**User Input**: "Let's discard the classifier work for now, it's not getting us anywhere."
+**AI Response**: "Looked at every target before touching it. Tracked edits (never committed): model-training/pyproject.toml (moved mlx-tune and clearml out of the core dependencies into a lora group and added a classifier group) and model-training/src/model_training/repository.py (added find_all_confidently_categorized_transactions). Untracked: classifier_dataset.py, classifier_train.py, classifier_dataset, classifier_dataset_v2, classifier_dataset_v3, classifier_output_v1 to v4 (about 510 MB each), dataset_backups (a 631 KB baseline export of transactions from 2026-08-30) and the .venv-classifier virtual environment (1.3 GB). DONE: moved all of those to ~/.Trash/transactagent-classifier-work-2026-10-07 together with a patch of the two tracked edits (tracked-changes.patch), then restored the two tracked files to the committed (main) versions. Nothing was permanently deleted: the Trash holds 3.3 GB and the work is recoverable until it is emptied. NOT touched: deploy/helm/transactagent/values-local.yaml, because it is unrelated to the classifier (a local Helm override file from 2026-08-22); it is untracked yet its own header says it is gitignored, so a stray commit of it is possible. No tracked file or committed code referenced the classifier files. The memory note on the shelved classifier was updated."
+**Context**: Housekeeping; the working tree now has only the unrelated deploy/ file as untracked. Recorded on the docs branch of PR #26 (not merged).
+
+---
+
+## Local Helm Values File Added to .gitignore
+**Timestamp**: 2026-10-07T06:36:46Z
+**User Input**: "ok add it."
+**AI Response**: "Added the pattern values-local.yaml to .gitignore, on the docs branch of PR #26 (not merged), so it reaches main by pull request. Before the change git check-ignore found no rule matching deploy/helm/transactagent/values-local.yaml (the file's own header claims it is gitignored, but no rule existed) and no Helm chart is tracked on main. The pattern is deliberately name-based, so any future local values file is covered wherever it sits. The file itself was not moved or edited, and it contains no secrets (its header says they go through Vault), only non-secret IDs and local endpoints."
+**Context**: Housekeeping; follows the discard of the classifier work.
 ## Issue #23 (Not All Table Columns Can Be Sorted): PR #24 Completed
 **Timestamp**: 2026-10-07T13:42:50Z
 **User Input**: "ok with all the recommended decisions."
