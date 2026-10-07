@@ -58,6 +58,9 @@ _SORT_COLUMNS = {
     "date": Transaction.transaction_date,
     "amount": func.coalesce(Transaction.out_flow, Transaction.in_flow),
     "bank": Transaction.bank_name,
+    # Issue #23: alphabetical whatever the case ("Grab" beside "GRAB"), not the database's byte order.
+    "description": func.lower(Transaction.description),
+    "converted": Transaction.converted_amount_sgd,
 }
 
 
@@ -67,7 +70,13 @@ def _apply_sort(stmt: Select, query) -> Select:
         stmt = stmt.join(Category, Transaction.category_id == Category.id, isouter=True) if query.category is None else stmt
     else:
         column = _SORT_COLUMNS[query.sort_by]
-    return stmt.order_by(column.desc() if query.sort_dir == "desc" else column.asc())
+    primary = column.desc() if query.sort_dir == "desc" else column.asc()
+    if query.sort_by == "converted":
+        primary = primary.nulls_last()  # no converted amount (no exchange rate) sorts after every amount, either way
+    # A column full of repeats (every "NTUC FAIRPRICE", every row of one bank) leaves the database free to return
+    # tied rows in any order, so page 2 could repeat or skip rows of page 1. Newest first, then id, makes the whole
+    # order total and each page the next slice of the same list.
+    return stmt.order_by(primary, Transaction.transaction_date.desc(), Transaction.id.asc())
 
 
 def query_transactions(db: Session, query, page: int, page_size: int) -> tuple[list[Transaction], int]:
