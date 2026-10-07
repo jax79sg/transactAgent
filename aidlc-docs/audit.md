@@ -3672,3 +3672,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Merging and release; deployment follows in a separate entry once done.
 
 ---
+
+## Release 1.1.0 Deployed
+**Timestamp**: 2026-10-07T13:59:31Z
+**User Input**: "go ahead" (the plan agreed above: merge the four pull requests, cut 1.1.0, deploy it)
+**AI Response**: "Merged the release pull request (#31, 0466e33), then deployed main to the live stack. BEFORE: no ingestion run, recategorization job or removal job active and no embeddings pending (a worker restart fails a run in progress); database at migration 0020; backup taken with pg_dump to data/backups/pre-release-1.1.0-20261007T135756Z.dump (924 KB; pg_restore lists 29 tables of data including bank_statements and transactions). DEPLOY: docker compose up -d --build (API, worker and frontend rebuilt and recreated; database and vector store untouched, still up 45 hours). AFTER: all five containers healthy; migration 0021 applied; 7,230 transactions and 188 statements intact; GET /version returns 1.1.0 on localhost and on the LAN address 192.168.50.41; /app/VERSION in the API container reads 1.1.0; the frontend bundle contains 1.1.0; the worker logs 'Ingestion worker 1.1.0 started'; the API log shows no errors. LIVE PROOF of the new ledger: one real embedding call through the live worker (provider gemini, gemini-embedding-2, 768 dimensions) left exactly one row in the live model_usage table (14 estimated tokens, \$0.00000280). That row is a real, correctly priced call (a deployment check), so it is part of the user's real spend history, about a thousandth of a cent. GUIDE PUBLISHED: GitHub Pages (main, /docs) serves the latest guide, releases.html, v1.0.0/ and v1.1.0/ (HTTP 200 each). Scratch demo servers and database removed. NOT DONE: no git tag or GitHub release was created (RELEASING.md step 4 says to tag the merge commit; the user did not ask, and a tag is public); the nightly Playwright suite was not run; the Costs page itself was not opened in the live app because that needs the user's login, which the assistant does not have."
+**Context**: Release and deployment; the live app now shows its release number and has the Costs page.
+
+---

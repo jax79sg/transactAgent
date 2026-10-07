@@ -622,4 +622,4 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## Release 1.1.0 and the Merge of PRs #24, #26, #29, #30 (2026-10-07, user: "go ahead")
 - [x] Merged in order: #26 docs, #24 sortable Description and Converted (SGD), #29 Costs page, #30 release numbers and the versioned guide.
 - [x] Release 1.1.0: `VERSION` = 1.1.0; guide updated with the Costs page and retaken screenshots; `docs/v1.1.0/` cut; `docs/v1.0.0/` kept as released.
-- [ ] Deploy 1.1.0 to the live stack (see `audit.md`).
+- [x] Deployed 1.1.0 to the live stack (2026-10-07; see `audit.md`): backup `data/backups/pre-release-1.1.0-20261007T135756Z.dump`, migration 0021 applied, a real embedding call recorded in the live ledger, the guide published on GitHub Pages.
