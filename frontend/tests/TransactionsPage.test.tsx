@@ -176,6 +176,56 @@ describe("TransactionsPage column sorting (issue #10)", () => {
   });
 });
 
+describe("TransactionsPage sorts by description and converted amount (issue #23)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function setUpPage() {
+    vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listBanks").mockResolvedValue([]);
+    const listSpy = vi.spyOn(transactionsApi, "listTransactions").mockImplementation(async (filter) => {
+      return pageOf(filter.page ?? 1);
+    });
+    renderTransactionsPage();
+    return listSpy;
+  }
+
+  it.each([
+    ["description", "sort-description"],
+    ["converted", "sort-converted"],
+  ])("clicking the %s header sorts by it, ascending first, then flips", async (sortBy, testId) => {
+    const user = userEvent.setup();
+    const listSpy = setUpPage();
+
+    await waitFor(() => expect(screen.getByTestId(testId)).toBeInTheDocument());
+    await user.click(screen.getByTestId(testId));
+    await waitFor(() => {
+      expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy, sortDir: "asc", page: 1 }));
+    });
+    expect(screen.getByTestId(testId)).toHaveAttribute("aria-sort", "ascending");
+
+    await user.click(screen.getByTestId(testId));
+    await waitFor(() => {
+      expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy, sortDir: "desc" }));
+    });
+    expect(screen.getByTestId(testId)).toHaveAttribute("aria-sort", "descending");
+  });
+
+  it("makes only the clicked column the active one", async () => {
+    const user = userEvent.setup();
+    setUpPage();
+
+    await waitFor(() => expect(screen.getByTestId("sort-description")).toBeInTheDocument());
+    await user.click(screen.getByTestId("sort-description"));
+    await waitFor(() => expect(screen.getByTestId("sort-description")).toHaveAttribute("aria-sort", "ascending"));
+
+    for (const other of ["sort-date", "sort-bank", "sort-category", "sort-converted"]) {
+      expect(screen.getByTestId(other)).toHaveAttribute("aria-sort", "none");
+    }
+  });
+});
+
 describe("TransactionsPage bank and category filters", () => {
   afterEach(() => {
     vi.restoreAllMocks();

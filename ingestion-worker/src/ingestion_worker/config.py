@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # verified against the real failing statement (3/3 clean runs, 0 invalid dates) to
     # not exhibit this -- see aidlc-docs/audit.md.
     gemini_model: str = "gemini-3.5-flash-lite"
+    # Issue #28 (Model Cost Page): what a Gemini call costs, in USD per million tokens, used to price each call as it
+    # is recorded (transactagent_db.model_usage). Google's price list for gemini-3.5-flash-lite and gemini-embedding-2
+    # as checked 2026-10-07; change them together with gemini_model / gemini_embedding_model.
+    gemini_input_price_per_million_usd: float = 0.30
+    gemini_output_price_per_million_usd: float = 2.50
+    gemini_embedding_price_per_million_usd: float = 0.20
     openrouter_model: str = "openrouter/free"
     # The categorization LLM client (openrouter_client.py) uses the `openai` SDK
     # pointed at this base_url, so it works against any OpenAI-compatible chat

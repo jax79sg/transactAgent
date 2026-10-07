@@ -14,7 +14,7 @@ export interface CategoryRef {
 export type CategorySourceValue = "similarity" | "llm" | "manual" | "unsure";
 export type FlowDirection = "in" | "out";
 export type GroupByOption = "category" | "bank" | "month" | "categorySource";
-export type SortByOption = "date" | "amount" | "category" | "bank";
+export type SortByOption = "date" | "amount" | "category" | "bank" | "description" | "converted";
 export type SortDir = "asc" | "desc";
 
 export interface TransactionDTO {
@@ -540,3 +540,50 @@ export interface ScanStatus {
   detectionEnabled: boolean;
 }
 
+
+/** Issue #28 (Costs page) -- matches api_service/costs/schemas.py. Money is US dollars (what Google bills), sent as
+ * decimal strings; never mixed with the SGD figures elsewhere in the app. */
+export type CostGranularity = "day" | "week" | "month";
+export type CostGroupBy = "none" | "purpose" | "model";
+
+export interface CostFilterState {
+  dateFrom: string;
+  dateTo: string;
+  granularity: CostGranularity;
+  groupBy: CostGroupBy;
+  /** The viewer's IANA time zone, so a "day" is the viewer's own calendar day. */
+  timezone: string;
+}
+
+export interface CostFigures {
+  costUsd: string;
+  inputTokens: number;
+  outputTokens: number;
+  calls: number;
+  /** How many of `calls` have token counts that are estimates (embeddings -- Google reports none). */
+  estimatedCalls: number;
+}
+
+export interface CostPoint extends CostFigures {
+  /** The day, the Monday of the week, or the first of the month (YYYY-MM-DD). */
+  period: string;
+  group: string;
+}
+
+export interface CostGroupTotal extends CostFigures {
+  group: string;
+}
+
+export interface CostsResponse {
+  currency: "USD";
+  dateFrom: string;
+  dateTo: string;
+  granularity: CostGranularity;
+  groupBy: CostGroupBy;
+  timezone: string;
+  /** Every period in the range, including those with no spend, so a chart has no gaps. */
+  periods: string[];
+  totals: CostFigures;
+  series: CostPoint[];
+  groups: CostGroupTotal[];
+}

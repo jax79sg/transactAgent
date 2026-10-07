@@ -12,6 +12,7 @@ from google.genai import errors as genai_errors
 
 from api_service.config import settings
 from api_service.errors import AiServiceUnavailableError
+from api_service.usage import record_ask_ai_call
 
 
 def _client() -> genai.Client:
@@ -26,6 +27,7 @@ def ask_gemini(prompt: str, model: str | None = None) -> str:
     try:
         client = _client()
         response = client.models.generate_content(model=model, contents=prompt)
+        record_ask_ai_call(model, response)  # issue #28; never raises
         return response.text
     except genai_errors.APIError as exc:
         raise AiServiceUnavailableError(f"AI assistant call failed: {exc}") from exc

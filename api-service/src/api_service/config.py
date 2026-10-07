@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     gemini_api_key: str
     gemini_model: str = "gemini-3.5-flash-lite"
     ai_assistant_max_transactions: int = 3000
+    # Issue #28 (Model Cost Page): USD per million tokens, used to price each Ask AI call as it is recorded, and read
+    # by the worker too (same names, same override file) for its own calls -- see the worker's config.py.
+    gemini_input_price_per_million_usd: float = 0.30
+    gemini_output_price_per_million_usd: float = 2.50
+    gemini_embedding_price_per_million_usd: float = 0.20
 
     # Epic 8 (Recurring Payments): AR-15's due-soon lead window -- how many days
     # before an upcoming due date (or before the next cycle, once the current one
@@ -126,6 +131,7 @@ class Settings(BaseSettings):
     categorization_provider: str = "local"  # display-only mirror of the worker's (2026-10-05)
     embedding_provider: str = "local"  # display-only mirror of the worker's (2026-10-05)
     gemini_embedding_model: str = "gemini-embedding-2"
+    gemini_embedding_price_per_million_usd: float = 0.20  # display-only mirror of the worker's (issue #28)
     openrouter_model: str = "openrouter/free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     backup_schedule_hour: int = 2

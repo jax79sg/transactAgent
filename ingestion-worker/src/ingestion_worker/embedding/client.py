@@ -17,6 +17,7 @@ from openai import OpenAI
 
 from ingestion_worker.clients.openrouter_client import GEMINI_OPENAI_BASE_URL
 from ingestion_worker.config import settings
+from ingestion_worker.usage import record_embedding_call
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,10 @@ def compute_embedding(text: str) -> list[float] | None:
     try:
         response = _client().embeddings.create(**request)
         vector = response.data[0].embedding
+        if provider.name == "gemini":
+            # Issue #28 (Costs page): the call succeeded and is billed, whatever is then thought of the vector. Gemini
+            # reports no usage here, so the tokens are estimated from the text actually sent. Never raises.
+            record_embedding_call(provider.model, request["input"])
     except Exception:
         # with no retry (contrast clients/retry.py's TransientError-only retry scope).
         logger.info("Embedding computation unavailable (endpoint unreachable or errored)", exc_info=True)

@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
+from transactagent_db.model_usage import PURPOSE_CATEGORIZATION
 
 from ingestion_worker.clients.retry import TransientError, retry_with_backoff
 from ingestion_worker.config import settings
+from ingestion_worker.usage import record_openai_call
 
 _UNKNOWN_AMOUNT = "unknown"
 
@@ -51,6 +53,12 @@ def _provider() -> _Provider:
     if settings.categorization_provider == "gemini":
         return _Provider("gemini", GEMINI_OPENAI_BASE_URL, settings.gemini_api_key, settings.gemini_model)
     return _Provider("local", settings.openrouter_base_url, settings.openrouter_api_key, settings.openrouter_model)
+
+
+def _record_if_cloud(model: str, response) -> None:
+    """Issue #28 (Costs page): only the cloud provider costs money, so only its calls are recorded (MC-5)."""
+    if _provider().name == "gemini":
+        record_openai_call(PURPOSE_CATEGORIZATION, model, response)
 
 
 def _client() -> OpenAI:
@@ -94,6 +102,7 @@ def classify_description(
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
         )
+        _record_if_cloud(model, response)
         return (response.choices[0].message.content or "").strip()
     except APIStatusError as exc:
         if exc.status_code in _TRANSIENT_STATUS_CODES:
@@ -160,6 +169,7 @@ def classify_descriptions_batch(
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
         )
+        _record_if_cloud(model, response)
         return (response.choices[0].message.content or "").strip()
     except APIStatusError as exc:
         if exc.status_code in _TRANSIENT_STATUS_CODES:

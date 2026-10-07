@@ -6,9 +6,11 @@ asking it to both read the page and extract structured transaction data in one c
 
 from google import genai
 from google.genai import errors as genai_errors
+from transactagent_db.model_usage import PURPOSE_STATEMENT_EXTRACTION
 
 from ingestion_worker.clients.retry import TransientError, retry_with_backoff
 from ingestion_worker.config import settings
+from ingestion_worker.usage import record_genai_call
 
 _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -49,6 +51,7 @@ def extract_statement_raw(page_images: list[bytes], prompt: str, model: str | No
         parts = [genai.types.Part.from_bytes(data=img, mime_type="image/png") for img in page_images]
         parts.append(prompt)
         response = client.models.generate_content(model=model, contents=parts)
+        record_genai_call(PURPOSE_STATEMENT_EXTRACTION, model, response)  # issue #28; never raises
         return response.text
     except genai_errors.APIError as exc:
         status_code = getattr(exc, "code", None)

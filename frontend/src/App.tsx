@@ -4,6 +4,7 @@ import { ProtectedLayout } from "./components/ProtectedLayout";
 import { AuthProvider } from "./context/AuthContext";
 import { AskAiPage } from "./pages/AskAiPage";
 import { ComparisonPage } from "./pages/ComparisonPage";
+import { CostsPage } from "./pages/CostsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { IngestionPage } from "./pages/IngestionPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -23,6 +24,7 @@ export function App() {
             <Route path="/ask-ai" element={<AskAiPage />} />
             <Route path="/ingestion" element={<IngestionPage />} />
             <Route path="/review" element={<ReviewPage />} />
+            <Route path="/costs" element={<CostsPage />} />
             <Route path="/duplicates/:comparisonId" element={<ComparisonPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

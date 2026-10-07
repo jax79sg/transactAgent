@@ -22,6 +22,7 @@ A self-hosted, single-user web app that pulls your bank statement PDFs from a pr
 - **Multi-currency**: converts everything to SGD for dashboards, using the statement's own printed conversion when available, a public FX-rate API otherwise — original amounts always retained
 - **Dashboards**: category spending trends, income vs. expenses, per-bank breakdowns
 - **Ask AI**: ask a plain-language question about your own transaction history (e.g. "is this $33,000 outflow likely a transfer to my credit account?") and get an answer grounded in your real transaction data — scoped to a date range you pick, or your whole history. Each transaction also has a one-click "Ask AI" shortcut with a suggested question pre-filled.
+- **Costs**: what the app has spent on Google's Gemini models (statement extraction, categorization, embeddings, Ask AI), in US dollars, by day, week or month, optionally grouped by purpose or model — priced from each call's token count and the prices in Settings
 
 ## Architecture
 
