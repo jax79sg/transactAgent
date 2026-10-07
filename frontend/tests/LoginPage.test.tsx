@@ -7,6 +7,7 @@ import * as authApi from "../src/api/auth";
 import { ApiError } from "../src/api/client";
 import { AuthProvider } from "../src/context/AuthContext";
 import { LoginPage } from "../src/pages/LoginPage";
+import { appVersion } from "../src/version";
 
 vi.mock("../src/api/auth");
 
@@ -24,6 +25,12 @@ describe("LoginPage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     sessionStorage.clear();
+  });
+
+  it("shows which release it is, before anyone has signed in (issue #27)", () => {
+    renderLoginPage();
+
+    expect(screen.getByTestId("login-version")).toHaveTextContent(`Version ${appVersion}`);
   });
 
   it("disables submit until both fields are filled", async () => {

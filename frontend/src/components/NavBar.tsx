@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 import { getActivitySummary } from "../api/backgroundActivity";
 import { getPendingPairCount } from "../api/duplicates";
@@ -9,6 +9,7 @@ import { getRecurringPaymentsStatus } from "../api/recurringPayments";
 import type { BackgroundJobType } from "../api/types";
 import { useAuth } from "../context/AuthContext";
 import { useTheme, type Theme } from "../context/ThemeContext";
+import { appVersion } from "../version";
 
 const LINKS = [
   { to: "/", label: "Dashboard" },
@@ -218,6 +219,15 @@ export function NavBar() {
         ))}
       </div>
       <div className="flex shrink-0 items-center gap-4">
+        {/* Issue #27: the release is always visible; it links to the About card on Settings. */}
+        <Link
+          to="/settings#about"
+          data-testid="app-version"
+          title="About this release"
+          className="text-xs text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
+        >
+          v{appVersion}
+        </Link>
         <ActivityIndicator />
         <ThemeToggle />
         <button

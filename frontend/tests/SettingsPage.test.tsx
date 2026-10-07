@@ -6,12 +6,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as categoriesApi from "../src/api/categories";
 import * as driveConnectApi from "../src/api/driveConnect";
 import * as settingsApi from "../src/api/settings";
+import * as versionApi from "../src/api/version";
 import type { SettingDTO } from "../src/api/types";
+import { RELEASES_URL, guideUrlFor } from "../src/lib/guideLinks";
 import { SettingsPage } from "../src/pages/SettingsPage";
+import { appVersion } from "../src/version";
 
 vi.mock("../src/api/categories");
 vi.mock("../src/api/driveConnect");
 vi.mock("../src/api/settings");
+vi.mock("../src/api/version");
 
 const SIMILARITY_THRESHOLD_SETTING: SettingDTO = {
   name: "similarity_threshold",
@@ -49,7 +53,11 @@ const DUPLICATE_SWITCH_SETTING: SettingDTO = {
   allowedValues: ["false", "true"],
 };
 
-function renderSettingsPage(settings: SettingDTO[] = [SIMILARITY_THRESHOLD_SETTING, EMBEDDING_BASE_URL_SETTING]) {
+function renderSettingsPage(
+  settings: SettingDTO[] = [SIMILARITY_THRESHOLD_SETTING, EMBEDDING_BASE_URL_SETTING],
+  initialEntry = "/settings",
+  serverVersion: () => Promise<{ version: string }> = () => Promise.resolve({ version: appVersion }),
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
   // Default, always-on mock -- ApplicationSettingsSection's list query runs
@@ -57,9 +65,10 @@ function renderSettingsPage(settings: SettingDTO[] = [SIMILARITY_THRESHOLD_SETTI
   // ReviewPage.test.tsx's beforeEach default for DisagreementTable's always-on query.
   vi.spyOn(settingsApi, "listSettings").mockResolvedValue(settings);
   vi.spyOn(settingsApi, "listSettingHistory").mockResolvedValue([]);
+  vi.spyOn(versionApi, "getServerVersion").mockImplementation(serverVersion);
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <SettingsPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -279,5 +288,76 @@ describe("SettingsPage enumerated settings (Epic 14 on/off switch)", () => {
 
     await waitFor(() => expect(settingsApi.updateSetting).toHaveBeenCalledWith("duplicate_detection_enabled", "true"));
     await waitFor(() => expect(screen.getByTestId("restart-command")).toHaveTextContent("docker restart transactagent-worker"));
+  });
+});
+
+
+describe("SettingsPage About card (issue #27)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows the release of the interface and of the server", async () => {
+    renderSettingsPage();
+
+    expect(screen.getByTestId("about-interface-version")).toHaveTextContent(`v${appVersion}`);
+    await waitFor(() => expect(screen.getByTestId("about-server-version")).toHaveTextContent(`v${appVersion}`));
+  });
+
+  it("says nothing about a mismatch when the two agree", async () => {
+    renderSettingsPage();
+    await waitFor(() => expect(screen.getByTestId("about-server-version")).toHaveTextContent(`v${appVersion}`));
+
+    expect(screen.queryByTestId("about-version-mismatch")).not.toBeInTheDocument();
+  });
+
+  it("warns, naming both releases, when the server is on a different one", async () => {
+    renderSettingsPage(undefined, "/settings", () => Promise.resolve({ version: "9.9.9" }));
+
+    const warning = await screen.findByTestId("about-version-mismatch");
+    expect(warning).toHaveTextContent(`interface (v${appVersion})`);
+    expect(warning).toHaveTextContent("server (v9.9.9)");
+    expect(screen.getByTestId("about-server-version")).toHaveTextContent("v9.9.9");
+  });
+
+  it("says the server's release is unavailable when it cannot be read, without crying mismatch", async () => {
+    renderSettingsPage(undefined, "/settings", () => Promise.reject(new Error("down")));
+
+    await waitFor(() => expect(screen.getByTestId("about-server-version")).toHaveTextContent("unavailable"));
+    expect(screen.queryByTestId("about-version-mismatch")).not.toBeInTheDocument();
+  });
+
+  it("says it is checking while the server has not yet answered, without crying mismatch", async () => {
+    renderSettingsPage(undefined, "/settings", () => new Promise(() => {}));
+
+    expect(screen.getByTestId("about-server-version")).toHaveTextContent("checking...");
+    expect(screen.queryByTestId("about-version-mismatch")).not.toBeInTheDocument();
+  });
+
+  it("links to this release's own guide and to the list of all releases, in a new tab", async () => {
+    renderSettingsPage();
+
+    const guide = screen.getByTestId("about-guide-link");
+    expect(guide).toHaveAttribute("href", guideUrlFor(appVersion));
+    expect(guide).toHaveTextContent(`User guide for v${appVersion}`);
+    expect(guide).toHaveAttribute("target", "_blank");
+    expect(guide).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(screen.getByTestId("about-releases-link")).toHaveAttribute("href", RELEASES_URL);
+  });
+
+  it("scrolls into view when reached from the nav bar's version label", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderSettingsPage(undefined, "/settings#about");
+
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    expect(scroll.mock.contexts[0]).toBe(screen.getByTestId("about-card"));
+  });
+
+  it("does not scroll when Settings is opened normally", async () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    renderSettingsPage();
+    await waitFor(() => expect(screen.getByTestId("about-server-version")).toHaveTextContent(`v${appVersion}`));
+
+    expect(scroll).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 from transactagent_db.migrate import run_migrations_with_lock
+from transactagent_db.version import app_version
 
 from ingestion_worker.backup import service as backup_service
 from ingestion_worker.config import settings
@@ -153,7 +154,7 @@ async def run_forever() -> None:
     recover_stale_state()
     vector_store.ensure_collections()  # Epic 9: best-effort, never blocks startup (NFR Design)
 
-    logger.info("Ingestion worker started, polling every %ss", settings.poll_interval_seconds)
+    logger.info("Ingestion worker %s started, polling every %ss", app_version(), settings.poll_interval_seconds)
     while True:
         touch_heartbeat()
         try:
