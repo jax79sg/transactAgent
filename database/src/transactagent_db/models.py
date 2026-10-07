@@ -876,6 +876,38 @@ class SettingChange(Base):
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ModelUsage(Base):
+    """Issue #28 (Model Cost Page, 2026-10-07) -- one row per successful call to a paid cloud model (today:
+    Gemini, from statement extraction, categorisation, embeddings and Ask AI), written by whichever service made
+    the call, read by the API's /costs endpoint. Append-only and standalone (no foreign key to anything), same shape
+    as BackupRun/SettingChange: it records what was spent, whether or not the work that spent it later succeeded.
+
+    `purpose` and `provider` are plain strings validated by the writing code (transactagent_db.model_usage), not
+    database enums, so a new purpose or provider is a code change and not an ALTER TYPE. `cost_usd` is worked out
+    when the call is made from the prices in Settings at that moment and stored (MC-2): changing a price later
+    never rewrites history; the token counts are kept too so a cost can be recomputed. `tokens_estimated` is true
+    where the provider reported no usage (Gemini's embeddings endpoint) and the count is an estimate (MC-3).
+    """
+
+    __tablename__ = "model_usage"
+    __table_args__ = (
+        CheckConstraint("input_tokens >= 0 AND output_tokens >= 0", name="ck_model_usage_tokens_non_negative"),
+        CheckConstraint("cost_usd >= 0", name="ck_model_usage_cost_non_negative"),
+        Index("ix_model_usage_occurred_at", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    tokens_estimated: Mapped[bool] = mapped_column(nullable=False, default=False, server_default=text("false"))
+    # 8 decimal places: one embedding call costs a few millionths of a dollar and must not round to zero.
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(18, 8), nullable=False)
+
+
 class Account(Base):
     """Epic 13 (Account Balance at a Point in Time, added 2026-10-02) -- a real-world
     account the user holds, created automatically from statement headers (FR-AB-1/2)

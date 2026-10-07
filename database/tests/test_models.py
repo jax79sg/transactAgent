@@ -41,6 +41,7 @@ from transactagent_db.models import (
     IngestionRunFileOutcome,
     KnownFile,
     KnownFileState,
+    ModelUsage,
     RecategorizationJob,
     RecategorizationProposal,
     RecategorizationProposalSourceBucket,
@@ -2354,3 +2355,73 @@ class TestEpic14ReferencesByHash:
         Table("unrelated", metadata, Column("id", Integer, primary_key=True))
 
         assert _dependents_of(metadata, {"parent"}) == {"child", "grandchild"}
+
+
+class TestModelUsage:
+    """Issue #28 (Model Cost Page): the standalone spend ledger. No foreign key to anything -- a row records money
+    already spent, whatever later happened to the work that spent it."""
+
+    @staticmethod
+    def _row(**overrides) -> ModelUsage:
+        fields = {
+            "purpose": "categorization", "provider": "gemini", "model": "gemini-3.5-flash-lite",
+            "input_tokens": 1200, "output_tokens": 40, "cost_usd": Decimal("0.00046000"),
+        }
+        fields.update(overrides)
+        return ModelUsage(**fields)
+
+    def test_a_row_is_valid_and_defaults_its_time_and_estimate_flag(self, db_session):
+        row = self._row()
+        db_session.add(row)
+        db_session.flush()
+
+        assert row.occurred_at is not None
+        assert row.tokens_estimated is False
+        assert row.id is not None
+
+    def test_the_flag_for_estimated_tokens_round_trips(self, db_session):
+        row = self._row(purpose="embedding", tokens_estimated=True)
+        db_session.add(row)
+        db_session.flush()
+        db_session.expire(row)
+
+        assert row.tokens_estimated is True
+
+    def test_a_cost_of_a_few_millionths_of_a_dollar_is_not_rounded_away(self, db_session):
+        """One embedding call costs about this much; the column must keep it."""
+        row = self._row(purpose="embedding", cost_usd=Decimal("0.00000400"))
+        db_session.add(row)
+        db_session.flush()
+        db_session.expire(row)
+
+        assert row.cost_usd == Decimal("0.00000400")
+
+    def test_a_free_call_with_zero_cost_is_valid(self, db_session):
+        db_session.add(self._row(input_tokens=0, output_tokens=0, cost_usd=Decimal(0)))
+        db_session.flush()  # should not raise
+
+    @pytest.mark.parametrize("field", ["input_tokens", "output_tokens"])
+    def test_negative_token_counts_are_rejected(self, db_session, field):
+        db_session.add(self._row(**{field: -1}))
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_a_negative_cost_is_rejected(self, db_session):
+        db_session.add(self._row(cost_usd=Decimal("-0.01")))
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    @pytest.mark.parametrize("field", ["purpose", "provider", "model", "input_tokens", "output_tokens", "cost_usd"])
+    def test_every_descriptive_field_is_required(self, db_session, field):
+        db_session.add(self._row(**{field: None}))
+        with pytest.raises(IntegrityError):
+            db_session.flush()
+
+    def test_a_token_count_beyond_32_bits_is_storable(self, db_session):
+        """A long backfill sums to billions of tokens; the count column must not be a 32-bit integer."""
+        row = self._row(input_tokens=5_000_000_000)
+        db_session.add(row)
+        db_session.flush()  # should not raise
+
+    def test_the_table_has_no_foreign_keys(self):
+        assert not ModelUsage.__table__.foreign_keys

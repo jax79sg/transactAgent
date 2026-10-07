@@ -16,6 +16,7 @@ const LINKS = [
   { to: "/ask-ai", label: "Ask AI" },
   { to: "/ingestion", label: "Ingestion" },
   { to: "/review", label: "Review" },
+  { to: "/costs", label: "Costs" },
   { to: "/settings", label: "Settings" },
 ];
 

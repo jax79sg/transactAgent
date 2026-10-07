@@ -6,6 +6,15 @@ from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 from transactagent_db.models import Base
 
+# api_service.config.Settings requires these env vars at import time -- set here, at collection, so a test module
+# can import api_service at its own top level (it used to be set by the engine fixture, i.e. only once a test ran).
+os.environ.setdefault("DB_USER", "test")
+os.environ.setdefault("DB_PASSWORD", "test")
+os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-prod")
+os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
+os.environ.setdefault("GOOGLE_OAUTH_CLIENT_SECRET", "test-client-secret")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+
 
 @pytest.fixture(scope="session")
 def postgres_container():
@@ -16,13 +25,6 @@ def postgres_container():
 @pytest.fixture(scope="session")
 def engine(postgres_container):
     url = postgres_container.get_connection_url().replace("psycopg2", "psycopg")
-    # api_service.config.Settings requires these env vars at import time
-    os.environ.setdefault("DB_USER", "test")
-    os.environ.setdefault("DB_PASSWORD", "test")
-    os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-prod")
-    os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
-    os.environ.setdefault("GOOGLE_OAUTH_CLIENT_SECRET", "test-client-secret")
-    os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
     engine = create_engine(url)
     Base.metadata.create_all(engine)
     yield engine
@@ -89,3 +91,15 @@ def settings_override_path(tmp_path, monkeypatch):
     path = str(tmp_path / "settings.env")
     monkeypatch.setattr(settings_service_module, "SETTINGS_OVERRIDE_FILE", path)
     return path
+
+
+@pytest.fixture(autouse=True)
+def recorded_usage(monkeypatch):
+    """Issue #28 (Costs page): Ask AI records what its paid call cost. No test may reach a real database through that,
+    so the recorder is replaced by a collector for every test; a test reads the list to see what would have been
+    recorded, and the tests of the recorder itself put the real one back."""
+    from api_service import usage
+
+    collected: list[dict] = []
+    monkeypatch.setattr(usage, "record_model_usage", lambda session_factory, **fields: collected.append(fields))
+    return collected

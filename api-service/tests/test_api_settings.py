@@ -10,7 +10,7 @@ class TestListSettingsApi:
         response = client.get("/settings", headers=auth_headers)
         assert response.status_code == 200
         body = response.json()
-        assert len(body) == 50
+        assert len(body) == 53
         names = {s["name"] for s in body}
         assert "similarity_threshold" in names
         assert "embedding_similarity_threshold" in names

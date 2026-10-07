@@ -610,3 +610,7 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## Issue-Driven Change: Sortable Description and Converted Columns (GitHub issue #23, PR #24 completed 2026-10-07)
 - [x] Fix — PR #24 (an earlier automated change) completed: URL state allow-list, case-insensitive description order, total ordering for stable paging, Converted (SGD) sortable; API 391 tests, frontend 226, 10 mutation checks all caught. Detail in `audit.md`.
 - [ ] Review and merge — PR #24 open, NOT merged. Review-page proposal columns (Description, Current category, Proposed category) remain unsortable (needs backend sorting); offered as a follow-up.
+## Issue-Driven Change: Model Cost Page (GitHub issue #28, 2026-10-07)
+- [x] Requirements Analysis — Standard; `inception/requirements/model-cost-page-requirements.md` (MC-1..MC-8); three assumptions stated for review (USD; paid cloud calls only; flat prices).
+- [x] Code Generation — Database, Ingestion Worker, API Service, Frontend: Complete (2026-10-07); `construction/plans/model-cost-page-code-generation-plan.md` steps 1-8 [x]; database 239 tests, worker 734, API 424, frontend 270; 72 mutation checks all caught; summary `construction/api-service/code/model-cost-page-summary.md`.
+- [ ] Review and merge — PR open, NOT merged. NOT deployed: the live stack runs `main` and needs a rebuild and migration 0021 (the user's call).

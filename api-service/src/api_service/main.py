@@ -14,6 +14,7 @@ from api_service.background_activity.router import router as background_activity
 from api_service.backup.router import router as backup_router
 from api_service.categories.router import router as categories_router
 from api_service.config import settings
+from api_service.costs.router import router as costs_router
 from api_service.dashboards.router import router as dashboards_router
 from api_service.drive_connect.router import router as drive_connect_router
 from api_service.duplicates.router import router as duplicates_router
@@ -62,6 +63,7 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     app.include_router(auth_router)
     app.include_router(transactions_router)
     app.include_router(dashboards_router)
+    app.include_router(costs_router)
     app.include_router(ingestion_router)
     app.include_router(categories_router)
     app.include_router(drive_connect_router)

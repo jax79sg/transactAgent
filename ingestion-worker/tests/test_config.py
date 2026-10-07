@@ -191,3 +191,28 @@ class TestEmbeddingProviderSettings:
         settings = Settings()
 
         assert (settings.embedding_provider, settings.gemini_embedding_model) == ("gemini", "gemini-embedding-3")
+
+
+class TestGeminiPrices:
+    """Issue #28 (Costs page): the three prices a Gemini call is priced with."""
+
+    def test_defaults_are_googles_published_prices(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(tmp_path / "none.env"))
+        for name in ("GEMINI_INPUT_PRICE_PER_MILLION_USD", "GEMINI_OUTPUT_PRICE_PER_MILLION_USD",
+                     "GEMINI_EMBEDDING_PRICE_PER_MILLION_USD"):
+            monkeypatch.delenv(name, raising=False)
+
+        settings = Settings()
+
+        assert (settings.gemini_input_price_per_million_usd, settings.gemini_output_price_per_million_usd,
+                settings.gemini_embedding_price_per_million_usd) == (0.30, 2.50, 0.20)
+
+    def test_the_settings_page_override_wins_over_the_deployed_value(self, tmp_path, monkeypatch):
+        override_file = tmp_path / "settings.env"
+        override_file.write_text("GEMINI_INPUT_PRICE_PER_MILLION_USD=0.5\nGEMINI_EMBEDDING_PRICE_PER_MILLION_USD=0\n")
+        monkeypatch.setattr(config_module, "SETTINGS_OVERRIDE_FILE", str(override_file))
+        monkeypatch.setenv("GEMINI_INPUT_PRICE_PER_MILLION_USD", "0.30")
+
+        settings = Settings()
+
+        assert (settings.gemini_input_price_per_million_usd, settings.gemini_embedding_price_per_million_usd) == (0.5, 0.0)
