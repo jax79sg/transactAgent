@@ -1,5 +1,10 @@
 [
   {
+    "version": "1.1.0",
+    "date": "2026-10-07",
+    "summary": "The Costs page (what Gemini calls cost, by day, week or month, grouped by purpose or model) with its prices in Settings; Transactions sortable by Description and Converted (SGD)."
+  },
+  {
     "version": "1.0.0",
     "date": "2026-10-07",
     "summary": "First numbered release: probable duplicate statements, reworked recurring payments, column sorting, dark mode, top-bar activity indicator, Gemini as an option for categorization and embeddings, release numbers and a guide for every release."

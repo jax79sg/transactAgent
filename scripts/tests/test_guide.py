@@ -208,6 +208,21 @@ class TestCheck:
 
         assert any("docs/v0.5.0 is an archived guide that docs/releases.json does not list" in p for p in guide.check(released))
 
+    @pytest.mark.parametrize("link", ['href="releases.html"', 'href="./"'])
+    def test_an_archive_with_a_link_that_only_works_from_the_site_root(self, released, link):
+        archive = released / "docs" / "v1.0.0" / "index.html"
+        archive.write_text(archive.read_text() + "<p><a " + link + ">list</a></p>")
+
+        problems = guide.check(released)
+
+        assert any("goes nowhere" in p and "docs/v1.0.0/index.html" in p for p in problems)
+
+    def test_a_link_that_works_from_either_place_is_fine_in_an_archive(self, released):
+        archive = released / "docs" / "v1.0.0" / "index.html"
+        archive.write_text(archive.read_text() + '<p><a href="https://example.org/releases.html">x</a> <a href="../">y</a></p>')
+
+        assert guide.check(released) == []
+
     def test_a_stale_index(self, released):
         (released / "docs" / "releases.html").write_text("<p>old</p>")
 
