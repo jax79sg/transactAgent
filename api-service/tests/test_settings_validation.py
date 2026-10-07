@@ -169,8 +169,8 @@ class TestCrossFieldValidation:
         assert check_cross_field(spec, 90.0, None) is None
 
 
-def test_catalog_has_exactly_50_settings():
-    assert len(SETTINGS_BY_NAME) == 50
+def test_catalog_has_exactly_53_settings():
+    assert len(SETTINGS_BY_NAME) == 53
 
 
 def test_every_setting_has_a_category_and_description():
@@ -242,3 +242,47 @@ class TestEmbeddingProviderEntries:
     def test_provider_rejects_anything_else(self, value):
         _parsed, error = parse_and_validate(SETTINGS_BY_NAME["embedding_provider"], value)
         assert error is not None
+
+
+class TestModelCostSettings:
+    """Issue #28 (Costs page): the three prices a Gemini call is priced with."""
+
+    _PRICES = ("gemini_input_price_per_million_usd", "gemini_output_price_per_million_usd",
+               "gemini_embedding_price_per_million_usd")
+
+    def test_defaults_are_googles_published_prices(self):
+        assert [SETTINGS_BY_NAME[n].default for n in self._PRICES] == [0.30, 2.50, 0.20]
+
+    def test_all_three_are_advanced_floats_in_their_own_category(self):
+        for name in self._PRICES:
+            spec = SETTINGS_BY_NAME[name]
+            assert (spec.type, spec.classification, spec.category, spec.min) == ("float", "advanced", "Model Costs", 0.0)
+
+    def test_the_text_prices_are_read_by_both_services_and_the_embedding_price_only_by_the_worker(self):
+        both = {s.name for s in SETTINGS_BY_NAME["gemini_model"].owning_services}
+        assert {s.name for s in SETTINGS_BY_NAME[self._PRICES[0]].owning_services} == both
+        assert {s.name for s in SETTINGS_BY_NAME[self._PRICES[1]].owning_services} == both
+        assert {s.name for s in SETTINGS_BY_NAME[self._PRICES[2]].owning_services} == {
+            s.name for s in SETTINGS_BY_NAME["gemini_embedding_model"].owning_services
+        }
+
+    def test_the_descriptions_name_the_model_setting_they_go_with_and_the_price_list(self):
+        assert "gemini_model" in SETTINGS_BY_NAME[self._PRICES[0]].description
+        assert "pricing" in SETTINGS_BY_NAME[self._PRICES[0]].description
+        assert "gemini_embedding_model" in SETTINGS_BY_NAME[self._PRICES[2]].description
+        assert "estimated" in SETTINGS_BY_NAME[self._PRICES[2]].description
+
+    @pytest.mark.parametrize("name", _PRICES)
+    def test_a_free_price_is_valid_a_negative_or_non_numeric_one_is_not(self, name):
+        spec = SETTINGS_BY_NAME[name]
+        assert parse_and_validate(spec, "0")[1] is None
+        assert parse_and_validate(spec, "0.075")[0] == 0.075
+        assert "at least" in parse_and_validate(spec, "-0.01")[1]
+        assert "not a number" in parse_and_validate(spec, "free")[1]
+
+    def test_the_apis_own_defaults_match_the_catalog(self):
+        from api_service.config import Settings
+
+        fields = Settings.model_fields
+        for name in self._PRICES:
+            assert fields[name].default == SETTINGS_BY_NAME[name].default

@@ -96,6 +96,13 @@ class InvalidDateRangeError(ApiError):
     error_code = "invalid_date_range"
 
 
+class InvalidTimeZoneError(ApiError):
+    """Costs page: the time zone name sent with the request is not a known IANA zone."""
+
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_code = "invalid_time_zone"
+
+
 class NoTransactionsInScopeError(ApiError):
     """Ask AI: nothing in the selected scope to ground an answer in."""
 

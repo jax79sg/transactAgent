@@ -3624,3 +3624,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Operations support; configuration only, no commit needed (.env is gitignored).
 
 ---
+
+## Open GitHub Issues: Model Cost Page (issue #28)
+**Timestamp**: 2026-10-07T07:27:11Z
+**User Input**: "Create PRs for new issues and work on them."
+**AI Response**: "Listed the open issues: #28 (cost page), #27 (guide out of date) and #23 (sortable columns; it already has PR #24, an automated fix whose frontend check fails). Treated #27 and #28 as the new issues; #23/PR #24 is reported, not touched. ISSUE #28, built on `feature/issue-28-model-cost-page` off main: requirements and plan first (`model-cost-page-requirements.md`, `model-cost-page-code-generation-plan.md`; three assumptions made without asking: USD, paid cloud calls only, flat prices in Settings), then a `model_usage` ledger (migration 0021), recording at the four Gemini call sites (statement extraction, categorization, embeddings with estimated tokens because Google's embeddings endpoint reports none, Ask AI), three price settings, `GET /costs`, and a Costs page with a stacked chart and two sortable tables. Google's price list was fetched to confirm $0.30 / $2.50 / $0.20 per million tokens; live probes showed the native and compatible chat APIs report exact usage and embeddings report none. VERIFIED: database 239, worker 734, API 424, frontend 270 tests pass, ruff and tsc clean; 72 mutation checks all caught (4 tests strengthened after initial survivors; one mutation made the period list loop forever, caught by timeout); migration up/down on a scratch database; the three real call paths run against a scratch database through this branch's code inside the worker container (correct rows and costs); the page checked in the browser on desktop and phone width against a scratch stack. NOT DONE, on purpose: nothing was deployed (the live stack runs main), nothing merged. The scratch containers and servers are removed at the end of the run."
+**Context**: Issue-driven change; PR open, not merged.
+
+---

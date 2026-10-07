@@ -192,6 +192,7 @@ const CATEGORY_ORDER = [
   "Duplicate Statements",
   "API & Access",
   "Ask AI",
+  "Model Costs",
 ];
 
 // Deliberately looser than IngestionPage's 3s active-run poll, but tighter than

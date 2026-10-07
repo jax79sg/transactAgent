@@ -1,4 +1,4 @@
-"""The settings allow-list (AR-28) -- the sole source of truth for which of the 50
+"""The settings allow-list (AR-28) -- the sole source of truth for which of the 53
 in-scope settings exist and what a valid value looks like. A name not in this dict
 has no code path to a value, secret or otherwise (NFR-CAS-2).
 
@@ -73,6 +73,7 @@ _INGESTION = "Ingestion"
 _DUPLICATES = "Duplicate Statements"
 _API_ACCESS = "API & Access"
 _ASK_AI = "Ask AI"
+_MODEL_COSTS = "Model Costs"
 
 _SPECS: tuple[SettingSpec, ...] = (
     # --- Matching & Categorization ---
@@ -357,6 +358,29 @@ _SPECS: tuple[SettingSpec, ...] = (
         "Caps how many transactions are sent as context per Ask AI question, most recent first -- keeps a very large or \"all transactions\" question from producing an unbounded prompt as your data grows.",
         "int", 3000, min=1,
     ),
+    # --- Model Costs (issue #28) ---
+    SettingSpec(
+        "gemini_input_price_per_million_usd", (_WORKER, _API), "advanced", _MODEL_COSTS,
+        "What Google charges per million INPUT tokens of the Gemini model in gemini_model (text and page images cost the "
+        "same), in US dollars. Used to price each call on the Costs page as it is made; past calls keep the price they were "
+        "made at. Default is Google's price for gemini-3.5-flash-lite as checked 2026-10-07 -- change it whenever you change "
+        "gemini_model (see https://ai.google.dev/gemini-api/docs/pricing).",
+        "float", 0.30, min=0.0,
+    ),
+    SettingSpec(
+        "gemini_output_price_per_million_usd", (_WORKER, _API), "advanced", _MODEL_COSTS,
+        "What Google charges per million OUTPUT tokens of the model in gemini_model, in US dollars; the model's thinking "
+        "tokens are billed as output and counted that way. Same rules as the input price above.",
+        "float", 2.50, min=0.0,
+    ),
+    SettingSpec(
+        "gemini_embedding_price_per_million_usd", (_WORKER,), "advanced", _MODEL_COSTS,
+        "What Google charges per million input tokens of the embedding model in gemini_embedding_model, in US dollars. "
+        "Google's embedding endpoint reports no token counts, so embedding costs are estimated from the text length "
+        "(about four characters per token) and marked as estimates on the Costs page. Default is Google's price for "
+        "gemini-embedding-2 as checked 2026-10-07.",
+        "float", 0.20, min=0.0,
+    ),
 )
 
 SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
@@ -367,4 +391,4 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 50, f"expected 50 settings, got {len(SETTINGS_BY_NAME)}"
+assert len(SETTINGS_BY_NAME) == 53, f"expected 53 settings, got {len(SETTINGS_BY_NAME)}"

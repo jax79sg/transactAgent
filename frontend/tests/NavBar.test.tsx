@@ -292,3 +292,25 @@ describe("NavBar pending duplicates badge", () => {
     expect(screen.queryByTestId("pending-duplicates-badge")).not.toBeInTheDocument();
   });
 });
+
+
+describe("NavBar links", () => {
+  beforeEach(() => {
+    vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue(NO_ATTENTION_NEEDED);
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 0 });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("has a Costs link to the costs page, between Review and Settings (issue #28)", async () => {
+    renderNavBar();
+
+    const labels = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(labels.indexOf("Costs")).toBe(labels.indexOf("Review") + 1);
+    expect(labels.indexOf("Settings")).toBe(labels.indexOf("Costs") + 1);
+    expect(screen.getByRole("link", { name: "Costs" })).toHaveAttribute("href", "/costs");
+  });
+});
