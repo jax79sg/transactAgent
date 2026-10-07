@@ -5,6 +5,7 @@ fallback. Defaults to OpenRouter but works against any OpenAI-compatible endpoin
 Text-only, constrained to the whitelist + "UNSURE" (WR-4).
 """
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
@@ -31,12 +32,30 @@ _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
 _REQUEST_TIMEOUT_SECONDS = 60.0
 
 
+# Google's OpenAI-compatible endpoint for the Gemini API (the same one the extraction key works against).
+GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+@dataclass(frozen=True)
+class _Provider:
+    name: str
+    base_url: str
+    api_key: str
+    model: str
+
+
+def _provider() -> _Provider:
+    """Where categorization requests go, read fresh on every call (like the model name always was).
+    `gemini` reuses the extraction key and model, so there is nothing extra to configure and no way for the two
+    to drift apart; `local` is the configurable OpenAI-compatible endpoint, unchanged."""
+    if settings.categorization_provider == "gemini":
+        return _Provider("gemini", GEMINI_OPENAI_BASE_URL, settings.gemini_api_key, settings.gemini_model)
+    return _Provider("local", settings.openrouter_base_url, settings.openrouter_api_key, settings.openrouter_model)
+
+
 def _client() -> OpenAI:
-    return OpenAI(
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
-        timeout=_REQUEST_TIMEOUT_SECONDS,
-    )
+    provider = _provider()
+    return OpenAI(api_key=provider.api_key, base_url=provider.base_url, timeout=_REQUEST_TIMEOUT_SECONDS)
 
 
 @retry_with_backoff()
@@ -51,7 +70,7 @@ def classify_description(
     live prompt's input shape matches what the Model Training unit's Dataset
     Curator trains against -- `None` renders as "unknown" (`_format_amount_sgd`).
 
-    `model` defaults to `settings.openrouter_model` (env-configurable: OPENROUTER_MODEL,
+    `model` defaults to the active provider's model (`local`: `settings.openrouter_model`, env-configurable: OPENROUTER_MODEL,
     per user request 2026-08-01), read fresh on each call rather than bound as a
     function default at import time. The default confirmed to work here,
     "openrouter/free", is OpenRouter's own free-models router -- it auto-selects among
@@ -59,7 +78,7 @@ def classify_description(
     specific model that could be deprecated/rate-limited. See
     https://openrouter.ai/openrouter/free.
     """
-    model = model or settings.openrouter_model
+    model = model or _provider().model
     prompt = (
         "Classify this bank transaction description into exactly one of the following "
         "categories, responding with ONLY the category name and nothing else:\n\n"
@@ -79,7 +98,7 @@ def classify_description(
     except APIStatusError as exc:
         if exc.status_code in _TRANSIENT_STATUS_CODES:
             raise TransientError(
-                f"Categorization LLM transient error ({settings.openrouter_base_url}, "
+                f"Categorization LLM transient error ({_provider().base_url}, "
                 f"status {exc.status_code}): {exc}"
             ) from exc
         raise
@@ -92,7 +111,7 @@ def classify_description(
     # silently giving up after zero retries instead of retrying a transient blip.
     except (APIConnectionError, APITimeoutError, TimeoutError, ConnectionError) as exc:
         raise TransientError(
-            f"Categorization LLM network error ({settings.openrouter_base_url}): {exc}"
+            f"Categorization LLM network error ({_provider().base_url}): {exc}"
         ) from exc
 
 
@@ -119,7 +138,7 @@ def classify_descriptions_batch(
     treats it as "nothing parsed," falling every description in this batch back
     to an individual classify_description call rather than raising further.
     """
-    model = model or settings.openrouter_model
+    model = model or _provider().model
     numbered = "\n".join(
         f"{i + 1}. {description} (amount: {_format_amount_sgd(amount_sgd)})"
         for i, (description, amount_sgd) in enumerate(items)
@@ -145,11 +164,11 @@ def classify_descriptions_batch(
     except APIStatusError as exc:
         if exc.status_code in _TRANSIENT_STATUS_CODES:
             raise TransientError(
-                f"Batch categorization LLM transient error ({settings.openrouter_base_url}, "
+                f"Batch categorization LLM transient error ({_provider().base_url}, "
                 f"status {exc.status_code}): {exc}"
             ) from exc
         raise
     except (APIConnectionError, APITimeoutError, TimeoutError, ConnectionError) as exc:
         raise TransientError(
-            f"Batch categorization LLM network error ({settings.openrouter_base_url}): {exc}"
+            f"Batch categorization LLM network error ({_provider().base_url}): {exc}"
         ) from exc

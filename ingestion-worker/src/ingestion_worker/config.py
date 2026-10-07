@@ -1,5 +1,8 @@
 """Environment-sourced configuration (NFR-4.1)."""
 
+from typing import Literal
+
+from pydantic import Field
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -42,6 +45,10 @@ class Settings(BaseSettings):
     # after hitting OpenRouter's free-tier rate limits). Override alongside
     # openrouter_api_key/openrouter_model when pointing elsewhere.
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Which provider categorizes transactions (openrouter_client.py). `local` is the OpenAI-compatible endpoint above
+    # (OpenRouter or your own model server); `gemini` is Google's Gemini API through its OpenAI-compatible endpoint,
+    # reusing gemini_api_key and gemini_model (the statement-extraction ones) -- no second key to manage (2026-10-05).
+    categorization_provider: Literal["local", "gemini"] = "local"
 
     # Needed to refresh the Drive access token via the refresh token Unit 2 obtained
     # (Google's token-refresh request requires client_id + client_secret, not just the
@@ -139,6 +146,13 @@ class Settings(BaseSettings):
     # local server would otherwise have to duplicate the same key under two names.
     embedding_api_key: str = ""
     embedding_model: str = "embeddinggemma-300m"
+    # Which provider computes embeddings (embedding/client.py). `local` is the OpenAI-compatible server above;
+    # `gemini` is Google's Gemini API through its OpenAI-compatible endpoint, reusing gemini_api_key. Gemini
+    # Embedding 2 is asked for embedding_dimensions-sized, already-normalised vectors, so it fits the existing
+    # collection; its scores sit on a different scale from embeddinggemma's, so the two thresholds below were
+    # re-calibrated for it on the user's own labelled transactions (2026-10-05).
+    embedding_provider: Literal["local", "gemini"] = "local"
+    gemini_embedding_model: str = "gemini-embedding-2"
     # Cosine similarity, 0.0-1.0 scale -- NOT the same scale as similarity_threshold
     # (0-100, fuzzy-text only). WR-23.
     # Matching Precision Refinement (WR-31): raised from the original Epic 9 default
@@ -184,6 +198,21 @@ class Settings(BaseSettings):
     # LLM-classification agreement signal is present, before the threshold check
     # above -- never a penalty on disagreement, only a boost withheld.
     embedding_llm_agreement_boost: float = 0.05
+
+    # Epic 14 (Probable Duplicate Statement Detection, WR-57). The switch gates only NEW
+    # judgments -- the check after extraction and the pair scan. The remembered-file
+    # lookup, removal jobs and the Review panel keep working when it is off, because they
+    # honour decisions the user already made. Ships OFF: it is switched on only after the
+    # accuracy evaluation (`check-duplicates`) has been run on the real statements.
+    duplicate_detection_enabled: bool = False
+    # A pair is a probable duplicate when at least this fraction of the SMALLER statement's
+    # transactions match. Below 0.50 the rule would start flagging statements that are
+    # plainly different, so the range is bounded and a bad value stops the worker starting.
+    # Also the size relation for "removal offered" (Question 1 = C, WR-64).
+    duplicate_match_ratio: float = Field(default=0.80, ge=0.50, le=1.00)
+    # Statements with fewer transactions than this are never flagged on transactions alone
+    # (FR-PD-4): their account identifier and closing balance must match too.
+    duplicate_min_transactions: int = Field(default=3, ge=1, le=50)
 
     @property
     def database_url(self) -> str:

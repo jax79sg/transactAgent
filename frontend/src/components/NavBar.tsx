@@ -3,6 +3,7 @@ import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 import { getActivitySummary } from "../api/backgroundActivity";
+import { getPendingPairCount } from "../api/duplicates";
 import { getPendingCount } from "../api/recategorization";
 import { getRecurringPaymentsStatus } from "../api/recurringPayments";
 import type { BackgroundJobType } from "../api/types";
@@ -36,6 +37,30 @@ function PendingReviewBadge() {
     <span
       data-testid="pending-review-badge"
       className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-amber-600"
+    >
+      {data.pendingCount}
+    </span>
+  );
+}
+
+// Epic 14 (Probable Duplicate Statement Detection): a SECOND badge beside the existing one, in a different colour
+// so the two are told apart without reading. The existing badge's number keeps meaning recategorization items
+// (NFR-PD-6); this counts probable-duplicate pairs awaiting a decision (information-only pairs included until
+// dismissed). Same 30s ambient poll; any action in the Review panel refreshes it immediately.
+function PendingDuplicatesBadge() {
+  const { data } = useQuery({
+    queryKey: ["duplicates", "pendingCount"],
+    queryFn: getPendingPairCount,
+    refetchInterval: PENDING_COUNT_POLL_INTERVAL_MS,
+  });
+
+  if (!data || data.pendingCount === 0) return null;
+
+  return (
+    <span
+      data-testid="pending-duplicates-badge"
+      aria-label={`${data.pendingCount} duplicate statement${data.pendingCount === 1 ? "" : "s"} awaiting review`}
+      className="ml-1 rounded-full bg-violet-500 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-violet-600"
     >
       {data.pendingCount}
     </span>
@@ -181,7 +206,12 @@ export function NavBar() {
             }
           >
             {link.label}
-            {link.to === "/review" && <PendingReviewBadge />}
+            {link.to === "/review" && (
+              <>
+                <PendingReviewBadge />
+                <PendingDuplicatesBadge />
+              </>
+            )}
             {link.to === "/" && <RecurringPaymentsBadge />}
           </NavLink>
         ))}

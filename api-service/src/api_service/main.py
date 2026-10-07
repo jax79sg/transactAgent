@@ -16,6 +16,7 @@ from api_service.categories.router import router as categories_router
 from api_service.config import settings
 from api_service.dashboards.router import router as dashboards_router
 from api_service.drive_connect.router import router as drive_connect_router
+from api_service.duplicates.router import router as duplicates_router
 from api_service.errors import register_exception_handlers
 from api_service.health import router as health_router
 from api_service.ingestion.router import router as ingestion_router
@@ -70,6 +71,7 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     app.include_router(recurring_payments_router)
     app.include_router(app_settings_router)
     app.include_router(background_activity_router)
+    app.include_router(duplicates_router)
 
     return app
 

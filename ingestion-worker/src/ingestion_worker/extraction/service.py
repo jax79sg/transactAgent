@@ -16,7 +16,12 @@ from ingestion_worker.clients.gemini_client import extract_statement_raw
 from ingestion_worker.clients.retry import TransientError
 from ingestion_worker.config import settings
 from ingestion_worker.extraction.prompts import EXTRACTION_PROMPT
-from ingestion_worker.extraction.schemas import ConfidenceLevel, RawExtractedStatement
+from ingestion_worker.extraction.schemas import (
+    ConfidenceLevel,
+    RawAccountSection,
+    RawExtractedStatement,
+    wrap_flat_reply,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +53,17 @@ def _parse_llm_json(raw_text: str) -> dict:
     return json.loads(text.strip())
 
 
+def _raw_transactions(parsed: dict):
+    """Every raw transaction dict across every account section of a parsed reply."""
+    for section in parsed.get("sections") or []:
+        if isinstance(section, dict):
+            yield from (txn for txn in section.get("transactions") or [] if isinstance(txn, dict))
+
+
 def _statement_needs_day_month_swap(parsed: dict) -> bool:
-    """True if at least one transaction_date has a month component >12 (unambiguously
-    invalid) that would become a valid month (<=12) if swapped with the day component.
+    """True if at least one transaction_date (in any account section) has a month
+    component >12 (unambiguously invalid) that would become a valid month (<=12) if
+    swapped with the day component.
 
     Many Singapore-issued statements (observed: OCBC) print dates day-first
     (DD/MM/YY); Gemini has been observed to correctly read the day and month values
@@ -62,8 +75,13 @@ def _statement_needs_day_month_swap(parsed: dict) -> bool:
     unambiguous month>12 case, then applying the swap to the whole document, avoids
     guessing on individually-ambiguous dates (day<=12, where either order parses as
     "valid" but means something different) in isolation.
+
+    Epic 13: only *transaction* dates are evidence. A closing-balance date never
+    triggers the document-wide swap on its own -- one odd closing date must not be
+    able to corrupt transaction dates that are otherwise correct -- but it does follow
+    the swap when transactions trigger it (same misreading, same document).
     """
-    for txn in parsed.get("transactions") or []:
+    for txn in _raw_transactions(parsed):
         raw_date = txn.get("transaction_date")
         if not isinstance(raw_date, str):
             continue
@@ -79,18 +97,32 @@ def _statement_needs_day_month_swap(parsed: dict) -> bool:
     return False
 
 
-def _swap_all_transaction_dates(parsed: dict) -> dict:
-    def swap_one(txn: dict) -> dict:
-        raw_date = txn.get("transaction_date")
-        if not isinstance(raw_date, str):
-            return txn
-        parts = raw_date.split("-")
-        if len(parts) != 3:
-            return txn
-        year, month, day = parts
-        return {**txn, "transaction_date": f"{year}-{day}-{month}"}
+def _swap_date_string(raw_date):
+    if not isinstance(raw_date, str):
+        return raw_date
+    parts = raw_date.split("-")
+    if len(parts) != 3:
+        return raw_date
+    year, month, day = parts
+    return f"{year}-{day}-{month}"
 
-    return {**parsed, "transactions": [swap_one(txn) for txn in parsed.get("transactions") or []]}
+
+def _swap_all_transaction_dates(parsed: dict) -> dict:
+    def swap_section(section):
+        if not isinstance(section, dict):
+            return section
+        swapped = {
+            **section,
+            "transactions": [
+                {**txn, "transaction_date": _swap_date_string(txn.get("transaction_date"))} if isinstance(txn, dict) else txn
+                for txn in section.get("transactions") or []
+            ],
+        }
+        if "closing_balance_date" in section:
+            swapped["closing_balance_date"] = _swap_date_string(section["closing_balance_date"])
+        return swapped
+
+    return {**parsed, "sections": [swap_section(section) for section in parsed.get("sections") or []]}
 
 
 # A "balance brought/carried forward", "previous/opening/closing balance", or
@@ -169,6 +201,46 @@ def _resolve_statement_date(raw_statement_date: date | None, max_trusted_date: d
     return min(valid) if valid else None
 
 
+def _trusted_max_date(transactions: list) -> date | None:
+    """Latest UNAMBIGUOUSLY-parsed date (day>12, non-excluded line) among `transactions`."""
+    return max(
+        (
+            t.transaction_date
+            for t in transactions
+            if not _is_excluded_from_date_correction(t.description) and t.transaction_date.day > 12
+        ),
+        default=None,
+    )
+
+
+def _validate_closing_balance(
+    section: RawAccountSection, statement_date: date | None, document_trusted_max: date | None
+) -> None:
+    """WR-47: a section's closing balance and its date are kept together or dropped
+    together (BR-33), and the date gets the same protection as every other date --
+    cross-validated like statement_date (it must fall on or shortly after the latest
+    unambiguous transaction date of its own section, else of the document), then
+    falling back to the already-validated statement_date, else the pair is dropped.
+    A dropped balance just means that section has no cross-check; it never fails an
+    extraction."""
+    if section.closing_balance is None:
+        section.closing_balance_date = None
+        return
+    reference = _trusted_max_date(section.transactions) or document_trusted_max
+    resolved = _resolve_statement_date(section.closing_balance_date, reference)
+    if resolved is None:
+        resolved = statement_date
+    if resolved is None:
+        logger.warning(
+            "Dropping an untrustworthy closing balance (%s as of %s) for account %s",
+            section.closing_balance, section.closing_balance_date, section.account_identifier or "(no identifier)",
+        )
+        section.closing_balance = None
+        section.closing_balance_date = None
+        return
+    section.closing_balance_date = resolved
+
+
 def _correct_ambiguous_transaction_dates(transactions: list, raw_statement_date: date | None = None) -> None:
     """Repairs a real, live-confirmed failure mode distinct from the whole-document
     swap above: for dates where the printed day is individually AMBIGUOUS (<=12,
@@ -201,11 +273,7 @@ def _correct_ambiguous_transaction_dates(transactions: list, raw_statement_date:
     candidate dates exactly matches the (cross-validated) statement_date, otherwise
     left as extracted.
     """
-    max_trusted_date = max(
-        (t.transaction_date for t in transactions if not _is_excluded_from_date_correction(t.description)
-         and t.transaction_date.day > 12),
-        default=None,
-    )
+    max_trusted_date = _trusted_max_date(transactions)
     statement_date = _resolve_statement_date(raw_statement_date, max_trusted_date)
 
     last_date: date | None = None
@@ -251,14 +319,25 @@ def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFai
         return ExtractionFailure(reason=f"Gemini call error: {exc}")
 
     try:
-        parsed = _parse_llm_json(raw_response)
-        whole_document_swap_applied = _statement_needs_day_month_swap(parsed)
+        parsed = wrap_flat_reply(_parse_llm_json(raw_response))
+        whole_document_swap_applied = isinstance(parsed, dict) and _statement_needs_day_month_swap(parsed)
         if whole_document_swap_applied:
             parsed = _swap_all_transaction_dates(parsed)
         statement = RawExtractedStatement.model_validate(parsed)
     except (json.JSONDecodeError, pydantic.ValidationError) as exc:
         # WR-1b: structural/schema validation failure
         return ExtractionFailure(reason=f"Response failed schema validation: {exc}", raw_response=raw_response)
+
+    # WR-44: a section without its own currency uses the statement's primary currency.
+    for section in statement.sections:
+        section.currency = section.currency or statement.currency
+
+    # Document-wide: the latest unambiguous transaction date across every section, and the
+    # statement date validated against it (WR-46) -- used to anchor excluded-line
+    # correction and as the fallback for closing-balance dates (WR-47).
+    all_transactions = statement.transactions
+    document_trusted_max = _trusted_max_date(all_transactions)
+    statement_date = _resolve_statement_date(statement.statement_date, document_trusted_max)
 
     # Repair individually-ambiguous (day<=12) date misreads -- a DIFFERENT failure
     # mode from the whole-document swap above (that one fires when the WHOLE
@@ -267,14 +346,18 @@ def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFai
     # otherwise-correctly-parsed document are wrong). Mutually exclusive with the
     # whole-document swap: once that's already corrected every date uniformly,
     # re-running this per-row heuristic on top would risk "correcting" dates that
-    # are already right. See _correct_ambiguous_transaction_dates.
+    # are already right. See _correct_ambiguous_transaction_dates. Per section (WR-46):
+    # the heuristic relies on ONE ascending list of transactions, and each account's
+    # list restarts the sequence.
     if not whole_document_swap_applied:
-        _correct_ambiguous_transaction_dates(statement.transactions, statement.statement_date)
+        for section in statement.sections:
+            _correct_ambiguous_transaction_dates(section.transactions, statement_date)
 
     # Drop balance-carry-forward lines before any of the checks below, so e.g. the
     # zero-transactions check reflects the real transaction count, not one inflated by
     # a non-transaction summary line.
-    statement.transactions = [t for t in statement.transactions if not _is_non_transaction_line(t.description)]
+    for section in statement.sections:
+        section.transactions = [t for t in section.transactions if not _is_non_transaction_line(t.description)]
 
     # Last-resort safety net: a bank statement documents transactions that have
     # already happened, so a transaction_date after today should never reach the
@@ -287,17 +370,33 @@ def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFai
             "Dropping %d transaction(s) with a transaction_date after today (%s): %s",
             len(future_dated), today, [str(t.transaction_date) for t in future_dated],
         )
-        statement.transactions = [t for t in statement.transactions if t.transaction_date <= today]
+        for section in statement.sections:
+            section.transactions = [t for t in section.transactions if t.transaction_date <= today]
 
-    # WR-2: bank/currency must be identified to commit
-    if statement.bank_name is None or statement.currency is None:
+    # WR-47: validate each section's closing balance against the final, corrected dates.
+    final_trusted_max = _trusted_max_date(statement.transactions)
+    for section in statement.sections:
+        _validate_closing_balance(section, statement_date, final_trusted_max)
+
+    # WR-46: a section left with neither transactions nor a closing balance is dropped;
+    # one that still has a closing balance is a real account on the statement and kept.
+    statement.sections = [s for s in statement.sections if s.transactions or s.closing_balance is not None]
+
+    # WR-2: bank/currency must be identified to commit. Every section needs a currency
+    # (its own, else the statement's); with no sections at all, the statement's own
+    # currency is what is checked, exactly as before sections existed.
+    currency_missing = any(s.currency is None for s in statement.sections) or (
+        not statement.sections and statement.currency is None
+    )
+    if statement.bank_name is None or currency_missing:
         return ExtractionFailure(
             reason="Could not identify bank name and/or currency", raw_response=raw_response
         )
 
     # WR-1c: zero transactions extracted is treated as a failure (a statement with
     # genuinely no transactions is a rare edge case for this app's use case; simpler
-    # and safer to flag for manual review than to silently commit an empty statement)
+    # and safer to flag for manual review than to silently commit an empty statement).
+    # Epic 13: counted across the WHOLE statement -- one account with no activity is fine.
     if len(statement.transactions) == 0:
         return ExtractionFailure(reason="Zero transactions extracted", raw_response=raw_response)
 

@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as backupApi from "../src/api/backup";
+import * as duplicatesApi from "../src/api/duplicates";
 import * as recategorizationApi from "../src/api/recategorization";
 import type {
   BackupStatusResponse,
@@ -14,9 +15,11 @@ import type {
   ProposalPage,
 } from "../src/api/types";
 import { ReviewPage } from "../src/pages/ReviewPage";
+import { pair, scan } from "./duplicatesFixtures";
 
 vi.mock("../src/api/recategorization");
 vi.mock("../src/api/backup");
+vi.mock("../src/api/duplicates");
 
 const NO_BACKUPS_YET: BackupStatusResponse = {
   lastRunAt: null,
@@ -113,6 +116,9 @@ describe("ReviewPage", () => {
     // pre-existing proposal-focused tests are unaffected; tests exercising it
     // override with their own mockResolvedValue.
     vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(disagreementPageOf([]));
+    // Epic 14: the Duplicate Statements panel also queries on every render; default to detection on, nothing found.
+    vi.spyOn(duplicatesApi, "getScanStatus").mockResolvedValue(scan({ pairsFound: 0 }));
+    vi.spyOn(duplicatesApi, "listPairs").mockResolvedValue({ items: [], page: 1, pageSize: 20, totalCount: 0 });
   });
 
   afterEach(() => {
@@ -408,6 +414,30 @@ describe("ReviewPage", () => {
       expect(screen.getByTestId("disagreement-section")).not.toContainElement(
         screen.getByTestId("review-row-proposal-1"),
       );
+    });
+  });
+
+  describe("Duplicate Statements panel (Epic 14)", () => {
+    it("is on the Review page, below the disagreements", async () => {
+      vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(
+        disagreementPageOf([makeDisagreement()]),
+      );
+      renderReviewPage();
+
+      const panel = await screen.findByTestId("duplicates-panel");
+      const disagreements = await screen.findByTestId("disagreement-section");
+      expect(disagreements.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("shows a pair awaiting a decision alongside the recategorization work", async () => {
+      vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([makeProposal()]));
+      vi.spyOn(duplicatesApi, "listPairs").mockResolvedValue({ items: [pair()], page: 1, pageSize: 20, totalCount: 1 });
+      renderReviewPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId("review-row-proposal-1")).toBeInTheDocument();
+        expect(screen.getByTestId("duplicate-pair-pair-1")).toBeInTheDocument();
+      });
     });
   });
 });

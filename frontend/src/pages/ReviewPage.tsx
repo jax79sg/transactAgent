@@ -15,6 +15,7 @@ import {
   resolveDisagreement,
 } from "../api/recategorization";
 import type { DisagreementDTO } from "../api/types";
+import { DuplicateStatementsPanel } from "../components/DuplicateStatementsPanel";
 import { FlowAmount } from "../components/FlowAmount";
 import { SortableTh } from "../components/SortableTh";
 
@@ -346,6 +347,8 @@ export function ReviewPage() {
       <BackupStatusPanel />
 
       <DisagreementTable />
+
+      <DuplicateStatementsPanel />
 
       {singleActionError && (
         <p data-testid="review-single-action-error" className="mb-3 text-sm text-amber-600 dark:text-amber-400">

@@ -55,3 +55,12 @@ docker compose up -d
 ### Build fails with dependency errors
 - **Cause**: Usually a transient package-registry issue (PyPI/npm)
 - **Solution**: Retry `docker compose build`; Docker's layer cache means only the failed step re-downloads
+
+---
+
+## Addendum (2026-10-04) — Account Balance (Epic 13) and Probable Duplicate Statement Detection (Epic 14)
+
+- **Migrations 0019 and 0020** are applied automatically at the start of either backend container (existing advisory-lock mechanism). Both are reversible; 0020's downgrade refuses while any ingestion run file uses the new outcome `skipped_probable_duplicate`. The Backfill Tool's CLI also applies pending migrations at start, so run it only when you intend the database to be migrated.
+- **New settings** `DUPLICATE_DETECTION_ENABLED` (default `false`), `DUPLICATE_MATCH_RATIO` (`0.80`), `DUPLICATE_MIN_TRANSACTIONS` (`3`) are in `.env.example` and passed to both the worker and the API container by `docker-compose.yml`. Detection ships **off**; the switch is changed on the Settings page and takes effect when the worker restarts.
+- **Frontend production build check without touching `dist/`**: `docker run --rm -v "$PWD/frontend":/app -w /app node:20-alpine sh -c "npx tsc --noEmit && npx vite build --outDir /tmp/fe-dist --emptyOutDir"`. Expected: success; main script about 568 kB (a "larger than 500 kB" notice is normal and pre-dates this work).
+- **Rebuild and redeploy** (`docker compose build && docker compose up -d`) was **not** done in this stage; the running containers are the previous version until you do it.

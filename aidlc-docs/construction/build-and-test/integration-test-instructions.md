@@ -66,3 +66,25 @@ docker compose down        # stop and remove containers (keeps ./data/postgres)
 docker compose down -v     # also remove volumes, for a fully clean slate
 rm .env                    # if you created one for testing only
 ```
+
+---
+
+## Addendum (2026-10-04) — Probable Duplicate Statement Detection (Epic 14): cross-service checks
+
+The scenarios above are live-stack smoke tests. Epic 14 added two checks that need no live stack at all, kept in `integration-tests/` (see its README for the one-time scratch environment):
+
+### Scenario 6: Worker ↔ API ↔ data — the whole removal lifecycle
+- **Command**: `python -m pytest integration-tests -q` (a throwaway PostgreSQL via testcontainers; Docker must be running)
+- **What it proves**: the worker detects a pair; the API lists it, refuses a stale or wrong confirmation, queues the removal; the worker executes the API's job; the API reports it removed; the next ingestion run recognises the removed copy's file without reading it; override, re-ingestion, and a scan that never re-proposes the file.
+- **Result 2026-10-04**: passes. It found one real defect when first run (a stale "found" count), since fixed.
+
+### Scenario 7: Frontend ↔ API contract
+- **Command**: `python integration-tests/contract_check_probable_duplicates.py` (exit 1 and a list of mismatches on any difference)
+- **What it proves**: field names, required/nullable, enumerated values and all 8 routes with methods agree between `frontend/src/api/{types,duplicates}.ts` and what the API actually sends (100 items).
+- **Result 2026-10-04**: passes; shown to fail on a renamed field, enum typos and wrong routes.
+
+### Looking at the new screens without touching the live stack
+Used on 2026-10-04 and torn down afterwards: start a throwaway PostgreSQL on a spare port; create the schema and seed it with the real worker code (ingest download-pairs with detection off, run the pair scan, execute one removal, leave one in flight, run again with detection on); run the real API app against it on a spare port with `FRONTEND_ORIGIN` set to the dev frontend's address; run the Vite dev server from a scratch copy of `frontend/` whose `index.html` sets `window.__APP_CONFIG__ = { apiBaseUrl: "http://localhost:<spare port>" }`. **The frontend's default API address is the live API's port, so that override is essential**; confirm in the browser's network log that nothing reaches the live port. Log in through the form (a reload logs you out — a known existing bug, filed separately — so navigate with the app's own links).
+
+### Not run (live-system steps, need a decision)
+Rebuild and redeploy; `check-duplicates` against real statements (the CLI migrates the live database to 0019 and 0020 first); switching detection on; the real backfill.

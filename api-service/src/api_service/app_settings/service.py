@@ -46,6 +46,10 @@ def _effective_value_str(spec: SettingSpec, overrides: dict[str, str | None]) ->
     if raw is not None:
         return raw, True
     live_value = getattr(config.settings, spec.name, spec.default)
+    if isinstance(live_value, bool):
+        # Epic 14: str(True) is "True", which would not match an enumerated setting's allowed values
+        # ("false"/"true") and would show the detection switch as an unrecognised value.
+        return str(live_value).lower(), False
     return str(live_value), False
 
 

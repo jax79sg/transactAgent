@@ -12,7 +12,7 @@ queued --> running --> completed
 
 - **queued**: Created by the API Service (Unit 2) when the user triggers a run (US-1.2); BR-10 ensures only one run is ever in `queued` or `running`.
 - **running**: Claimed by the Ingestion Worker Service (Unit 3) polling for queued runs.
-- **completed**: All files in the run had outcome `processed` or `skipped_duplicate` (zero `failed`).
+- **completed**: All files in the run had outcome `processed`, `skipped_duplicate`, or `skipped_probable_duplicate` (zero `failed`; a skip is never a failure, BR-52).
 - **completed_with_failures**: At least one file had outcome `failed`, but the run itself finished (NFR-2.2 partial-failure isolation — one bad file does not abort the run).
 - **failed**: A run-level failure occurred before any per-file processing could complete (e.g., Drive auth failure per US-1.1 edge case) — distinct from a per-file `failed` outcome.
 
@@ -23,10 +23,11 @@ No transition skips a state (e.g., `queued` never jumps directly to `completed`)
 ```
 (created when file is listed) --> processed
                                --> skipped_duplicate
+                               --> skipped_probable_duplicate   (added 2026-10-03, Epic 14)
                                --> failed
 ```
 
-Terminal, single-assignment — set once when the Orchestrator finishes handling that file, never revised afterward (a genuinely-changed statement per FR-3.2's edge case is a **new** `IngestionRunFile`/`BankStatement` row, not a mutation of the old one).
+`skipped_duplicate` means the file's exact bytes were already processed (the existing statement is linked, BR-12). `skipped_probable_duplicate` means different bytes whose extracted transactions match a statement already held, or a file already remembered as such: no statement exists for it, and its stored comparison is linked instead (BR-49). Terminal, single-assignment — set once when the Orchestrator finishes handling that file, never revised afterward (a genuinely-changed statement per FR-3.2's edge case is a **new** `IngestionRunFile`/`BankStatement` row, not a mutation of the old one).
 
 ## Lifecycle: Transaction.category_source
 
@@ -180,6 +181,116 @@ pending --[Embedding Manager successfully computes + persists the embedding]--> 
 
 Unlike every entity above, `SettingChange` has no state machine or lifecycle diagram — it carries no `status` field and no row ever transitions between states. Each row is written once, at `updateSetting()` time, and never touched again (BR-28). The only "lifecycle" that exists is at the *collection* level: the table grows by insertion only, one row per successful setting change, read back in `listSettingHistory()` (FR-CAS-9) most-recent-first. This is a deliberate design choice (Application Design's Key Design Resolution 4), not an oversight — an audit-log-shaped entity with a status field to transition would have no meaning here.
 
+## Lifecycle: Account.account_type and type_user_set (added 2026-10-02 — Account Balance at a Point in Time, Epic 13)
+
+`account_type` has three values — `unknown`, `deposit`, `credit_card` — and one flag, `type_user_set`, that decides who may change it:
+
+- **At creation** (by the Account Resolver, from the first statement's extraction): `deposit` or `credit_card` if extraction could tell, otherwise `unknown`. `type_user_set` = false.
+- **While `type_user_set` is false**: a later extraction may set or refine the type (for example `unknown` to `deposit`); the precise rule when a later extraction *disagrees* with an earlier known type is Ingestion Worker Functional Design.
+- **User correction** (Account Management Component): sets `account_type` to the user's choice and `type_user_set` to true. From then on **no extraction may change the type** (BR-34); only the user can, again.
+- **Effect on balances**: only `deposit` accounts take part in balance features (FR-AB-4). `unknown` is treated as non-deposit (A-3), so an account whose type could not be read stays out of every balance and total until the user confirms it.
+
+## Procedure: Account Resolution by Key (added 2026-10-02 — Epic 13)
+
+Run by the Ingestion Worker's Account Resolver for each **account section** of each statement whose extraction **succeeded** (a statement may hold several; two sections that resolve to the same key collapse into one, BR-37). A failed extraction never reaches it, so no account is ever created from one:
+
+1. Build the statement's key: `bank_key` from the extracted bank name; `account_identifier` as printed, normalized only for spacing and hyphens, or none if the statement prints none (A-2); and the statement's currency.
+2. Look up an `AccountKey` with that exact (`bank_key`, `account_identifier`, `currency`) (BR-30).
+3. **Found**: the statement belongs to that key's account. Nothing else about the account changes except, while `type_user_set` is false, its type (above).
+4. **Not found**: create an `Account` (derived name, display `bank_name`, type from extraction or `unknown`, the statement's currency) and its first `AccountKey`, in one step; the statement belongs to the new account.
+5. Only one ingestion run is ever active at a time (BR-10), so two statements cannot race to create the same key; BR-30's uniqueness is the backstop if that assumption ever fails.
+
+## Procedure: Account Merge (added 2026-10-02 — Epic 13)
+
+Account A is absorbed into account B, in this order, as one all-or-nothing operation (BR-35):
+
+1. Refuse unless A and B have the same currency (BR-31), **and** no single statement has a section for both (a statement that lists both proves they are different accounts; this also keeps BR-37 safe in step 3).
+2. Settle anchors: both have one, the caller must name the survivor and the other is removed; only one has one, it ends up on B; neither has one, nothing to do.
+3. Re-point every `StatementAccount` of A to B (revised 2026-10-03).
+4. Re-point every `AccountKey` of A to B. This is what makes the merge permanent: a later statement that used to resolve to A now resolves to B through the same key.
+5. Delete A, which now has no statement sections, keys, or anchor — the only state in which the schema allows an account to be deleted.
+
+B's own name, type, and `type_user_set` are unchanged. Transactions need no change at all: each belongs to an account only through its statement-account link, and that link moves with the section in step 3.
+
+## Lifecycle: BalanceAnchor (added 2026-10-02 — Epic 13)
+
+- **Absent**: a new deposit account has no anchor and so has no balance ("anchor required", A-8). Captured statement closing balances never stand in for it (they are only the cross-check).
+- **Created / replaced**: by the user, for a deposit account only; a replacement overwrites the row in place (BR-32) and every balance for that account immediately reflects it.
+- **Inert**: if the account's type stops being `deposit`, the anchor stays but nothing reads it; switching back restores it with no re-entry.
+- **Removed**: only as part of a merge (BR-35), when the other account's anchor was chosen to survive.
+
+## Cross-Entity Rule: Closing Balance Capture (added 2026-10-02 — Epic 13)
+
+At ingestion, each account section's printed closing balance and the date it applies to are stored together on that section's `StatementAccount` row (BR-33; moved from `BankStatement` on 2026-10-03, so a multi-account PDF stores one per account) and are never turned into a `Transaction`; the existing rule that balance-restatement lines are excluded from the transaction list is unchanged. Whether a given statement's pair is present depends only on what the statement prints; a missing pair just means that statement has no cross-check. The pair is never edited after being written, other than by a backfill reingest.
+
+## Cross-Entity Rule: Backfill Wipe Order and the Vector-Store Consequence (added 2026-10-02 — Epic 13)
+
+BR-36 fixes *what* the backfill touches; the order matters because of foreign keys. Rows that reference a transaction go first (`recurring_payment_matches`, `categorization_disagreements`, `recategorization_proposals` — which references `recategorization_jobs` as well as a transaction — then `recategorization_jobs`), then `transactions`, then `statement_accounts`, then `bank_statements` (a statement whose PDF is missing from Drive is skipped entirely, BR-36). `ingestion_run_files.bank_statement_id` is set to null before any statement is removed. Reingested transactions start with `embedding_status = pending` (BR-24), so the existing embedding mechanism re-embeds them with no new code.
+
+**Consequence outside the database (not designed here)**: transaction embeddings live in the separate vector store, keyed by transaction id. Deleting transactions here leaves their vectors behind there, pointing at ids that no longer exist, and the vector store client currently has no delete operation. This design cannot fix that; it is handed to the Ingestion Worker's Functional Design (Backfill Tool Component), which must remove those vectors as part of the wipe — otherwise the retroactive re-scan's nearest-neighbor search could return matches that no longer exist. Recurring-payment-name vectors are unaffected, since `recurring_payments` is kept.
+
+## Lifecycle: KnownFile.state (added 2026-10-03 — Probable Duplicate Statement Detection, Epic 14)
+
+```
+(no record) --> probable_duplicate --> overridden
+(no record) --> confirmed_duplicate --> overridden
+```
+
+- **No record to `probable_duplicate`**: inserted by the Probable Duplicate Detector when ingestion skips a file (FR-PD-1), or by the Backfill Tool when it pre-registers the copy it will skip (FR-PD-16). Both carry the matched statement's hash and the comparison (BR-40).
+- **No record to `confirmed_duplicate`**: inserted by the Statement Removal Handler when a removal completes, carrying the kept copy's hash and the pair's comparison, so the removed copy's Drive file is never re-ingested (FR-PD-13).
+- **To `overridden`**: set by the Duplicate Review Component when the user chooses "Not a duplicate — ingest it" (FR-PD-7), from either earlier state; `decided_at` is stamped. The file is ingested on the **next** run (A-PD-4). The row stays, so the file is never flagged again and the comparison can say it was ingested at the user's request. From a `confirmed_duplicate` this is the in-app way back after a removal; the corrections that sat on the removed copy are not restored.
+- No other change is allowed (BR-41). In particular a `probable_duplicate` is **never re-evaluated** by a later run: the record is of a past comparison, and only the user's override changes it. That is what makes the backfill's pre-registered skips independent of the order Drive lists files.
+
+## Lifecycle: DuplicatePair.status (added 2026-10-03 — Epic 14)
+
+```
+pending --> dismissed
+        --> removed
+        --> superseded
+```
+
+- **pending**: found by the scan, awaiting the user (FR-PD-9). Its proposal and comparison are refreshed by a later scan. The nav badge counts pending pairs that have no active removal job. *(Added 2026-10-04, Epic 14 Ingestion Worker Functional Design Q1 = C)*: a pending pair with `removal_allowed = false` is listed for information only and stays pending, and counted by the badge, until the user dismisses it.
+- **dismissed**: the user said "not a duplicate" (FR-PD-10, A-PD-5). Final: never offered again, and excluded from detection at ingestion and from the backfill's pre-registration.
+- **removed**: the database deletion for its removal job committed. Final. (A job that only failed leaves the pair `pending`, so it can be retried.) *(Refined 2026-10-04, Ingestion Worker Functional Design WR-67: originally "a removal job for it completed"; the pair, the removed file's `confirmed_duplicate` record, and the job's move to `embeddings_pending` now commit together with the deletion, because from the user's point of view the statement is gone then, and it stops the file being re-ingested before the embeddings are cleaned. A job that later ends `embeddings_failed` leaves the pair `removed`.)*
+- **superseded**: the backfill's reingest resolved it, or a scan found that its statements are no longer both held. Final.
+
+No transition skips a state, and none leaves a final state (BR-44).
+
+## Lifecycle: StatementRemovalJob.status (added 2026-10-03 — Epic 14)
+
+```
+queued --> running --> embeddings_pending --> completed
+                   |                      |
+                   |                      +-> embeddings_failed
+                   |
+                   +-> failed
+```
+
+- **queued**: written by the Duplicate Review Component when the user confirms (FR-PD-10), carrying what the user acknowledged.
+- **running**: claimed by the Ingestion Worker's Statement Removal Handler. If the worker stops while a job is `running`, the database deletion has not committed (BR-46), so on restart the job is safely marked `failed`, like a stale ingestion run, and the user may retry.
+- **embeddings_pending**: the statement, its sections, its transactions, and their dependents are deleted and committed, and `removed_transaction_ids` is recorded, in one transaction (BR-46). The embeddings are being deleted; a failure here is retried, counted in `embedding_attempts`.
+- **completed**: the embeddings are gone, the removed copy's `KnownFile` (`confirmed_duplicate`) is recorded, and the pair is `removed`. Terminal.
+- **embeddings_failed**: the retries ran out. The data is deleted; only orphaned vectors remain. Terminal and visible to the user, with a reason.
+- **failed**: nothing was deleted. Either re-verification refused the job (the statement is gone, or the removal copy now has more manual corrections than the user acknowledged) or the deletion rolled back. Terminal; the pair stays `pending`, so a new job can be requested (BR-45).
+
+## Cross-Entity Rule: What a Removal Deletes, and What Survives It (added 2026-10-03 — Epic 14)
+
+A removal deletes, for the one statement, in this order and in one transaction: `recurring_payment_matches`, `categorization_disagreements`, `recategorization_proposals`, and `recategorization_jobs` referencing its transactions; its `transactions`; its `statement_accounts`; and the `bank_statements` row, which is BR-36's wipe order scoped to one statement (BR-51 is what keeps the two lists identical). `ingestion_run_files.bank_statement_id` referencing it is set to null, so run history survives, as in the backfill. **Nothing the Epic 14 entities hold is touched**, because they refer to statements by hash (BR-50). The `Account`, `AccountKey`, and `BalanceAnchor` rows are kept, so a removal never loses an anchor or an account; an account left with no statements is harmless and is not deleted.
+
+Outside the database (not designed here): the removed transactions' embeddings live in the vector store; BR-46 and the job lifecycle are what make deleting them safe and retryable, executed by the Ingestion Worker (Unit 3).
+
+## Cross-Entity Rule: Backfill and the Probable-Duplicate Entities (added 2026-10-03 — Epic 14)
+
+When the Backfill Tool (BR-36) wipes and recreates every statement: the `KnownFile` rows survive and are matched by content hash; pending pairs whose statements the reingest resolves are marked `superseded` (BR-44); dismissed pairs are honoured, so a statement the user said is not a duplicate is neither pre-registered nor flagged; the comparison a pre-registered `KnownFile` points at is the pair's existing comparison, so the evidence survives the wipe. The Backfill Tool's backup and restore cover all six new tables, because it adds `KnownFile` rows and changes pair statuses and `restore` must revert both.
+
+## Non-Lifecycle Note: DuplicateComparison, DuplicateComparisonRow, DuplicateScanState (added 2026-10-03 — Epic 14)
+
+The comparison and its rows have no lifecycle: they are written once (BR-42). `DuplicateScanState` is a single row updated in place (BR-48) with no state machine; whether a scan is due is derived by comparing its recorded values with the current settings and statements, and that derivation belongs to Ingestion Worker Functional Design.
+
 ## Cross-Entity Rule: Statement Processing Idempotency
 
 Given the same PDF bytes (same `pdf_content_hash`), processing MUST be idempotent at the `BankStatement`/`Transaction` level: a second ingestion run encountering that hash creates an `IngestionRunFile` with `outcome = 'skipped_duplicate'` and inserts **zero** new `Transaction` rows (BR-3, FR-3.2). This is the schema-level guarantee that makes FR-1.4/US-1.4 safe to re-trigger repeatedly.
+
+*Addendum (2026-10-02, Epic 13)*: the one-time backfill (BR-36) deliberately defeats this guarantee for exactly the existing statements, by deleting their `BankStatement` rows so the same PDFs read as new. It is the only sanctioned way to do so; nothing in a normal ingestion run can.
+
+*Addendum (2026-10-03, Epic 14)*: this guarantee covers identical **bytes**. The same statement saved as a different file has different bytes and passes it, which is the gap Probable Duplicate Statement Detection closes at the level of extracted transactions (BR-39..BR-52). The two mechanisms are independent: the exact-bytes check runs first and is unchanged (NFR-PD-6).

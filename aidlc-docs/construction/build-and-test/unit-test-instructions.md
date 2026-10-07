@@ -59,3 +59,28 @@ If a test fails after you've modified code:
 1. Re-run the single failing test file for a focused view (e.g., `pytest tests/test_categorization_service.py -v`)
 2. Check whether the failure is in application code or a test fixture (several bugs found during original development were test-helper bugs, not app bugs — e.g. a hardcoded hash colliding across multiple rows in one test)
 3. Fix and re-run the full suite for that unit before moving on
+
+---
+
+## Addendum (2026-10-04) — Account Balance (Epic 13) and Probable Duplicate Statement Detection (Epic 14)
+
+**Expected results now**: Database **188**, Ingestion Worker **664**, API Service **354**, Frontend **215**, all passing; `ruff check src tests` clean in the three Python units; `tsc --noEmit` clean; `eslint` 0 errors and the same 5 existing warnings.
+
+Python suites need Docker running (each starts a throwaway PostgreSQL 16 through testcontainers) and run in parallel safely:
+
+```bash
+(cd database       && .venv/bin/python -m pytest -q)
+(cd ingestion-worker && .venv/bin/python -m pytest -q)
+(cd api-service    && .venv/bin/python -m pytest -q)
+```
+
+**Environment caveat seen on 2026-10-04**: `database/.venv` and `api-service/.venv` were broken (their interpreter no longer exists). Recreate them (`python3.12 -m venv .venv && .venv/bin/pip install -e ../database -e ".[test]"`; for the Database unit `-e ".[test]"` alone) or use any working environment with the three packages installed.
+
+The frontend has no Node on the host in this setup; run it in a container with the folder mounted (the existing `node_modules` holds Linux ARM binaries):
+
+```bash
+cd frontend
+docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "npx vitest run; npx tsc --noEmit; npx eslint ."
+```
+
+Mutation checks (one deliberate defect at a time in a scratch copy, each must fail a test) were run at each unit's Code Generation and are described in that unit's `probable-duplicate-summary.md`.
