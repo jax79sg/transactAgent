@@ -395,10 +395,28 @@ export function ReviewPage() {
               <tr className="text-left text-slate-500 dark:text-slate-400">
                 <th></th>
                 <SortableTh label="Date" sortKey="date" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
-                <th>Description</th>
+                <SortableTh
+                  label="Description"
+                  sortKey="description"
+                  activeSortKey={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
                 <SortableTh label="Amount" sortKey="amount" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
-                <th>Current category</th>
-                <th>Proposed category</th>
+                <SortableTh
+                  label="Current category"
+                  sortKey="currentCategory"
+                  activeSortKey={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Proposed category"
+                  sortKey="proposedCategory"
+                  activeSortKey={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
                 <SortableTh label="Score" sortKey="score" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
                 <SortableTh label="Source" sortKey="source" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
                 <th></th>
