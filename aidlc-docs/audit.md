@@ -3640,3 +3640,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Housekeeping; the working tree now has only the unrelated deploy/ file as untracked. Recorded on the docs branch of PR #26 (not merged).
 
 ---
+
+## Local Helm Values File Added to .gitignore
+**Timestamp**: 2026-10-07T06:36:46Z
+**User Input**: "ok add it."
+**AI Response**: "Added the pattern values-local.yaml to .gitignore, on the docs branch of PR #26 (not merged), so it reaches main by pull request. Before the change git check-ignore found no rule matching deploy/helm/transactagent/values-local.yaml (the file's own header claims it is gitignored, but no rule existed) and no Helm chart is tracked on main. The pattern is deliberately name-based, so any future local values file is covered wherever it sits. The file itself was not moved or edited, and it contains no secrets (its header says they go through Vault), only non-secret IDs and local endpoints."
+**Context**: Housekeeping; follows the discard of the classifier work.
+
+---
