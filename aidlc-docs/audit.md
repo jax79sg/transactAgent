@@ -3616,3 +3616,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Embedding backlog finishing as the Mac stays awake; the 1,093 changed categories await the user's decision.
 
 ---
+
+## Login From Another Address Refused (CORS Origin Missing)
+**Timestamp**: 2026-10-07T00:37:21Z
+**User Input**: "I cannot log in from another address to 192.168.50.41:8787"
+**AI Response**: "CAUSE: the stack was healthy and listening on all interfaces (frontend 8787, API 7878), the page loaded from 192.168.50.41, but the API's CORS check rejected the browser's origin: the preflight from http://192.168.50.41:8787 returned 400 'Disallowed CORS origin', because FRONTEND_ORIGIN in the local .env listed only localhost and two earlier DHCP addresses of the Mac (192.168.50.113 and 192.168.50.145); the Mac's address is now 192.168.50.41. FIX: appended http://192.168.50.41:8787 to FRONTEND_ORIGIN in the gitignored .env and recreated only the API container (docker compose up -d --no-deps api-service; worker, frontend, database and vector store untouched, still up). VERIFIED: the API is healthy and the same preflight now returns 200 with access-control-allow-origin: http://192.168.50.41:8787. A real login was not attempted (no credentials entered). NOT CHANGED: no code, no wildcard origin. The Mac's address changes with DHCP (three different addresses so far), so this will recur; the durable fix is a DHCP reservation on the router. NOTE: while reading the file the assistant's output showed JWT_SECRET and the Google OAuth client secret from .env in this session; they are the user's own local values, but rotating them is an option. Google Drive connection links still use http://localhost:7878/drive/callback, so connecting Drive must be done from the Mac itself."
+**Context**: Operations support; configuration only, no commit needed (.env is gitignored).
+
+---
