@@ -11,6 +11,7 @@ import * as recurringPaymentsApi from "../src/api/recurringPayments";
 import { NavBar } from "../src/components/NavBar";
 import { AuthProvider } from "../src/context/AuthContext";
 import { ThemeProvider } from "../src/context/ThemeContext";
+import { appVersion } from "../src/version";
 
 vi.mock("../src/api/recategorization");
 vi.mock("../src/api/recurringPayments");
@@ -290,5 +291,26 @@ describe("NavBar pending duplicates badge", () => {
 
     await waitFor(() => expect(screen.getByTestId("pending-review-badge")).toHaveTextContent("6"));
     expect(screen.queryByTestId("pending-duplicates-badge")).not.toBeInTheDocument();
+  });
+});
+
+
+describe("NavBar release label (issue #27)", () => {
+  beforeEach(() => {
+    vi.spyOn(recurringPaymentsApi, "getRecurringPaymentsStatus").mockResolvedValue(NO_ATTENTION_NEEDED);
+    vi.spyOn(backgroundActivityApi, "getActivitySummary").mockResolvedValue(NO_ACTIVITY);
+    vi.spyOn(recategorizationApi, "getPendingCount").mockResolvedValue({ pendingCount: 0 });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("always shows the release, linking to the About card on Settings", () => {
+    renderNavBar();
+
+    const label = screen.getByTestId("app-version");
+    expect(label).toHaveTextContent(`v${appVersion}`);
+    expect(label).toHaveAttribute("href", "/settings#about");
   });
 });

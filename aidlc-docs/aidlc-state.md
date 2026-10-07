@@ -606,3 +606,8 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Code Generation — Ingestion Worker and API Service: Complete (2026-10-05); plan steps 1-10 [x]; worker 711 tests, API 373, ruff clean, 13 mutations each caught; `construction/ingestion-worker/code/gemini-embedding-provider-summary.md`.
 - [ ] Deploy (plan step 11): waits for the backfill to finish, since a worker restart would fail its in-progress run.
 
+
+## Issue-Driven Change: Versioned Releases and an Up-to-Date, Archived Guide (GitHub issue #27, 2026-10-07)
+- [x] Requirements Analysis — Standard; `inception/requirements/versioned-guide-requirements.md` (GV-1..GV-6); three assumptions stated for review (the number 1.0.0; Pages publishing; full copies per release).
+- [x] Code Generation — Database, API Service, Ingestion Worker, Frontend, deployment files, `scripts/` tool and the guide: Complete (2026-10-07); `construction/plans/versioned-guide-code-generation-plan.md` steps 1-8 [x]; database 206 tests, worker 715, API 377, frontend 252, release tool 35; 42 mutation checks all caught; summary `construction/api-service/code/versioned-guide-summary.md`.
+- [ ] Review and merge — PR open, NOT merged. The guide is published by GitHub Pages only after it merges to `main`.

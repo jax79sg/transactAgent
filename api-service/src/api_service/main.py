@@ -23,6 +23,7 @@ from api_service.ingestion.router import router as ingestion_router
 from api_service.recategorization.router import router as recategorization_router
 from api_service.recurring_payments.router import router as recurring_payments_router
 from api_service.transactions.router import router as transactions_router
+from api_service.version import router as version_router
 
 _DATABASE_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "database" / "alembic.ini"
 
@@ -59,6 +60,7 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health_router)
+    app.include_router(version_router)
     app.include_router(auth_router)
     app.include_router(transactions_router)
     app.include_router(dashboards_router)
