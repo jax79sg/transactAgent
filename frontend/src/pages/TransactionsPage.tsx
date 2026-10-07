@@ -403,7 +403,13 @@ export function TransactionsPage() {
                 sortDir={filter.sortDir ?? "desc"}
                 onSort={handleSort}
               />
-              <th>Converted (SGD)</th>
+              <SortableTh
+                label="Converted (SGD)"
+                sortKey="converted"
+                activeSortKey={filter.sortBy}
+                sortDir={filter.sortDir ?? "desc"}
+                onSort={handleSort}
+              />
               <th></th>
             </tr>
           </thead>

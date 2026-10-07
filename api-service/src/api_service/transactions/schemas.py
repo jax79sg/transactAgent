@@ -10,7 +10,7 @@ from api_service.schemas import CamelModel
 FlowDirection = Literal["in", "out"]
 CategorySourceFilter = Literal["similarity", "llm", "manual", "unsure"]
 GroupByOption = Literal["category", "bank", "month", "categorySource"]
-SortByOption = Literal["date", "amount", "category", "bank", "description"]
+SortByOption = Literal["date", "amount", "category", "bank", "description", "converted"]
 SortDir = Literal["asc", "desc"]
 
 
