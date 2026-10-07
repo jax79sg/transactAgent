@@ -618,3 +618,8 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Requirements Analysis — Standard; `inception/requirements/versioned-guide-requirements.md` (GV-1..GV-6); three assumptions stated for review (the number 1.0.0; Pages publishing; full copies per release).
 - [x] Code Generation — Database, API Service, Ingestion Worker, Frontend, deployment files, `scripts/` tool and the guide: Complete (2026-10-07); `construction/plans/versioned-guide-code-generation-plan.md` steps 1-8 [x]; database 206 tests, worker 715, API 377, frontend 252, release tool 35; 42 mutation checks all caught; summary `construction/api-service/code/versioned-guide-summary.md`.
 - [ ] Review and merge — PR open, NOT merged. The guide is published by GitHub Pages only after it merges to `main`.
+
+## Release 1.1.0 and the Merge of PRs #24, #26, #29, #30 (2026-10-07, user: "go ahead")
+- [x] Merged in order: #26 docs, #24 sortable Description and Converted (SGD), #29 Costs page, #30 release numbers and the versioned guide.
+- [x] Release 1.1.0: `VERSION` = 1.1.0; guide updated with the Costs page and retaken screenshots; `docs/v1.1.0/` cut; `docs/v1.0.0/` kept as released.
+- [ ] Deploy 1.1.0 to the live stack (see `audit.md`).

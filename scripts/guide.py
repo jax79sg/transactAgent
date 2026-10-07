@@ -28,6 +28,8 @@ SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 META = re.compile(r'<meta name="guide-version" content="([^"]*)">')
 BANNER = re.compile(r"<!--version-banner-->.*?<!--/version-banner-->", re.DOTALL)
 ARCHIVED_BANNER = re.compile(r'class="version-banner archived"')
+# Links that are right in the latest guide (at the site root) but break in an archived copy one folder down.
+ROOT_RELATIVE_LINKS = ('href="releases.html"', 'href="./"')
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -162,6 +164,12 @@ def check(root: Path) -> List[str]:
             problems.append("docs/v{}/index.html is not stamped as version {}".format(release["version"], release["version"]))
         elif banner(release["version"], False) not in text:
             problems.append("docs/v{}/index.html lacks its archived-release banner".format(release["version"]))
+        for link in ROOT_RELATIVE_LINKS:
+            if link in text:
+                problems.append(
+                    "docs/v{v}/index.html has {link}, which resolves inside docs/v{v}/ and goes nowhere; "
+                    "use the full address (https://jax79sg.github.io/transactAgent/...) or ../".format(v=release["version"], link=link)
+                )
 
     docs = root / "docs"
     for folder in sorted(docs.glob("v*")):
