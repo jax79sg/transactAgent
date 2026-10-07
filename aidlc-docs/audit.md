@@ -3624,3 +3624,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Operations support; configuration only, no commit needed (.env is gitignored).
 
 ---
+
+## Epics 13 and 14 Merged (PR #25)
+**Timestamp**: 2026-10-07T04:54:25Z
+**User Input**: "Ok. Merge, commit and push."
+**AI Response**: "Checked PR #25 first: not a draft, mergeable, merge state CLEAN, all 17 checks green (lint and tests for API, worker, database, frontend and model training; Docker builds; CodeQL; gitleaks; GitGuardian; dependency scan), and the branch head (af7652b) equal to the pushed head. Merged with a merge commit, the repository's convention (merge commit f72fa89 on main, 2026-10-07T04:54:01Z). Everything of this work was already committed and pushed; the local main branch was fast-forwarded to f72fa89 without switching branches. NOT committed, deliberately: the unrelated working-tree changes from the shelved classifier work (model-training/pyproject.toml, model-training/src/model_training/repository.py, classifier_dataset.py, classifier_train.py, deploy/, and large generated datasets, outputs, backups and a virtual environment under model-training/); they are not part of this PR, and the generated data and venv do not belong in the repository. This record is committed on its own branch (docs/record-epic-13-14-merge) for a small docs PR, not merged, because main takes changes through pull requests only."
+**Context**: Epics 13 (Account Balance) and 14 (Probable Duplicate Statement Detection) are on main and deployed. Open for the user: the 1,093 changed automatic categories, the Mac's power settings, the SEEEDSTUDIO amount, 16 zero-transaction PDFs, the pending duplicate pairs.
+
+---
