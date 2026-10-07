@@ -606,3 +606,7 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Code Generation — Ingestion Worker and API Service: Complete (2026-10-05); plan steps 1-10 [x]; worker 711 tests, API 373, ruff clean, 13 mutations each caught; `construction/ingestion-worker/code/gemini-embedding-provider-summary.md`.
 - [ ] Deploy (plan step 11): waits for the backfill to finish, since a worker restart would fail its in-progress run.
 
+
+## Issue-Driven Change: Sortable Description and Converted Columns (GitHub issue #23, PR #24 completed 2026-10-07)
+- [x] Fix — PR #24 (an earlier automated change) completed: URL state allow-list, case-insensitive description order, total ordering for stable paging, Converted (SGD) sortable; API 391 tests, frontend 226, 10 mutation checks all caught. Detail in `audit.md`.
+- [ ] Review and merge — PR #24 open, NOT merged. Review-page proposal columns (Description, Current category, Proposed category) remain unsortable (needs backend sorting); offered as a follow-up.
