@@ -623,3 +623,7 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Merged in order: #26 docs, #24 sortable Description and Converted (SGD), #29 Costs page, #30 release numbers and the versioned guide.
 - [x] Release 1.1.0: `VERSION` = 1.1.0; guide updated with the Costs page and retaken screenshots; `docs/v1.1.0/` cut; `docs/v1.0.0/` kept as released.
 - [x] Deployed 1.1.0 to the live stack (2026-10-07; see `audit.md`): backup `data/backups/pre-release-1.1.0-20261007T135756Z.dump`, migration 0021 applied, a real embedding call recorded in the live ledger, the guide published on GitHub Pages.
+
+## About-This-Project Note (2026-10-08)
+- [x] README and guide carry a prominent note: a learning project of jax79sg, much of it made with Claude Code (Opus and Sonnet). Guide re-cut at 1.1.0 (latest and archive); 1.0.0 archive untouched.
+- [ ] Review and merge — PR open, NOT merged.

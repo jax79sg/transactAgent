@@ -118,6 +118,27 @@
     text-wrap: pretty;
   }
 
+  .project-note {
+    max-width: 62ch;
+    margin: 28px 0 0;
+    padding: 14px 18px;
+    border: 1px solid var(--accent-soft-border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    font-size: 0.97rem;
+  }
+  .project-note .label {
+    display: block;
+    margin: 0 0 5px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .project-note p { margin: 0; color: var(--ink); }
+
   /* ---------- Layout: rail + content ---------- */
   .layout {
     display: grid;
@@ -374,6 +395,10 @@
     <!--version-banner--><p class="version-banner">Guide for <strong>version 1.1.0</strong>, the latest release. <a href="releases.html">All versions</a></p><!--/version-banner-->
     <h1>Bank Transaction Insights</h1>
     <p class="lede">Turn a folder of bank statement PDFs into categorized transactions, spending charts, and plain-English answers about your own money — with a nightly backup running quietly in the background.</p>
+    <div class="project-note">
+      <span class="label">About this project</span>
+      <p>This project is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. <strong>Much of this entire repository — the code, the tests and the documentation — was made with Claude Code, using Anthropic's Claude Opus and Sonnet models.</strong></p>
+    </div>
   </div>
 
   <div class="layout">
@@ -713,7 +738,7 @@
       </section>
 
       <footer class="manual-footer">
-        Bank Transaction Insights — User Guide, version 1.1.0. Screenshots use sample data for illustration.
+        Bank Transaction Insights — User Guide, version 1.1.0. Screenshots use sample data for illustration. A learning project by jax79sg, made largely with Claude Code (Claude Opus and Sonnet).
       </footer>
     </div>
   </div>

@@ -1,5 +1,8 @@
 # Bank Transaction Insights
 
+> [!NOTE]
+> **About this project.** This is **jax79sg**'s means of learning and understanding the challenges of building software with a coding agent. **Much of this entire repository — the code, the tests and the documentation — was made with [Claude Code](https://claude.com/claude-code), using Anthropic's Claude Opus and Sonnet models.** The [`aidlc-docs/`](aidlc-docs/) folder keeps the trail: what was asked, what was decided and what was built, change by change.
+
 [![Database](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml)
 [![API Service](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml)
 [![Ingestion Worker](https://github.com/jax79sg/transactAgent/actions/workflows/test-ingestion-worker.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-ingestion-worker.yml)

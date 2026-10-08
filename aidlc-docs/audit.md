@@ -3680,3 +3680,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Release and deployment; the live app now shows its release number and has the Costs page.
 
 ---
+
+## About-This-Project Note in the README and the Guide
+**Timestamp**: 2026-10-08T06:13:27Z
+**User Input**: "add in a prominent spot in the readme and guide that this project is jax79sg's means of learning and understanding the challenges of using coding agent. Also highlight much of this entire repo is made via Claude Code with Opus and Sonnet."
+**AI Response**: "README: a GitHub 'note' callout as the very first thing under the title (above the status badges): the project is jax79sg's means of learning and understanding the challenges of building software with a coding agent; much of the entire repository (code, tests, documentation) was made with Claude Code using Anthropic's Claude Opus and Sonnet models; with a pointer to aidlc-docs/ as the trail of what was asked, decided and built. GUIDE: an 'About this project' callout on the cover, under the one-line description and so on the first screen at desktop and phone widths (checked in Chrome in light, dark and phone widths: no console errors, no horizontal overflow), and a closing line in the footer. The wording stays to what was asked: it does not claim the work was reviewed, hardened, or anything beyond 'much of this was made with Claude Code'. HOW THE GUIDE CHANGE IS VERSIONED: no feature changed, so VERSION stays 1.1.0; the latest guide and the 1.1.0 archive were both re-cut with `guide.py snapshot` (same version, same date and summary) so that the release the live stack is on carries the note. This bends RELEASING.md's 'archives are never edited' for one reason (the note is about the whole project, not a feature of that release) and only for the current release; the 1.0.0 archive is left exactly as shipped. The note reaches the published guide when this merges (GitHub Pages builds from main). NOT DONE: nothing is merged; the app itself (Settings About card) was not changed, since only the README and guide were asked for."
+**Context**: Documentation only; PR open, not merged.
+
+---
