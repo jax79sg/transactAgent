@@ -635,3 +635,6 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## Release 1.1.1 (2026-10-08, user: "ok deploy, with a version bump, guide note and screenshots updates, then a rebuild.")
 - [x] `VERSION` = 1.1.1; guide updated, all screenshots retaken, `docs/v1.1.1/` cut.
 - [x] Merged (PR #35), tagged `v1.1.1`, deployed to the live stack 2026-10-08 after waiting for the recategorization queue to drain (see `audit.md`).
+
+## Security PR 3 of 3 (2026-10-08)
+- [x] Frontend: vitest 4.1.11 (removes tinypool), source-map-js 1.2.2, brace-expansion 5.0.12, a global mock reset in `tests/setup.ts`; lint, build and 327 tests pass from a clean install. PR open, NOT merged. `braces` (high, no patched version exists; Tailwind 3 only) is not resolvable without a Tailwind 4 migration.
