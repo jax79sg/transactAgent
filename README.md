@@ -2,6 +2,8 @@
 
 > [!NOTE]
 > **About this project.** This is **jax79sg**'s means of learning and understanding the challenges of building software with a coding agent. **Much of this entire repository — the code, the tests and the documentation — was made with [Claude Code](https://claude.com/claude-code), using Anthropic's Claude Opus and Sonnet models.** The [`aidlc-docs/`](aidlc-docs/) folder keeps the trail: what was asked, what was decided and what was built, change by change.
+>
+> **How it was checked.** Every change is built behind automated tests and security scans, and the findings are tracked: since the first push (3 Aug 2026), **16 vulnerabilities have been fixed** and **72 findings are still open** (figures as of 8 Oct 2026; the breakdown, and what this is *not*, is in [How this was reviewed and hardened](#how-this-was-reviewed-and-hardened)).
 
 [![Database](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml)
 [![API Service](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml)
@@ -15,6 +17,41 @@
 A self-hosted, single-user web app that pulls your bank statement PDFs from a private Google Drive folder, extracts transactions with an LLM, auto-categorizes them (learning from your corrections over time), and gives you a filterable transaction table plus financial dashboards. Fully containerized — one `docker-compose up` runs the whole thing on your own machine.
 
 📘 **[User Guide](https://jax79sg.github.io/transactAgent/)** — a screenshot walkthrough of every page (login, top bar, dashboard, transactions, Ask AI, ingestion, review, settings). Every release keeps its own copy of the guide — see the [list of releases](https://jax79sg.github.io/transactAgent/releases.html); the version you are running is shown in the app's top bar and under Settings. Screenshots use AI-generated sample data, not real transactions. To cut a release, see [RELEASING.md](RELEASING.md).
+
+## How this was reviewed and hardened
+
+Written down so a reader can judge it, including the parts that are not flattering. Figures are a snapshot from GitHub's own security records and the repository on **8 October 2026**; the live numbers are on the repository's [Security tab](https://github.com/jax79sg/transactAgent/security).
+
+**Reviewed**
+
+- **Approval gates, on the record.** The project follows a written workflow (AI-DLC): requirements, designs and code-generation plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim in [`aidlc-docs/audit.md`](aidlc-docs/audit.md) (443 logged inputs). Some approvals were a standing instruction to carry on, and the log shows which.
+- **Pull requests with automated checks.** Since 21 Aug 2026 every change has been merged through a pull request (23 so far; none committed straight to `main`). Each runs about 15 checks: lint and type checks, the test suites below, Docker builds, CodeQL, gitleaks, GitGuardian, and dependency scans. Automated checks and scanning were only switched on on 17 Aug, two weeks after the first push, so the first two weeks had none.
+- **Tests: about 1,800** (1,793: 257 database, 734 ingestion worker, 446 API, 318 frontend, 38 release tooling), run against a real PostgreSQL, with property-based tests on pure logic and four browser end-to-end specs run nightly.
+- **The tests were tested.** For recent features, code was deliberately broken in a scratch copy to confirm a test notices (for example 72 such checks on the Costs page and 42 on release numbering); each time one went unnoticed, a test was added. The results are in `aidlc-docs/`.
+
+**Hardened (in the app)**
+
+- **57 of the API's 61 operations need a login.** The four that don't are the health check, the release number, sign-in, and the address Google redirects back to during Drive connect (the API's own documentation pages are public too). Passwords are stored as bcrypt hashes and sessions expire.
+- The API accepts browser requests only from the addresses listed in `FRONTEND_ORIGIN`.
+- The Settings page can change only an allow-list of values, and never shows secrets.
+- Destructive steps are guarded: removing a duplicate statement lists exactly what will be deleted and asks first; the one-time re-ingestion needs a typed confirmation and a backup; the newest database migrations refuse to downgrade over data they would destroy.
+- Secrets live in a git-ignored `.env`; GitHub secret scanning and push protection are on, and CI runs gitleaks with a custom rule for password hashes.
+
+**Vulnerabilities since the first push** (dependency and code scanning began on 17 Aug 2026, so nothing before that was scanned)
+
+| Source | Raised | **Fixed** | Still open |
+|---|---|---|---|
+| Dependabot (known-vulnerable dependencies) | 80 | **14** (1 critical, 4 high, 8 medium, 1 low) | 63 (33 distinct advisories: 3 critical, 9 high, 21 medium); 3 more were auto-dismissed by GitHub |
+| CodeQL (code scanning) | 11 | **2** (a CI-only fixture password echoed in a script's output; a missing workflow permissions block), fixed in commits before merge | 9 (all "workflow does not contain permissions", medium) |
+| GitHub secret scanning | 0 | | 0 |
+
+**16 fixed, 72 open.** Thirteen of the fourteen dependency fixes landed within six days of the first alerts (the vitest and vite CVEs, the PyJWT and clearml set, nanoid). Most of the open dependency alerts are advisories published in early October against PyJWT and urllib3, repeated across the five lock files. Dependabot's automatic security updates are off and the dependency scan in CI is report-only, so these are fixed by hand, and haven't been yet.
+
+**What this is not**
+
+- It has had **no independent security review or penetration test**, and the workflow's security-baseline rules were **not enabled**: the hardening above comes from the scanners, the tests and jax79sg's approvals, not from a formal security design review.
+- "Fixed" means GitHub's records or the commits say so. Open findings are still open.
+- It is a single-user app designed to run on your own machine or network. Treat it as a learning project.
 
 ## What it does
 
