@@ -3717,3 +3717,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Release 1.1.1 deployed; recategorization performance analysed, not changed.
 
 ---
+
+## Security PR 2 of 3: PyJWT and urllib3 in the model-training Lock File
+**Timestamp**: 2026-10-08T08:39:16Z
+**User Input**: "Resolve all high and critical vulnerabilities. Split into different PRs as you deem necessary."
+**AI Response**: "model-training is a separate offline research unit (not a docker-compose service) with its own lock file, so it gets its own pull request. `uv lock --upgrade-package` for pyjwt and urllib3: PyJWT 2.13.0 to 2.15.1 and urllib3 2.7.0 to 2.8.0, nothing else. VERIFIED by building the unit's whole environment from the new lock on this Mac (uv sync --frozen --extra test, which installs the real mlx-tune stack): ruff clean, its 29 unit tests pass, and mlx_tune, its VLM config, datasets and clearml import and a datasets Dataset can be built. THE THIRD ADVISORY IN THIS UNIT, fsspec GHSA-27vj-qcqg-25rc (high, template injection in ReferenceFileSystem, fixed in 2026.6.0), CANNOT be fixed by a plain upgrade and is deliberately NOT in this pull request: every release of mlx-tune up to the latest (0.6.0) requires datasets below 4, and datasets 3.x requires fsspec at most 2025.3.0, so the lock cannot move past 2025.3.0 without overriding a declared constraint. Exposure is nil as written: the advisory needs fsspec to open an attacker-supplied reference:// document, and nothing in model_training uses datasets, fsspec or Hugging Face loading (mlx_tune is imported only inside train.py). Options are weighed in the next entry."
+**Context**: Dependency security fix; PR open, not merged.
+
+---

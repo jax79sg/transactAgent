@@ -635,3 +635,6 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## Release 1.1.1 (2026-10-08, user: "ok deploy, with a version bump, guide note and screenshots updates, then a rebuild.")
 - [x] `VERSION` = 1.1.1; guide updated, all screenshots retaken, `docs/v1.1.1/` cut.
 - [x] Merged (PR #35), tagged `v1.1.1`, deployed to the live stack 2026-10-08 after waiting for the recategorization queue to drain (see `audit.md`).
+
+## Security PR 2 of 3 (2026-10-08)
+- [x] model-training lock: PyJWT 2.15.1, urllib3 2.8.0; ruff and 29 tests pass in an environment built from the new lock; mlx_tune stack imports. PR open, NOT merged. The unit's fsspec advisory is blocked by mlx-tune's `datasets<4` pin (see `audit.md`).
