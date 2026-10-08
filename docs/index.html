@@ -118,6 +118,27 @@
     text-wrap: pretty;
   }
 
+  .project-note {
+    max-width: 62ch;
+    margin: 28px 0 0;
+    padding: 14px 18px;
+    border: 1px solid var(--accent-soft-border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    font-size: 0.97rem;
+  }
+  .project-note .label {
+    display: block;
+    margin: 0 0 5px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .project-note p { margin: 0; color: var(--ink); }
+
   /* ---------- Layout: rail + content ---------- */
   .layout {
     display: grid;
@@ -374,6 +395,11 @@
     <!--version-banner--><p class="version-banner">Guide for <strong>version 1.1.0</strong>, the latest release. <a href="releases.html">All versions</a></p><!--/version-banner-->
     <h1>Bank Transaction Insights</h1>
     <p class="lede">Turn a folder of bank statement PDFs into categorized transactions, spending charts, and plain-English answers about your own money — with a nightly backup running quietly in the background.</p>
+    <div class="project-note">
+      <span class="label">About this project</span>
+      <p>This project is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. <strong>Much of this entire repository — the code, the tests and the documentation — was made with Claude Code, using Anthropic's Claude Opus and Sonnet models.</strong></p>
+      <p style="margin-top:8px">It is checked by automated tests and security scans on every change. Since the first push, <strong>16 vulnerabilities have been fixed and 72 findings are still open</strong> (8 Oct 2026). <a href="#about-project">The full breakdown, and what this is not.</a></p>
+    </div>
   </div>
 
   <div class="layout">
@@ -389,6 +415,7 @@
         <a href="#review">Review</a>
         <a href="#costs">Costs</a>
         <a href="#settings">Settings</a>
+        <a href="#about-project">About this project</a>
         <a href="#releases">Releases</a>
       </nav>
     </aside>
@@ -691,8 +718,47 @@
 
       </section>
 
+      <section class="feature" id="about-project">
+        <p class="kicker">10 · About this project</p>
+        <h2>How it was made, reviewed and hardened</h2>
+        <p class="dek">This is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. Much of this entire repository — the code, the tests and the documentation — was made with <strong>Claude Code</strong>, using Anthropic's <strong>Claude Opus and Sonnet</strong> models. What follows is how it was checked, including the parts that are not flattering. The figures are a snapshot from GitHub's own security records on 8 October 2026.</p>
+
+        <h3>Reviewed</h3>
+        <ul class="feature-list">
+          <li><strong>Approval gates, on the record.</strong> Requirements, designs and plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim (443 logged inputs); some approvals were a standing instruction to carry on, and the log shows which.</li>
+          <li><strong>Pull requests with automated checks.</strong> Since 21 August 2026 every change has gone through a pull request (23 so far), each running about 15 checks: lint, type checks, tests, Docker builds, CodeQL, gitleaks, GitGuardian and dependency scans. Those were only switched on on 17 August, two weeks after the first push.</li>
+          <li><strong>About 1,800 automated tests</strong>, run against a real PostgreSQL, with property-based tests and nightly browser tests. For recent features the tests were themselves tested by deliberately breaking the code to confirm a test notices.</li>
+        </ul>
+
+        <h3>Hardened</h3>
+        <ul class="feature-list">
+          <li>57 of the server's 61 operations need a login. The four that don't are the health check, the release number, sign-in, and the address Google redirects back to when you connect Drive. Passwords are stored hashed (bcrypt) and sessions expire.</li>
+          <li>The server accepts browser requests only from listed addresses, and Settings can change only an allow-list of values and never shows secrets.</li>
+          <li>Destructive steps ask first and say exactly what they will delete; the one-time re-ingestion needs a typed confirmation and a backup.</li>
+          <li>Secrets stay out of the repository: GitHub secret scanning and push protection are on, and CI runs gitleaks.</li>
+        </ul>
+
+        <h3>Vulnerabilities since the first push</h3>
+        <p class="dek">Dependency and code scanning began on 17 August 2026, so nothing before that was scanned.</p>
+        <ul class="feature-list">
+          <li><strong>Dependencies (Dependabot):</strong> 80 raised, <strong>14 fixed</strong> (1 critical, 4 high, 8 medium, 1 low), <strong>63 still open</strong> (33 distinct advisories: 3 critical, 9 high, 21 medium) and 3 auto-dismissed by GitHub.</li>
+          <li><strong>Code scanning (CodeQL):</strong> 11 raised, <strong>2 fixed</strong> (a CI-only fixture password echoed in a script's output; a missing workflow permission), <strong>9 still open</strong> (all medium: workflows without an explicit permissions block).</li>
+          <li><strong>Leaked secrets:</strong> none flagged by GitHub.</li>
+        </ul>
+
+        <div class="callout warn">
+          <span class="label">16 fixed, 72 still open</span>
+          <p>Most of the open dependency alerts are advisories published in early October against PyJWT and urllib3, repeated across the project's lock files. Automatic security updates are off and the CI dependency scan only reports, so these are fixed by hand, and have not been yet.</p>
+        </div>
+
+        <div class="callout warn">
+          <span class="label">What this is not</span>
+          <p>No independent security review or penetration test has been done, and the workflow's security-baseline rules were not enabled: the hardening comes from the scanners, the tests and jax79sg's approvals. It is a single-user app designed to run on your own machine or network. Treat it as a learning project. The live numbers are on the repository's <a href="https://github.com/jax79sg/transactAgent/security">Security tab</a>.</p>
+        </div>
+      </section>
+
       <section class="feature" id="releases">
-        <p class="kicker">10 · Which version?</p>
+        <p class="kicker">11 · Which version?</p>
         <h2>Releases</h2>
         <p class="dek">The app has a release number, written MAJOR.MINOR.PATCH. This guide is for version <strong>1.1.0</strong>, and every release keeps its own copy of the guide.</p>
 
@@ -713,7 +779,7 @@
       </section>
 
       <footer class="manual-footer">
-        Bank Transaction Insights — User Guide, version 1.1.0. Screenshots use sample data for illustration.
+        Bank Transaction Insights — User Guide, version 1.1.0. Screenshots use sample data for illustration. A learning project by jax79sg, made largely with Claude Code (Claude Opus and Sonnet).
       </footer>
     </div>
   </div>
