@@ -3725,3 +3725,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Dependency security fix; PR open, not merged.
 
 ---
+
+## Security PR 2b: the model-training fsspec Override (Draft, Needs a Decision)
+**Timestamp**: 2026-10-08T08:42:05Z
+**User Input**: "Resolve all high and critical vulnerabilities. Split into different PRs as you deem necessary."
+**AI Response**: "The one advisory that cannot be fixed by a plain upgrade: fsspec GHSA-27vj-qcqg-25rc (high, CVE-2026-104851, CVSS 8.8, template injection in ReferenceFileSystem when it opens an attacker-supplied reference:// document; fixed in 2026.6.0), in model-training only. Every mlx-tune release up to the latest (0.6.0) requires datasets<4 and datasets 3.x requires fsspec<=2025.3.0, so no in-spec resolution exists. OPTIONS WEIGHED: (a) a uv override of fsspec only; (b) an override forcing datasets 5 (rejected: it jumps two majors past mlx-tune's own pin, and datasets 4 changed image and audio handling that mlx-tune's VLM path may use); (c) dismiss the alert as 'not used', which changes the security record and was not done without being asked; (d) wait for mlx-tune. CHOSEN as the proposal, as a DRAFT pull request stacked on PR 2: override-dependencies = fsspec[http]>=2026.6.0 (the [http] extra kept: a first trial with plain fsspec silently dropped aiohttp and its dependencies). Resolved diff: fsspec 2025.3.0 to 2026.9.0 only. VERIFIED in an environment built from the repository's own lock: ruff clean, the 29 unit tests pass, and a smoke test of the paths datasets and mlx-tune use passes (local jsonl via load_dataset, map, train_test_split, save_to_disk and load_from_disk, an HTTP download through fsspec[http], the Hugging Face filesystem, and the mlx_tune and VLM config imports). `uv pip check` reports exactly one incompatibility, the intended one (datasets declares fsspec<=2025.3.0). NOT VERIFIED: a real fine-tuning run (it needs a 26B model download and hours of GPU time), so the claim is limited to 'the parts that can be exercised here work'. EXPOSURE: nil as written; model_training never uses datasets, fsspec or Hugging Face loading. Left as a draft because merging overrides a library's declared bound."
+**Context**: Dependency security fix needing the user's decision; draft PR open, not merged.
+
+---
