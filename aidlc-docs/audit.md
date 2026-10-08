@@ -3701,3 +3701,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Documentation only; PR open, not merged.
 
 ---
+
+## Release 1.1.1 Cut (Review Sorting)
+**Timestamp**: 2026-10-08T06:37:17Z
+**User Input**: "ok deploy, with a version bump, guide note and screenshots updates, then a rebuild."
+**AI Response**: "Read as: cut release 1.1.1 (which carries the Review page sorting merged in PR #33), then rebuild and deploy it, as was done for 1.1.0. THIS ENTRY covers the release; the deployment is recorded separately once it has happened. DONE: VERSION bumped 1.1.0 to 1.1.1 (a PATCH: no new feature, a completion of sorting and a paging fix); the guide updated (a Sort bullet in the Review section, 'What's new in 1.1.1', the earlier releases summarised, the version in its three prose places); EVERY screenshot retaken from a rebuilt demo stack so they show v1.1.1 and, on the Review page, the three newly sortable column headers (the Ask AI screenshot is kept: that screen is unchanged and needs a live key); docs/v1.1.1/ cut and docs/releases.json and releases.html updated; 1.1.0 and 1.0.0 archives left as they are. The capture script was made independent of today's date after it failed on the date having moved to 8 Oct. CHECKED: guide check ok; release tool 38 tests; the latest guide and the 1.1.1 archive rendered in Chrome with no console errors or broken images; the version-reading tests pass under 1.1.1 (database 18, API 4, frontend 27). The release pull request is merged before deploying and the merge commit tagged v1.1.1 (RELEASING.md step 4; the user asked for the 1.1.0 tag, and the same process is followed here)."
+**Context**: Release 1.1.1; deployment follows.
+
+---

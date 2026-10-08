@@ -1,5 +1,10 @@
 [
   {
+    "version": "1.1.1",
+    "date": "2026-10-08",
+    "summary": "Review page: the suggested corrections sort by Description, Current category and Proposed category too, and rows with equal values keep a steady order between pages."
+  },
+  {
     "version": "1.1.0",
     "date": "2026-10-07",
     "summary": "The Costs page (what Gemini calls cost, by day, week or month, grouped by purpose or model) with its prices in Settings; Transactions sortable by Description and Converted (SGD)."
