@@ -631,3 +631,7 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## About-This-Project Note (2026-10-08)
 - [x] README and guide carry a prominent note: a learning project of jax79sg, much of it made with Claude Code (Opus and Sonnet). Guide re-cut at 1.1.0 (latest and archive); 1.0.0 archive untouched.
 - [ ] Review and merge — PR open, NOT merged.
+
+## Release 1.1.1 (2026-10-08, user: "ok deploy, with a version bump, guide note and screenshots updates, then a rebuild.")
+- [x] `VERSION` = 1.1.1; guide updated, all screenshots retaken, `docs/v1.1.1/` cut.
+- [ ] Merge, tag `v1.1.1`, deploy to the live stack (see `audit.md`).
