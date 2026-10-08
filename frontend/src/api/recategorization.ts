@@ -9,7 +9,14 @@ import type {
   ProposalPage,
 } from "./types";
 
-export type ProposalSortByOption = "date" | "amount" | "score" | "source";
+export type ProposalSortByOption =
+  | "date"
+  | "amount"
+  | "score"
+  | "source"
+  | "description"
+  | "currentCategory"
+  | "proposedCategory";
 
 export function listPendingProposals(
   page: number,

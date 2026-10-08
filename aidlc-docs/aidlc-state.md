@@ -624,6 +624,10 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Release 1.1.0: `VERSION` = 1.1.0; guide updated with the Costs page and retaken screenshots; `docs/v1.1.0/` cut; `docs/v1.0.0/` kept as released.
 - [x] Deployed 1.1.0 to the live stack (2026-10-07; see `audit.md`): backup `data/backups/pre-release-1.1.0-20261007T135756Z.dump`, migration 0021 applied, a real embedding call recorded in the live ledger, the guide published on GitHub Pages.
 
+## Tag v1.1.0 and the Review Page Sorting Follow-Up (2026-10-07, user: "Tag it. Follow up with sorting.")
+- [x] Tag `v1.1.0` created on 0466e33 and pushed.
+- [x] Review page suggested corrections: Description, Current category and Proposed category sortable (backend sort, stable paging for every sort); API 467 tests, frontend 327, 13 mutation checks all caught. Detail in `audit.md`.
+- [ ] Review and merge — PR open, NOT merged; not released or deployed (next release would be 1.1.1).
 ## About-This-Project Note (2026-10-08)
 - [x] README and guide carry a prominent note: a learning project of jax79sg, much of it made with Claude Code (Opus and Sonnet). Guide re-cut at 1.1.0 (latest and archive); 1.0.0 archive untouched.
 - [ ] Review and merge — PR open, NOT merged.

@@ -441,3 +441,89 @@ describe("ReviewPage", () => {
     });
   });
 });
+
+
+describe("ReviewPage suggested corrections: sorting (issue #23 follow-up)", () => {
+  beforeEach(() => {
+    vi.spyOn(backupApi, "getBackupStatus").mockResolvedValue(NO_BACKUPS_YET);
+    vi.spyOn(recategorizationApi, "listPendingDisagreements").mockResolvedValue(disagreementPageOf([]));
+    vi.spyOn(duplicatesApi, "getScanStatus").mockResolvedValue(scan({ pairsFound: 0 }));
+    vi.spyOn(duplicatesApi, "listPairs").mockResolvedValue({ items: [], page: 1, pageSize: 20, totalCount: 0 });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const COLUMNS = [
+    ["date", "sort-date"],
+    ["description", "sort-description"],
+    ["amount", "sort-amount"],
+    ["currentCategory", "sort-currentCategory"],
+    ["proposedCategory", "sort-proposedCategory"],
+    ["score", "sort-score"],
+    ["source", "sort-source"],
+  ] as const;
+
+  function listSpy() {
+    return vi.spyOn(recategorizationApi, "listPendingProposals").mockResolvedValue(pageOf([makeProposal()]));
+  }
+
+  it("starts newest first and offers every data column as sortable", async () => {
+    const spy = listSpy();
+    renderReviewPage();
+
+    await waitFor(() => expect(screen.getByTestId("sort-date")).toBeInTheDocument());
+    expect(spy).toHaveBeenCalledWith(1, 20, "date", "desc");
+    for (const [, testId] of COLUMNS) {
+      expect(screen.getByTestId(testId)).toBeInTheDocument();
+    }
+  });
+
+  it.each(COLUMNS.filter(([key]) => key !== "date"))(
+    "clicking the %s header asks for that column ascending first, then flips it",
+    async (key, testId) => {
+      const user = userEvent.setup();
+      const spy = listSpy();
+      renderReviewPage();
+
+      await waitFor(() => expect(screen.getByTestId(testId)).toBeInTheDocument());
+      await user.click(screen.getByTestId(testId));
+      await waitFor(() => expect(spy).toHaveBeenLastCalledWith(1, 20, key, "asc"));
+      expect(screen.getByTestId(testId)).toHaveAttribute("aria-sort", "ascending");
+
+      await user.click(screen.getByTestId(testId));
+      await waitFor(() => expect(spy).toHaveBeenLastCalledWith(1, 20, key, "desc"));
+      expect(screen.getByTestId(testId)).toHaveAttribute("aria-sort", "descending");
+    },
+  );
+
+  it("makes only the clicked column the active one", async () => {
+    const user = userEvent.setup();
+    listSpy();
+    renderReviewPage();
+
+    await waitFor(() => expect(screen.getByTestId("sort-currentCategory")).toBeInTheDocument());
+    await user.click(screen.getByTestId("sort-currentCategory"));
+    await waitFor(() => expect(screen.getByTestId("sort-currentCategory")).toHaveAttribute("aria-sort", "ascending"));
+
+    for (const [, testId] of COLUMNS.filter(([key]) => key !== "currentCategory")) {
+      expect(screen.getByTestId(testId)).toHaveAttribute("aria-sort", "none");
+    }
+  });
+
+  it("goes back to the first page when the order changes", async () => {
+    const user = userEvent.setup();
+    const spy = vi
+      .spyOn(recategorizationApi, "listPendingProposals")
+      .mockResolvedValue({ items: [makeProposal()], page: 1, pageSize: 20, totalCount: 45 });
+    renderReviewPage();
+
+    await waitFor(() => expect(screen.getByTestId("review-next-page")).toBeInTheDocument());
+    await user.click(screen.getByTestId("review-next-page"));
+    await waitFor(() => expect(spy).toHaveBeenLastCalledWith(2, 20, "date", "desc"));
+
+    await user.click(screen.getByTestId("sort-description"));
+    await waitFor(() => expect(spy).toHaveBeenLastCalledWith(1, 20, "description", "asc"));
+  });
+});
