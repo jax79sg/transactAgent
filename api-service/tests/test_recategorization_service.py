@@ -149,6 +149,78 @@ class TestListPendingProposalsSort:
         assert [p.id for p in items] == [low.id, high.id]
 
 
+class TestListPendingProposalsSortByTextColumns:
+    """Issue #23 follow-up: Description, Current category and Proposed category sort too. Each goes through its own
+    join (the two category columns through their own aliases of Category), so each is proven separately, and with
+    names chosen so that byte order and alphabetical order disagree."""
+
+    @pytest.fixture
+    def three(self, db_session):
+        """Proposals whose descriptions, current categories and proposed categories sort in three DIFFERENT orders,
+        so a column sorted by the wrong join shows up."""
+        categories = {name: _make_category(db_session, name) for name in ("banana", "Zebra", "apple", "Cherry", "mango", "Delta")}
+        source = _make_transaction(db_session, "IKEA", categories["Zebra"], CategorySource.MANUAL)
+        job = _make_job(db_session, source.id)
+        # chosen so that byte order (capitals first) and alphabetical order disagree in every column
+        specs = [("banana stand", "Zebra", "mango"),
+                 ("Zebra Cafe", "banana", "Delta"),
+                 ("apple store", "Cherry", "apple")]
+        proposals = {}
+        for description, current, proposed in specs:
+            candidate = _make_transaction(db_session, description, categories[current], CategorySource.UNSURE)
+            proposals[description] = _make_proposal(db_session, job, candidate, categories[proposed])
+        return proposals
+
+    @pytest.mark.parametrize(
+        ("sort_by", "ascending"),
+        [
+            ("description", ["apple store", "banana stand", "Zebra Cafe"]),
+            ("currentCategory", ["Zebra Cafe", "apple store", "banana stand"]),  # banana, Cherry, Zebra
+            ("proposedCategory", ["apple store", "Zebra Cafe", "banana stand"]),  # apple, Delta, mango
+        ],
+    )
+    def test_sorts_alphabetically_whatever_the_case_in_both_directions(self, db_session, three, sort_by, ascending):
+        asc, _ = service.list_pending_proposals(db_session, page=1, page_size=20, sort_by=sort_by, sort_dir="asc")
+        desc, _ = service.list_pending_proposals(db_session, page=1, page_size=20, sort_by=sort_by, sort_dir="desc")
+
+        assert [p.id for p in asc] == [three[name].id for name in ascending]
+        assert [p.id for p in desc] == [three[name].id for name in reversed(ascending)]
+
+    @pytest.mark.parametrize("sort_by", ["description", "currentCategory", "proposedCategory", "score", "source", "date", "amount"])
+    @pytest.mark.parametrize("sort_dir", ["asc", "desc"])
+    def test_paging_through_tied_rows_yields_each_proposal_once_in_one_order(self, db_session, sort_by, sort_dir):
+        """Eleven proposals with the same description and categories, created together (so also the same created_at):
+        every sort ties on every row, and page after page must still be consecutive slices of one list."""
+        household = _make_category(db_session, "Household")
+        source = _make_transaction(db_session, "IKEA", household, CategorySource.MANUAL)
+        job = _make_job(db_session, source.id)
+        for _ in range(11):
+            candidate = _make_transaction(db_session, "SHOPEE SINGAPORE", household, CategorySource.UNSURE)
+            _make_proposal(db_session, job, candidate, household)
+
+        seen = []
+        for page in range(1, 7):
+            items, total = service.list_pending_proposals(db_session, page=page, page_size=2, sort_by=sort_by, sort_dir=sort_dir)
+            assert total == 11
+            seen.extend(p.id for p in items)
+        everything, _ = service.list_pending_proposals(db_session, page=1, page_size=50, sort_by=sort_by, sort_dir=sort_dir)
+
+        assert len(seen) == len(set(seen)) == 11
+        assert seen == [p.id for p in everything]
+
+    def test_a_resolved_proposal_never_appears_whatever_the_sort(self, db_session):
+        household = _make_category(db_session, "Household")
+        source = _make_transaction(db_session, "IKEA", household, CategorySource.MANUAL)
+        job = _make_job(db_session, source.id)
+        pending = _make_proposal(db_session, job, _make_transaction(db_session, "A", household, CategorySource.UNSURE), household)
+        _make_proposal(db_session, job, _make_transaction(db_session, "B", household, CategorySource.UNSURE), household,
+                       status=RecategorizationProposalStatus.APPROVED)
+
+        for sort_by in ("description", "currentCategory", "proposedCategory"):
+            items, total = service.list_pending_proposals(db_session, page=1, page_size=20, sort_by=sort_by, sort_dir="asc")
+            assert [p.id for p in items] == [pending.id] and total == 1
+
+
 class TestGetPendingCount:
     def test_counts_only_pending(self, db_session):
         household = _make_category(db_session, "Household")
