@@ -645,3 +645,5 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 
 ## Security PR 2b (2026-10-08)
 - [x] Draft PR (stacked on PR 2): override `fsspec[http]>=2026.6.0` in model-training; 29 tests and a datasets/fsspec/HTTP/mlx_tune smoke test pass; a real fine-tune run was not possible. DRAFT, awaiting the user's decision.
+## Security PR 3 of 3 (2026-10-08)
+- [x] Frontend: vitest 4.1.11 (removes tinypool), source-map-js 1.2.2, brace-expansion 5.0.12, a global mock reset in `tests/setup.ts`; lint, build and 327 tests pass from a clean install. PR open, NOT merged. `braces` (high, no patched version exists; Tailwind 3 only) is not resolvable without a Tailwind 4 migration.
