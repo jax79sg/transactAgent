@@ -3744,3 +3744,30 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Dependency security fix; PR open, not merged.
 
 ---
+
+## Security: User Says Vulnerabilities Are Resolved; The Four PRs Were Still Open
+**Timestamp**: 2026-10-09T01:28:50Z
+**User Input**: "tHE VULNERABILITIES has been resolved. Can you update the readme and guide?"
+**AI Response**: "Checked before writing. All four security pull requests (#37 to #40) were still open and GitHub showed 63 open Dependabot alerts, so nothing was resolved on `main` yet. Declined to write 'resolved' into the README and guide, explained why, and offered the options: merge the four PRs first and then write the real post-merge figures, or write the README and guide with the figures as they stood."
+**Context**: Premise did not match the records; the assistant did not write an untrue claim and asked.
+
+---
+## Security: Merge All Four PRs
+**Timestamp**: 2026-10-09T01:31:15Z
+**User Input**: "merge all 4."
+**AI Response**: "Merged #37 (service lock files), #38 (model-training lock), #39 (fsspec override, a draft stacked on #38, so its base was set to `main` and it was marked ready once #38 merged) and #40 (frontend, vitest 4), in that order, resolving the audit and state merge conflicts where they arose by keeping main's entries and then the branch's. GitHub's rescan afterwards: Dependabot 80 raised, 63 fixed (5 critical, 26 high, 31 medium, 1 low; 49 of them on 2026-10-09: 4 critical, 22 high, 23 medium), 16 open (all medium: Mako 4, pytest 4, oauthlib 2, react-router 2, react-router-dom, multidict, postcss-selector-parser, datasets), 1 auto-dismissed (braces, high, no patched version exists). CodeQL unchanged: 9 open (all medium workflow-permissions), 2 fixed in commits before merge. Secret scanning 0. No open high or critical alert remains. The API and worker containers were checked directly: PyJWT 2.15.1 and urllib3 2.8.0 (they install from pyproject at build, so the lock files never decided what ran), so nothing needed redeploying."
+**Context**: Security PRs merged on request; none of the changes touch the running services' code.
+
+---
+## Incident: Docker/OrbStack Hang During Frontend Verification; Assistant Mistakes
+**Trigger**: Not a user input. Happened while verifying PR #40 after the merges.
+**AI Response**: "Two mistakes by the assistant, both recorded here. (1) A verification run mounted the wrong directory (`$PWD/..` instead of the project), so a `tsc` result from it was meaningless and was discarded. (2) The assistant then ran `rm -rf node_modules` and `npm ci` over a Docker bind mount, which is very slow on this machine; it coincided with the OrbStack VM freezing (the Mac's lid-closed sleep and wake had left the VM paused), the Docker and orbctl commands hung, and the run was cut off. Recovered by a supervised `orbctl stop` then `orbctl start` (commands run in the background with a time limit and `kill -9`, since the CLIs can hang and macOS has no `timeout`). All five containers came back healthy, the version endpoint reported 1.1.1 and the database was verified intact. The frontend verification was then redone inside a container from a read-only copy of the repository (lint 0 errors, build ok, 327 of 327 tests, tinypool absent, vitest 4.1.11, source-map-js 1.2.2, brace-expansion 5.0.12); the host's `node_modules` was untouched. Lesson: do not delete or reinstall `node_modules` over a bind mount; copy the tree and run in the copy."
+**Context**: Environment fault plus assistant error; no data lost, no code or repository state damaged.
+
+---
+## README and Guide Updated With the Post-Fix Security Figures
+**Trigger**: Carries out the request logged above ("tHE VULNERABILITIES has been resolved. Can you update the readme and guide?") once the four PRs were merged.
+**AI Response**: "Recounted everything from GitHub and the repository on 2026-10-09 rather than editing the old numbers: Dependabot 80 raised, 63 fixed (5 critical, 26 high, 31 medium, 1 low), 16 open (10 distinct advisories, all medium), 1 auto-dismissed (braces); CodeQL 11 raised, 2 fixed, 9 open; secret scanning 0; totals 65 fixed and 25 open, none high or critical. The README note, its 'How this was reviewed and hardened' section and table, and the guide's cover note and 'About this project' section now say so, and the 1.1.1 guide archive was re-cut with the same summary and date (docs only; no version bump). They say plainly what is NOT resolved: the braces advisory (high, no patched release, Tailwind 3 build tooling only, GitHub auto-dismissed), the 16 medium dependency alerts, the 9 medium CodeQL warnings, and that the fsspec override in model training is untested by a real fine-tune. Two earlier statements were corrected while recounting: 'none committed straight to main since 21 Aug' was imprecise (two direct commits were made that morning, before the first pull request; the text now says so) and 'merged PRs 23' is now 28; the 3 auto-dismissed alerts are now 1 because vitest 4 removed the other two packages. Checks run: `scripts/guide.py check` ok, 38 release-tooling tests pass, guide rendered in a browser with no horizontal overflow. Opened as a pull request; not merged."
+**Context**: Documentation-only change, branch `docs/vulnerabilities-resolved`.
+
+---

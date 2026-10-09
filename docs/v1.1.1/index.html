@@ -398,7 +398,7 @@
     <div class="project-note">
       <span class="label">About this project</span>
       <p>This project is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. <strong>Much of this entire repository — the code, the tests and the documentation — was made with Claude Code, using Anthropic's Claude Opus and Sonnet models.</strong></p>
-      <p style="margin-top:8px">It is checked by automated tests and security scans on every change. Since the first push, <strong>16 vulnerabilities have been fixed and 72 findings are still open</strong> (8 Oct 2026). <a href="#about-project">The full breakdown, and what this is not.</a></p>
+      <p style="margin-top:8px">It is checked by automated tests and security scans on every change. Since the first push, <strong>65 vulnerabilities have been fixed and 25 findings are still open</strong>, all of medium severity (9 Oct 2026). <a href="#about-project">The full breakdown, and what this is not.</a></p>
     </div>
   </div>
 
@@ -722,12 +722,12 @@
       <section class="feature" id="about-project">
         <p class="kicker">10 · About this project</p>
         <h2>How it was made, reviewed and hardened</h2>
-        <p class="dek">This is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. Much of this entire repository — the code, the tests and the documentation — was made with <strong>Claude Code</strong>, using Anthropic's <strong>Claude Opus and Sonnet</strong> models. What follows is how it was checked, including the parts that are not flattering. The figures are a snapshot from GitHub's own security records on 8 October 2026.</p>
+        <p class="dek">This is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. Much of this entire repository — the code, the tests and the documentation — was made with <strong>Claude Code</strong>, using Anthropic's <strong>Claude Opus and Sonnet</strong> models. What follows is how it was checked, including the parts that are not flattering. The figures are a snapshot from GitHub's own security records on 9 October 2026.</p>
 
         <h3>Reviewed</h3>
         <ul class="feature-list">
-          <li><strong>Approval gates, on the record.</strong> Requirements, designs and plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim (443 logged inputs); some approvals were a standing instruction to carry on, and the log shows which.</li>
-          <li><strong>Pull requests with automated checks.</strong> Since 21 August 2026 every change has gone through a pull request (23 so far), each running about 15 checks: lint, type checks, tests, Docker builds, CodeQL, gitleaks, GitGuardian and dependency scans. Those were only switched on on 17 August, two weeks after the first push.</li>
+          <li><strong>Approval gates, on the record.</strong> Requirements, designs and plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim (453 logged inputs); some approvals were a standing instruction to carry on, and the log shows which.</li>
+          <li><strong>Pull requests with automated checks.</strong> From 21 August 2026 every change has gone through a pull request (28 merged so far; the last two direct commits were made that morning, before the first pull request was opened), each running about 15 checks: lint, type checks, tests, Docker builds, CodeQL, gitleaks, GitGuardian and dependency scans. Those were only switched on on 17 August, two weeks after the first push.</li>
           <li><strong>About 1,800 automated tests</strong>, run against a real PostgreSQL, with property-based tests and nightly browser tests. For recent features the tests were themselves tested by deliberately breaking the code to confirm a test notices.</li>
         </ul>
 
@@ -742,19 +742,20 @@
         <h3>Vulnerabilities since the first push</h3>
         <p class="dek">Dependency and code scanning began on 17 August 2026, so nothing before that was scanned.</p>
         <ul class="feature-list">
-          <li><strong>Dependencies (Dependabot):</strong> 80 raised, <strong>14 fixed</strong> (1 critical, 4 high, 8 medium, 1 low), <strong>63 still open</strong> (33 distinct advisories: 3 critical, 9 high, 21 medium) and 3 auto-dismissed by GitHub.</li>
+          <li><strong>Dependencies (Dependabot):</strong> 80 raised, <strong>63 fixed</strong> (5 critical, 26 high, 31 medium, 1 low), <strong>16 still open</strong> (10 distinct advisories, all medium; none high or critical) and 1 auto-dismissed by GitHub: a high-severity advisory in a development-only build tool for which no patched version has been released.</li>
           <li><strong>Code scanning (CodeQL):</strong> 11 raised, <strong>2 fixed</strong> (a CI-only fixture password echoed in a script's output; a missing workflow permission), <strong>9 still open</strong> (all medium: workflows without an explicit permissions block).</li>
           <li><strong>Leaked secrets:</strong> none flagged by GitHub.</li>
         </ul>
 
         <div class="callout warn">
-          <span class="label">16 fixed, 72 still open</span>
-          <p>Most of the open dependency alerts are advisories published in early October against PyJWT and urllib3, repeated across the project's lock files. Automatic security updates are off and the CI dependency scan only reports, so these are fixed by hand, and have not been yet.</p>
+          <span class="label">65 fixed, 25 still open, none of them high or critical</span>
+          <p>Fourteen of the dependency fixes landed between 17 August and 2 October. The other 49, including 4 critical and 22 high, were fixed on 9 October through four pull requests, after most of those alerts had been open for two to seven days. Automatic security updates are off and the CI dependency scan only reports, so they were fixed by hand. The running API and worker were already on the patched libraries, so nothing had to be redeployed.</p>
+          <p style="margin-top:8px">One fix is a compromise: the model-training tool is pinned to a newer file-handling library than one of its own dependencies says it supports. Its tests pass, but a real fine-tuning run was not tried against it.</p>
         </div>
 
         <div class="callout warn">
           <span class="label">What this is not</span>
-          <p>No independent security review or penetration test has been done, and the workflow's security-baseline rules were not enabled: the hardening comes from the scanners, the tests and jax79sg's approvals. It is a single-user app designed to run on your own machine or network. Treat it as a learning project. The live numbers are on the repository's <a href="https://github.com/jax79sg/transactAgent/security">Security tab</a>.</p>
+          <p>It is not clean: 16 medium dependency alerts and 9 medium code-scanning warnings (workflows with no explicit permissions block) are open, and the high-severity advisory in the frontend's build tooling (<code>braces</code>) has no patch; fixing it would mean moving to Tailwind 4, which has not been done. No independent security review or penetration test has been done, and the workflow's security-baseline rules were not enabled: the hardening comes from the scanners, the tests and jax79sg's approvals. It is a single-user app designed to run on your own machine or network. Treat it as a learning project. The live numbers are on the repository's <a href="https://github.com/jax79sg/transactAgent/security">Security tab</a>.</p>
         </div>
       </section>
 

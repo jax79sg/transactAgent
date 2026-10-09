@@ -3,7 +3,7 @@
 > [!NOTE]
 > **About this project.** This is **jax79sg**'s means of learning and understanding the challenges of building software with a coding agent. **Much of this entire repository — the code, the tests and the documentation — was made with [Claude Code](https://claude.com/claude-code), using Anthropic's Claude Opus and Sonnet models.** The [`aidlc-docs/`](aidlc-docs/) folder keeps the trail: what was asked, what was decided and what was built, change by change.
 >
-> **How it was checked.** Every change is built behind automated tests and security scans, and the findings are tracked: since the first push (3 Aug 2026), **16 vulnerabilities have been fixed** and **72 findings are still open** (figures as of 8 Oct 2026; the breakdown, and what this is *not*, is in [How this was reviewed and hardened](#how-this-was-reviewed-and-hardened)).
+> **How it was checked.** Every change is built behind automated tests and security scans, and the findings are tracked: since the first push (3 Aug 2026), **65 vulnerabilities have been fixed** and **25 findings are still open**, all of medium severity (figures as of 9 Oct 2026; one more high-severity advisory, in a development-only build tool, has no patch yet; the breakdown, and what this is *not*, is in [How this was reviewed and hardened](#how-this-was-reviewed-and-hardened)).
 
 [![Database](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml)
 [![API Service](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml)
@@ -20,12 +20,12 @@ A self-hosted, single-user web app that pulls your bank statement PDFs from a pr
 
 ## How this was reviewed and hardened
 
-Written down so a reader can judge it, including the parts that are not flattering. Figures are a snapshot from GitHub's own security records and the repository on **8 October 2026**; the live numbers are on the repository's [Security tab](https://github.com/jax79sg/transactAgent/security).
+Written down so a reader can judge it, including the parts that are not flattering. Figures are a snapshot from GitHub's own security records and the repository on **9 October 2026**; the live numbers are on the repository's [Security tab](https://github.com/jax79sg/transactAgent/security).
 
 **Reviewed**
 
-- **Approval gates, on the record.** The project follows a written workflow (AI-DLC): requirements, designs and code-generation plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim in [`aidlc-docs/audit.md`](aidlc-docs/audit.md) (443 logged inputs). Some approvals were a standing instruction to carry on, and the log shows which.
-- **Pull requests with automated checks.** Since 21 Aug 2026 every change has been merged through a pull request (23 so far; none committed straight to `main`). Each runs about 15 checks: lint and type checks, the test suites below, Docker builds, CodeQL, gitleaks, GitGuardian, and dependency scans. Automated checks and scanning were only switched on on 17 Aug, two weeks after the first push, so the first two weeks had none.
+- **Approval gates, on the record.** The project follows a written workflow (AI-DLC): requirements, designs and code-generation plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim in [`aidlc-docs/audit.md`](aidlc-docs/audit.md) (453 logged inputs). Some approvals were a standing instruction to carry on, and the log shows which.
+- **Pull requests with automated checks.** From 21 Aug 2026 every change has been merged through a pull request (28 merged so far; none committed straight to `main` since, the last two direct commits having been made that morning, before the first pull request was opened). Each runs about 15 checks: lint and type checks, the test suites below, Docker builds, CodeQL, gitleaks, GitGuardian, and dependency scans. Automated checks and scanning were only switched on on 17 Aug, two weeks after the first push, so the first two weeks had none.
 - **Tests: about 1,800** (1,823: 257 database, 734 ingestion worker, 467 API, 327 frontend, 38 release tooling), run against a real PostgreSQL, with property-based tests on pure logic and four browser end-to-end specs run nightly.
 - **The tests were tested.** For recent features, code was deliberately broken in a scratch copy to confirm a test notices (for example 72 such checks on the Costs page and 42 on release numbering); each time one went unnoticed, a test was added. The results are in `aidlc-docs/`.
 
@@ -41,14 +41,17 @@ Written down so a reader can judge it, including the parts that are not flatteri
 
 | Source | Raised | **Fixed** | Still open |
 |---|---|---|---|
-| Dependabot (known-vulnerable dependencies) | 80 | **14** (1 critical, 4 high, 8 medium, 1 low) | 63 (33 distinct advisories: 3 critical, 9 high, 21 medium); 3 more were auto-dismissed by GitHub |
+| Dependabot (known-vulnerable dependencies) | 80 | **63** (5 critical, 26 high, 31 medium, 1 low) | 16 (10 distinct advisories, **all medium**; none high or critical); 1 more, a high in a development-only build tool with no patch released, was auto-dismissed by GitHub |
 | CodeQL (code scanning) | 11 | **2** (a CI-only fixture password echoed in a script's output; a missing workflow permissions block), fixed in commits before merge | 9 (all "workflow does not contain permissions", medium) |
 | GitHub secret scanning | 0 | | 0 |
 
-**16 fixed, 72 open.** Thirteen of the fourteen dependency fixes landed within six days of the first alerts (the vitest and vite CVEs, the PyJWT and clearml set, nanoid). Most of the open dependency alerts are advisories published in early October against PyJWT and urllib3, repeated across the five lock files. Dependabot's automatic security updates are off and the dependency scan in CI is report-only, so these are fixed by hand, and haven't been yet.
+**65 fixed, 25 open, none of them high or critical.** Fourteen of the dependency fixes landed between 17 Aug and 2 Oct (thirteen of them within six days of the first alerts: the vitest and vite CVEs, the PyJWT and clearml set, nanoid). The other **49, including 4 critical and 22 high, were fixed on 9 Oct** through four pull requests ([#37](https://github.com/jax79sg/transactAgent/pull/37), [#38](https://github.com/jax79sg/transactAgent/pull/38), [#39](https://github.com/jax79sg/transactAgent/pull/39), [#40](https://github.com/jax79sg/transactAgent/pull/40)): PyJWT and urllib3 in the Python lock files, fsspec in model training, and vitest 4 for the frontend. Dependabot's automatic security updates are off and the dependency scan in CI is report-only, so these were fixed by hand, after most of those alerts had been open for two to seven days.
+
+Two things worth knowing about those fixes. The container images install their packages when they are built, and the running API and worker containers were already on the patched PyJWT and urllib3, so nothing had to be redeployed; the lock files decide what CI and a developer's machine use. And one fix is a compromise: model training pins a newer fsspec than the `datasets` library declares it supports (`mlx-tune`, which pulls `datasets` in, has no release that allows a newer one). The unit tests and a smoke test pass, but a real fine-tuning run was **not** tried against it.
 
 **What this is not**
 
+- **It is not clean.** 16 medium dependency alerts and 9 medium CodeQL warnings (workflows with no explicit permissions block) are open. A high-severity advisory in `braces`, which the frontend's Tailwind 3 build tooling pulls in, has no patched release; GitHub auto-dismissed it, it is build tooling that does not ship in the app, and the real fix would be moving to Tailwind 4, which has not been done.
 - It has had **no independent security review or penetration test**, and the workflow's security-baseline rules were **not enabled**: the hardening above comes from the scanners, the tests and jax79sg's approvals, not from a formal security design review.
 - "Fixed" means GitHub's records or the commits say so. Open findings are still open.
 - It is a single-user app designed to run on your own machine or network. Treat it as a learning project.
