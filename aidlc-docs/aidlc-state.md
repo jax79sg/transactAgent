@@ -636,5 +636,14 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] `VERSION` = 1.1.1; guide updated, all screenshots retaken, `docs/v1.1.1/` cut.
 - [x] Merged (PR #35), tagged `v1.1.1`, deployed to the live stack 2026-10-08 after waiting for the recategorization queue to drain (see `audit.md`).
 
+## Security: Resolve All High and Critical Vulnerabilities (2026-10-08, user: "Resolve all high and critical vulnerabilities. Split into different PRs as you deem necessary.")
+- [x] PR 1 of 3 — services' lock files (PyJWT 2.15.1, urllib3 2.8.0): database 257, worker 734, API 467 tests pass in environments built from the new locks; pip-audit clean for both packages. PR open, NOT merged.
+- [ ] PR 2 of 3 — model-training lock (pyjwt, urllib3, fsspec).
+- [ ] PR 3 of 3 — frontend (vitest 3 to 4 removes tinypool; source-map-js).
+## Security PR 2 of 3 (2026-10-08)
+- [x] model-training lock: PyJWT 2.15.1, urllib3 2.8.0; ruff and 29 tests pass in an environment built from the new lock; mlx_tune stack imports. PR open, NOT merged. The unit's fsspec advisory is blocked by mlx-tune's `datasets<4` pin (see `audit.md`).
+
+## Security PR 2b (2026-10-08)
+- [x] Draft PR (stacked on PR 2): override `fsspec[http]>=2026.6.0` in model-training; 29 tests and a datasets/fsspec/HTTP/mlx_tune smoke test pass; a real fine-tune run was not possible. DRAFT, awaiting the user's decision.
 ## Security PR 3 of 3 (2026-10-08)
 - [x] Frontend: vitest 4.1.11 (removes tinypool), source-map-js 1.2.2, brace-expansion 5.0.12, a global mock reset in `tests/setup.ts`; lint, build and 327 tests pass from a clean install. PR open, NOT merged. `braces` (high, no patched version exists; Tailwind 3 only) is not resolvable without a Tailwind 4 migration.
