@@ -19,6 +19,15 @@ test = [
     "testcontainers[postgres]>=4.0,<5.0",
 ]
 
+[tool.uv]
+# fsspec GHSA-27vj-qcqg-25rc (high, fixed in 2026.6.0): mlx-tune (every release to 0.6.0) requires datasets<4, and
+# datasets 3.x requires fsspec<=2025.3.0, so the patched fsspec is unreachable without this override. It overrides a
+# declared upper bound, so it is only as safe as datasets 3.6.0 working with a newer fsspec (smoke-tested: local
+# files, map/split/save, HTTP via fsspec[http], the Hugging Face filesystem, the unit tests; a real fine-tune run
+# was not). The [http] extra is kept: datasets asks for fsspec[http], and dropping it removes aiohttp.
+# REMOVE this once mlx-tune accepts datasets>=4 (check by deleting it and running `uv lock`).
+override-dependencies = ["fsspec[http]>=2026.6.0"]
+
 [tool.uv.sources]
 transactagent-db = { path = "../database", editable = true }
 

@@ -642,3 +642,6 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [ ] PR 3 of 3 — frontend (vitest 3 to 4 removes tinypool; source-map-js).
 ## Security PR 2 of 3 (2026-10-08)
 - [x] model-training lock: PyJWT 2.15.1, urllib3 2.8.0; ruff and 29 tests pass in an environment built from the new lock; mlx_tune stack imports. PR open, NOT merged. The unit's fsspec advisory is blocked by mlx-tune's `datasets<4` pin (see `audit.md`).
+
+## Security PR 2b (2026-10-08)
+- [x] Draft PR (stacked on PR 2): override `fsspec[http]>=2026.6.0` in model-training; 29 tests and a datasets/fsspec/HTTP/mlx_tune smoke test pass; a real fine-tune run was not possible. DRAFT, awaiting the user's decision.
