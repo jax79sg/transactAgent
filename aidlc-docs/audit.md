@@ -3718,6 +3718,10 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 
 ---
 
+## Security PR 1 of 3: PyJWT and urllib3 in the Three Services' Lock Files
+**Timestamp**: 2026-10-08T08:37:06Z
+**User Input**: "Resolve all high and critical vulnerabilities. Split into different PRs as you deem necessary."
+**AI Response**: "Fetched the 24 open high and critical Dependabot alerts (12 distinct advisories: 4 critical alerts, 20 high): PyJWT (1 critical GHSA-ffc3-869f-jxw9 and 5 high, fixed in 2.14.0), urllib3 (2 high, fixed in 2.8.0), fsspec (1 high, model-training only, fixed in 2026.6.0), tinypool (2 critical, npm dev tool) and source-map-js (1 high, npm dev tool). KEY FINDING: the running containers already had the patched versions (PyJWT 2.15.1, urllib3 2.8.0), because the Dockerfiles install from pyproject.toml and resolve afresh at build; the exposure was in the uv.lock files that CI and development use, and in the npm dev tools. SPLIT into three pull requests by risk: (1) the three deployed services' lock files, (2) the research model-training unit, (3) the frontend's vitest major upgrade. THIS PR (1): `uv lock --upgrade-package` for only pyjwt and urllib3, so the diff is exactly PyJWT 2.13.0 to 2.15.1 (api-service) and urllib3 2.7.0 to 2.8.0 (api-service, database, ingestion-worker). VERIFIED by building a fresh environment from each new lock file (uv sync --frozen --extra test) and running the full suite and ruff in it: database 257, ingestion worker 734, API 467 tests pass. pip-audit on each lock before: PyJWT 14 advisories, urllib3 3; after: none for either. What pip-audit still reports is oauthlib (api-service) and pytest (all three), both medium per GitHub and out of the requested scope. Not touched: the Dockerfiles (they do not use the lock), the live stack (already patched), and the medium alerts."
 ## Security PR 2 of 3: PyJWT and urllib3 in the model-training Lock File
 **Timestamp**: 2026-10-08T08:39:16Z
 **User Input**: "Resolve all high and critical vulnerabilities. Split into different PRs as you deem necessary."

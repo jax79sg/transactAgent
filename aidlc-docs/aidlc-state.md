@@ -636,6 +636,10 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] `VERSION` = 1.1.1; guide updated, all screenshots retaken, `docs/v1.1.1/` cut.
 - [x] Merged (PR #35), tagged `v1.1.1`, deployed to the live stack 2026-10-08 after waiting for the recategorization queue to drain (see `audit.md`).
 
+## Security: Resolve All High and Critical Vulnerabilities (2026-10-08, user: "Resolve all high and critical vulnerabilities. Split into different PRs as you deem necessary.")
+- [x] PR 1 of 3 — services' lock files (PyJWT 2.15.1, urllib3 2.8.0): database 257, worker 734, API 467 tests pass in environments built from the new locks; pip-audit clean for both packages. PR open, NOT merged.
+- [ ] PR 2 of 3 — model-training lock (pyjwt, urllib3, fsspec).
+- [ ] PR 3 of 3 — frontend (vitest 3 to 4 removes tinypool; source-map-js).
 ## Security PR 2 of 3 (2026-10-08)
 - [x] model-training lock: PyJWT 2.15.1, urllib3 2.8.0; ruff and 29 tests pass in an environment built from the new lock; mlx_tune stack imports. PR open, NOT merged. The unit's fsspec advisory is blocked by mlx-tune's `datasets<4` pin (see `audit.md`).
 
