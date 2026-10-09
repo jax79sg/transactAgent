@@ -652,3 +652,8 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] PRs #37, #38, #39 and #40 merged. GitHub rescan: 0 open high or critical Dependabot alerts (63 fixed, 16 open all medium, 1 auto-dismissed: braces, no patch). CodeQL 9 open (medium), 2 fixed. Secret scanning 0.
 - [x] README and guide updated with the 2026-10-09 figures (65 fixed, 25 open) and the caveats; 1.1.1 guide archive re-cut (docs only). PR open, NOT merged.
 - [ ] Not done, offered: add `permissions:` to the 9 workflows flagged by CodeQL; clear the 16 medium dependency alerts; Tailwind 3 to 4 (braces).
+
+## Security: remaining medium findings (2026-10-09, user: "the readme section ... is still open.")
+- [x] PR #42 CI workflow permissions (9 CodeQL warnings); PR #43 Python locks (mako, oauthlib 4, multidict, pytest 9 + pytest-asyncio 1.x); PR #44 frontend (React Router 7, postcss-selector-parser override). All verified locally, OPEN, NOT merged.
+- [x] PR #45 DRAFT: datasets 5.x override in model-training (two-major override of mlx-tune's pin; no real fine-tune run), awaiting the user's decision.
+- [ ] After merge and a GitHub rescan: update the README and guide to the real post-merge figures. `braces` stays unresolved (no patched release).
