@@ -28,7 +28,7 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = REPO_ROOT / "aidlc-docs" / "claude-usage" / "ledger.json"
@@ -50,10 +50,13 @@ COUNT_FIELDS = (
 MILLION = 1_000_000
 
 
-def default_transcript_dir(repo_root: Path = REPO_ROOT, home: Optional[Path] = None) -> Path:
-    """Where Claude Code keeps this project's transcripts: its folder name is the project path with every character
-    that is not a letter or a digit turned into a dash."""
-    return (home or Path.home()) / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(repo_root))
+def default_transcript_dirs(repo_root: Path = REPO_ROOT, home: Optional[Path] = None) -> List[Path]:
+    """Where Claude Code keeps this project's transcripts: a folder named after the project path with every character
+    that is not a letter or a digit turned into a dash, and one more of the same name plus "--claude-worktrees-<name>"
+    for each session that ran in a git worktree under .claude/worktrees (those are the project's usage too)."""
+    projects = (home or Path.home()) / ".claude" / "projects"
+    main = projects / re.sub(r"[^A-Za-z0-9]", "-", str(repo_root))
+    return [main] + sorted(path for path in projects.glob(main.name + "--claude-worktrees-*") if path.is_dir())
 
 
 def iter_transcripts(directory: Path) -> Iterator[Tuple[Path, str, str]]:
@@ -124,19 +127,22 @@ def read_requests(path: Path) -> Dict[Tuple[str, str], dict]:
     return requests
 
 
-def collect(directory: Path) -> List[dict]:
-    """Ledger rows for every transcript under `directory`."""
+def collect(directories: Union[Path, List[Path]]) -> List[dict]:
+    """Ledger rows for every transcript under the folder, or folders, given."""
+    if isinstance(directories, Path):
+        directories = [directories]
     rows: Dict[Tuple[str, str, str, str], dict] = {}
-    for path, session, kind in iter_transcripts(directory):
-        for record in read_requests(path).values():
-            if not record["day"]:
-                continue
-            key = (session, record["day"], record["model"], kind)
-            row = rows.setdefault(key, dict(zip(KEY_FIELDS, key), **{field: 0 for field in COUNT_FIELDS}))
-            row["requests"] += 1
-            row["advisor_requests"] += 1 if record["advisor"] else 0
-            for field in ("input", "output", "thinking", "cache_read", "cache_write_5m", "cache_write_1h"):
-                row[field] += record[field]
+    for directory in directories:
+        for path, session, kind in iter_transcripts(directory):
+            for record in read_requests(path).values():
+                if not record["day"]:
+                    continue
+                key = (session, record["day"], record["model"], kind)
+                row = rows.setdefault(key, dict(zip(KEY_FIELDS, key), **{field: 0 for field in COUNT_FIELDS}))
+                row["requests"] += 1
+                row["advisor_requests"] += 1 if record["advisor"] else 0
+                for field in ("input", "output", "thinking", "cache_read", "cache_write_5m", "cache_write_1h"):
+                    row[field] += record[field]
     return sorted(rows.values(), key=_row_key)
 
 
@@ -355,31 +361,43 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in (("report", "print the usage"), ("update", "merge the transcripts into the ledger")):
         p = sub.add_parser(name, help=help_text)
-        p.add_argument("--transcripts", type=Path, default=None, help="Claude Code's transcript folder for this project")
+        p.add_argument(
+            "--transcripts",
+            type=Path,
+            action="append",
+            default=None,
+            help="a Claude Code transcript folder (repeat for more); default: this project's folder and its worktrees' folders",
+        )
         p.add_argument("--ledger", type=Path, default=DEFAULT_LEDGER)
         if name == "update":
             p.add_argument("--summary", type=Path, default=DEFAULT_SUMMARY)
+            p.add_argument("--quiet", action="store_true", help="print nothing (for a hook)")
     args = parser.parse_args(argv)
 
-    directory = args.transcripts or default_transcript_dir()
-    live = collect(directory)
+    directories = args.transcripts or default_transcript_dirs()
+    live = collect(directories)
     existing = load_ledger(args.ledger)
     rows = merge(existing, live)
     prices = load_prices()
     text = render(rows, prices, repository_start_day())
     if args.command == "report":
-        if not directory.is_dir():
-            print("note: no transcripts at {}; showing the ledger only".format(directory), file=sys.stderr)
+        if not any(directory.is_dir() for directory in directories):
+            print("note: no transcripts at {}; showing the ledger only".format(directories[0]), file=sys.stderr)
         sys.stdout.write(text)
+        return 0
+    if not rows:
+        if not args.quiet:
+            print("claude usage: no transcripts and no ledger, nothing written")
         return 0
     write_ledger(args.ledger, rows)
     args.summary.parent.mkdir(parents=True, exist_ok=True)
     args.summary.write_text(text, encoding="utf-8")
-    print(
-        "claude usage: {} ledger rows ({} read from transcripts, {} already in the ledger); wrote {} and {}".format(
-            len(rows), len(live), len(existing), args.ledger, args.summary
+    if not args.quiet:
+        print(
+            "claude usage: {} ledger rows ({} read from transcripts, {} already in the ledger); wrote {} and {}".format(
+                len(rows), len(live), len(existing), args.ledger, args.summary
+            )
         )
-    )
     return 0
 
 

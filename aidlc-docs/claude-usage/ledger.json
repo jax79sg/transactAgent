@@ -2,6 +2,48 @@
  "version": 1,
  "rows": [
   {
+   "session": "21741946-bc5f-4d82-a822-3082d98dda5e",
+   "day": "2026-08-17",
+   "model": "claude-sonnet-5",
+   "kind": "main",
+   "requests": 48,
+   "input": 6206,
+   "output": 26568,
+   "thinking": 12785,
+   "cache_read": 5263293,
+   "cache_write_5m": 0,
+   "cache_write_1h": 102619,
+   "advisor_requests": 0
+  },
+  {
+   "session": "21741946-bc5f-4d82-a822-3082d98dda5e",
+   "day": "2026-08-18",
+   "model": "claude-sonnet-5",
+   "kind": "main",
+   "requests": 9,
+   "input": 18,
+   "output": 2162,
+   "thinking": 658,
+   "cache_read": 1045685,
+   "cache_write_5m": 0,
+   "cache_write_1h": 215845,
+   "advisor_requests": 0
+  },
+  {
+   "session": "4bee1133-e2cd-411e-a717-705f31051ec5",
+   "day": "2026-08-17",
+   "model": "claude-sonnet-5",
+   "kind": "main",
+   "requests": 4,
+   "input": 8,
+   "output": 707,
+   "thinking": 264,
+   "cache_read": 204313,
+   "cache_write_5m": 0,
+   "cache_write_1h": 24881,
+   "advisor_requests": 0
+  },
+  {
    "session": "595b9799-e80a-432a-b43c-bd99863964a5",
    "day": "2026-09-22",
    "model": "claude-sonnet-5",
@@ -118,14 +160,14 @@
    "day": "2026-10-10",
    "model": "claude-sonnet-5-5",
    "kind": "main",
-   "requests": 24,
-   "input": 48,
-   "output": 50421,
-   "thinking": 23608,
-   "cache_read": 6213439,
+   "requests": 43,
+   "input": 86,
+   "output": 78083,
+   "thinking": 34257,
+   "cache_read": 13369868,
    "cache_write_5m": 0,
-   "cache_write_1h": 265487,
-   "advisor_requests": 24
+   "cache_write_1h": 658738,
+   "advisor_requests": 43
   },
   {
    "session": "5bd88e90-f342-4fc9-a2d0-1e60f2a77216",
@@ -153,6 +195,20 @@
    "cache_read": 1654153,
    "cache_write_5m": 0,
    "cache_write_1h": 46001,
+   "advisor_requests": 0
+  },
+  {
+   "session": "94925555-df5a-4744-a4ee-44f2591fa2ee",
+   "day": "2026-08-16",
+   "model": "claude-sonnet-5",
+   "kind": "main",
+   "requests": 472,
+   "input": 944,
+   "output": 331439,
+   "thinking": 119212,
+   "cache_read": 200552433,
+   "cache_write_5m": 0,
+   "cache_write_1h": 2551251,
    "advisor_requests": 0
   },
   {

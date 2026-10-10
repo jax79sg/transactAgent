@@ -651,3 +651,9 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## Claude usage tracking (2026-10-10, user: "Can you collect and track total Claude usage for this project?")
 - [x] `scripts/claude_usage.py` (`report`, `update`), prices file with calibration, 13 tests (12 mutations caught), ledger + SUMMARY.md backfilled from the transcripts (2026-08-15 to 2026-10-10). PR open, NOT merged.
 - [ ] Offered, not done: session-end hook to refresh the ledger automatically; a README line; a CI staleness check. To refresh by hand: `python scripts/claude_usage.py update`, commit the two files.
+
+## Claude usage tracking, follow-up (2026-10-11, user: "I want both.")
+- [x] SessionEnd hook in `.claude/settings.local.json` (local, git-ignored); command pipe-tested and validated; firing at session end not yet observed.
+- [x] 'What it took' lines in README and guide (about $760, 11 sessions, as of 10 Oct 2026); 1.1.1 guide archive re-cut.
+- [x] Fix: worktree sessions' transcripts are now read (first ledger had 8 sessions and about $700; now 11 and about $759).
+- [ ] Not done: CI check that the ledger is not stale.

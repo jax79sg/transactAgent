@@ -178,6 +178,48 @@ def test_the_ledger_has_no_conversation_content(tmp_path):
     assert secret not in ledger.read_text()
 
 
-def test_the_transcript_folder_name_is_the_project_path_with_dashes():
-    path = claude_usage.default_transcript_dir(Path("/Users/jax/projects/transact.Agent_x"), home=Path("/h"))
-    assert path == Path("/h/.claude/projects/-Users-jax-projects-transact-Agent-x")
+def test_the_transcript_folders_are_the_projects_and_those_of_its_worktrees(tmp_path):
+    projects = tmp_path / ".claude" / "projects"
+    main = projects / "-Users-jax-projects-transact-Agent-x"
+    worktree = projects / "-Users-jax-projects-transact-Agent-x--claude-worktrees-calm-owl-1a2b3c"
+    other_project = projects / "-Users-jax-projects-other"
+    for folder in (main, worktree, other_project):
+        folder.mkdir(parents=True)
+    (projects / "-Users-jax-projects-transact-Agent-x--claude-worktrees-a-file").write_text("not a folder")
+
+    folders = claude_usage.default_transcript_dirs(Path("/Users/jax/projects/transact.Agent_x"), home=tmp_path)
+
+    assert folders == [main, worktree]
+
+
+def test_usage_in_a_worktree_folder_is_collected_with_the_rest(tmp_path):
+    write_transcript(tmp_path / "main" / "s1.jsonl", assistant("m1", output_tokens=10))
+    write_transcript(tmp_path / "worktree" / "s2.jsonl", assistant("m2", request_id="req_2", output_tokens=20))
+
+    rows = claude_usage.collect([tmp_path / "main", tmp_path / "worktree"])
+
+    assert {row["session"]: row["output"] for row in rows} == {"s1": 10, "s2": 20}
+
+
+def test_quiet_update_prints_nothing_but_still_writes(tmp_path, capsys):
+    transcripts = tmp_path / "transcripts"
+    write_transcript(transcripts / "s1.jsonl", assistant("m1", output_tokens=40))
+    ledger = tmp_path / "out" / "ledger.json"
+
+    code = claude_usage.main(
+        ["update", "--quiet", "--transcripts", str(transcripts), "--ledger", str(ledger), "--summary", str(tmp_path / "out" / "S.md")]
+    )
+
+    assert code == 0 and capsys.readouterr().out == ""
+    assert json.loads(ledger.read_text())["rows"][0]["output"] == 40
+
+
+def test_update_with_no_transcripts_and_no_ledger_writes_nothing(tmp_path):
+    ledger, summary = tmp_path / "out" / "ledger.json", tmp_path / "out" / "SUMMARY.md"
+
+    code = claude_usage.main(
+        ["update", "--quiet", "--transcripts", str(tmp_path / "gone"), "--ledger", str(ledger), "--summary", str(summary)]
+    )
+
+    assert code == 0
+    assert not ledger.exists() and not summary.exists() and not (tmp_path / "out").exists()
