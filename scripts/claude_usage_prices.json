@@ -1,0 +1,18 @@
+{
+  "as_of": "2026-10-06",
+  "source": "Anthropic's published API list prices: the model table cached in the claude-api skill on 2026-10-06, and its prompt-caching notes (cache reads 0.1x the input price, 0.05x on Claude Opus 5.5; cache writes 1.25x for the 5-minute TTL and 2x for the 1-hour TTL). Per million tokens, in US dollars. Thinking tokens are part of output_tokens, so they are priced as output.",
+  "unit": "USD per million tokens",
+  "models": {
+    "claude-sonnet-5-5": {"input": 2.0, "output": 10.0, "cache_read": 0.2, "cache_write_5m": 2.5, "cache_write_1h": 4.0, "checked_against_claude_code": true},
+    "claude-sonnet-5": {"input": 2.0, "output": 10.0, "cache_read": 0.2, "cache_write_5m": 2.5, "cache_write_1h": 4.0, "checked_against_claude_code": false},
+    "claude-opus-5-5": {"input": 4.0, "output": 20.0, "cache_read": 0.2, "cache_write_5m": 5.0, "cache_write_1h": 8.0, "checked_against_claude_code": false},
+    "claude-opus-5": {"input": 5.0, "output": 25.0, "cache_read": 0.5, "cache_write_5m": 6.25, "cache_write_1h": 10.0, "checked_against_claude_code": false},
+    "claude-haiku-4-5": {"input": 1.0, "output": 5.0, "cache_read": 0.1, "cache_write_5m": 1.25, "cache_write_1h": 2.0, "checked_against_claude_code": false}
+  },
+  "calibration": {
+    "checked_on": "2026-10-10",
+    "what": "Claude Code writes its own running cost into a transcript (a cost-state record). For claude-sonnet-5-5 the same tokens at these prices reproduce its recorded cost exactly ($17.7706 for 6,824 input, 228,619 output, 45,036,636 cache-read and 1,615,857 one-hour cache-write tokens). Counting the transcript's own requests up to the same output-token total gave a cost 2.5% to 9.0% below Claude Code's own figure at five snapshots of one long session: Claude Code also counts calls the transcript does not record.",
+    "shortfall_low_percent": 2.5,
+    "shortfall_high_percent": 9.0
+  }
+}

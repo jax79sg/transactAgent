@@ -647,3 +647,7 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Draft PR (stacked on PR 2): override `fsspec[http]>=2026.6.0` in model-training; 29 tests and a datasets/fsspec/HTTP/mlx_tune smoke test pass; a real fine-tune run was not possible. DRAFT, awaiting the user's decision.
 ## Security PR 3 of 3 (2026-10-08)
 - [x] Frontend: vitest 4.1.11 (removes tinypool), source-map-js 1.2.2, brace-expansion 5.0.12, a global mock reset in `tests/setup.ts`; lint, build and 327 tests pass from a clean install. PR open, NOT merged. `braces` (high, no patched version exists; Tailwind 3 only) is not resolvable without a Tailwind 4 migration.
+
+## Claude usage tracking (2026-10-10, user: "Can you collect and track total Claude usage for this project?")
+- [x] `scripts/claude_usage.py` (`report`, `update`), prices file with calibration, 13 tests (12 mutations caught), ledger + SUMMARY.md backfilled from the transcripts (2026-08-15 to 2026-10-10). PR open, NOT merged.
+- [ ] Offered, not done: session-end hook to refresh the ledger automatically; a README line; a CI staleness check. To refresh by hand: `python scripts/claude_usage.py update`, commit the two files.
