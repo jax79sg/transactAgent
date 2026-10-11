@@ -37,6 +37,10 @@ Written down so a reader can judge it, including the parts that are not flatteri
 - Destructive steps are guarded: removing a duplicate statement lists exactly what will be deleted and asks first; the one-time re-ingestion needs a typed confirmation and a backup; the newest database migrations refuse to downgrade over data they would destroy.
 - Secrets live in a git-ignored `.env`; GitHub secret scanning and push protection are on, and CI runs gitleaks with a custom rule for password hashes.
 
+**What it took** (Claude Code usage, as of 10 Oct 2026)
+
+Building this with Claude Code from 15 Aug to 10 Oct 2026 used about **$760 at Anthropic's API list prices**: about 6,000 requests in 11 sessions; 71% of the cost is Claude re-reading the conversation so far from cache on every turn. Treat it as an estimate and a floor, not a bill: it cannot see calls Claude Code makes that are not in its transcripts (on the one session that could be checked, Claude Code's own figure was 2.5% to 9.0% higher), the advisor model's tokens, or anything before 15 Aug, twelve days after the first commit. The ledger, the method and every caveat are in [`aidlc-docs/claude-usage/`](aidlc-docs/claude-usage/SUMMARY.md); `python scripts/claude_usage.py update` refreshes them.
+
 **Vulnerabilities since the first push** (dependency and code scanning began on 17 Aug 2026, so nothing before that was scanned)
 
 | Source | Raised | **Fixed** | Still open |

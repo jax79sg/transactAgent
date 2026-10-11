@@ -739,6 +739,9 @@
           <li>Secrets stay out of the repository: GitHub secret scanning and push protection are on, and CI runs gitleaks.</li>
         </ul>
 
+        <h3>What it took</h3>
+        <p class="dek">Building this with Claude Code from 15 August to 10 October 2026 used about <strong>$760 at Anthropic's API list prices</strong>: about 6,000 requests in 11 sessions; most of that cost is Claude re-reading the conversation so far on every turn. It is an estimate and a floor, not a bill: it cannot see calls Claude Code makes that are not in its records (on the one session that could be checked, Claude Code's own figure was 2.5% to 9.0% higher), the advisor model's tokens, or anything before 15 August, twelve days after the first commit.</p>
+
         <h3>Vulnerabilities since the first push</h3>
         <p class="dek">Dependency and code scanning began on 17 August 2026, so nothing before that was scanned.</p>
         <ul class="feature-list">
