@@ -15,6 +15,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# These jobs only check out the code and run checks on the runner; they never push, comment or otherwise
+# write back to the repository, so the token needs no more than read access (CodeQL:
+# actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
