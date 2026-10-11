@@ -20,13 +20,16 @@ test = [
 ]
 
 [tool.uv]
-# fsspec GHSA-27vj-qcqg-25rc (high, fixed in 2026.6.0): mlx-tune (every release to 0.6.0) requires datasets<4, and
-# datasets 3.x requires fsspec<=2025.3.0, so the patched fsspec is unreachable without this override. It overrides a
-# declared upper bound, so it is only as safe as datasets 3.6.0 working with a newer fsspec (smoke-tested: local
-# files, map/split/save, HTTP via fsspec[http], the Hugging Face filesystem, the unit tests; a real fine-tune run
-# was not). The [http] extra is kept: datasets asks for fsspec[http], and dropping it removes aiohttp.
-# REMOVE this once mlx-tune accepts datasets>=4 (check by deleting it and running `uv lock`).
-override-dependencies = ["fsspec[http]>=2026.6.0"]
+# fsspec GHSA-27vj-qcqg-25rc (high, fixed in 2026.6.0) and datasets GHSA-379c-qx7v-6h59 (medium, fixed in 5.0.1):
+# mlx-tune (every release to 0.6.0) requires datasets<4, and datasets 3.x requires fsspec<=2025.3.0, so neither patched
+# version is reachable without these overrides. They override a declared upper bound (mlx-tune's datasets<4, by two
+# major versions), so they are only as safe as mlx-tune working with datasets 5.1: smoke-tested are the calls mlx-tune
+# makes (load_dataset on local json, Dataset.from_list, map, train_test_split, save/load, mlx_lm's own loader), HTTP via
+# fsspec[http], the Hugging Face filesystem and the unit tests; a real fine-tune run was NOT. fsspec is capped at
+# 2026.7.0 because datasets 5.1 accepts fsspec<=2026.7.0; the [http] extra is kept because datasets asks for it and
+# dropping it removes aiohttp.
+# REMOVE both once mlx-tune accepts datasets>=5 (check by deleting them and running `uv lock`).
+override-dependencies = ["fsspec[http]>=2026.6.0,<=2026.7.0", "datasets>=5.0.1"]
 
 [tool.uv.sources]
 transactagent-db = { path = "../database", editable = true }
