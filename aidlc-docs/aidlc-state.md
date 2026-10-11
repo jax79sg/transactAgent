@@ -657,3 +657,15 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] PR #42 CI workflow permissions (9 CodeQL warnings); PR #43 Python locks (mako, oauthlib 4, multidict, pytest 9 + pytest-asyncio 1.x); PR #44 frontend (React Router 7, postcss-selector-parser override). All verified locally, OPEN, NOT merged.
 - [x] PR #45 DRAFT: datasets 5.x override in model-training (two-major override of mlx-tune's pin; no real fine-tune run), awaiting the user's decision.
 - [ ] After merge and a GitHub rescan: update the README and guide to the real post-merge figures. `braces` stays unresolved (no patched release).
+## Claude usage tracking (2026-10-10, user: "Can you collect and track total Claude usage for this project?")
+- [x] `scripts/claude_usage.py` (`report`, `update`), prices file with calibration, 13 tests (12 mutations caught), ledger + SUMMARY.md backfilled from the transcripts (2026-08-15 to 2026-10-10). PR open, NOT merged.
+- [ ] Offered, not done: session-end hook to refresh the ledger automatically; a README line; a CI staleness check. To refresh by hand: `python scripts/claude_usage.py update`, commit the two files.
+
+## Claude usage tracking, follow-up (2026-10-11, user: "I want both.")
+- [x] SessionEnd hook in `.claude/settings.local.json` (local, git-ignored); command pipe-tested and validated; firing at session end not yet observed.
+- [x] 'What it took' lines in README and guide (about $760, 11 sessions, as of 10 Oct 2026); 1.1.1 guide archive re-cut.
+- [x] Fix: worktree sessions' transcripts are now read (first ledger had 8 sessions and about $700; now 11 and about $759).
+- [ ] Not done: CI check that the ledger is not stale.
+
+## Claude usage tracker merged (2026-10-11, user: "Ok merge and push")
+- [x] PR #46 merged (f6a47af). Open and NOT merged: #41 (docs figures; main merged into its branch to clear log conflicts), #42, #43, #44, and draft #45.

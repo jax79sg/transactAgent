@@ -24,7 +24,7 @@ Written down so a reader can judge it, including the parts that are not flatteri
 
 **Reviewed**
 
-- **Approval gates, on the record.** The project follows a written workflow (AI-DLC): requirements, designs and code-generation plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim in [`aidlc-docs/audit.md`](aidlc-docs/audit.md) (454 logged inputs). Some approvals were a standing instruction to carry on, and the log shows which.
+- **Approval gates, on the record.** The project follows a written workflow (AI-DLC): requirements, designs and code-generation plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim in [`aidlc-docs/audit.md`](aidlc-docs/audit.md) (457 logged inputs). Some approvals were a standing instruction to carry on, and the log shows which.
 - **Pull requests with automated checks.** From 21 Aug 2026 every change has been merged through a pull request (28 merged so far; none committed straight to `main` since, the last two direct commits having been made that morning, before the first pull request was opened). Each runs about 15 checks: lint and type checks, the test suites below, Docker builds, CodeQL, gitleaks, GitGuardian, and dependency scans. Automated checks and scanning were only switched on on 17 Aug, two weeks after the first push, so the first two weeks had none.
 - **Tests: about 1,800** (1,823: 257 database, 734 ingestion worker, 467 API, 327 frontend, 38 release tooling), run against a real PostgreSQL, with property-based tests on pure logic and four browser end-to-end specs run nightly.
 - **The tests were tested.** For recent features, code was deliberately broken in a scratch copy to confirm a test notices (for example 72 such checks on the Costs page and 42 on release numbering); each time one went unnoticed, a test was added. The results are in `aidlc-docs/`.
@@ -36,6 +36,10 @@ Written down so a reader can judge it, including the parts that are not flatteri
 - The Settings page can change only an allow-list of values, and never shows secrets.
 - Destructive steps are guarded: removing a duplicate statement lists exactly what will be deleted and asks first; the one-time re-ingestion needs a typed confirmation and a backup; the newest database migrations refuse to downgrade over data they would destroy.
 - Secrets live in a git-ignored `.env`; GitHub secret scanning and push protection are on, and CI runs gitleaks with a custom rule for password hashes.
+
+**What it took** (Claude Code usage, as of 10 Oct 2026)
+
+Building this with Claude Code from 15 Aug to 10 Oct 2026 used about **$760 at Anthropic's API list prices**: about 6,000 requests in 11 sessions; 71% of the cost is Claude re-reading the conversation so far from cache on every turn. Treat it as an estimate and a floor, not a bill: it cannot see calls Claude Code makes that are not in its transcripts (on the one session that could be checked, Claude Code's own figure was 2.5% to 9.0% higher), the advisor model's tokens, or anything before 15 Aug, twelve days after the first commit. The ledger, the method and every caveat are in [`aidlc-docs/claude-usage/`](aidlc-docs/claude-usage/SUMMARY.md); `python scripts/claude_usage.py update` refreshes them.
 
 **Vulnerabilities since the first push** (dependency and code scanning began on 17 Aug 2026, so nothing before that was scanned)
 
