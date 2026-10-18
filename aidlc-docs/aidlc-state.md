@@ -675,3 +675,12 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 - [x] Auto-fix switched on for the bound PR; standing practice for every PR opened from now on (no global setting exists).
 - [x] README and guide updated to the final figures in `docs/security-all-resolved` (PR open, NOT merged).
 - [ ] Not done: Tailwind 3 to 4 (braces); a real model-training fine-tune against the two overrides; the nightly browser tests against React Router 7.
+## Classifier dataset export (2026-10-18, user: "I've categorised all the transactions. Can you extract all the transactions details including embedding, and their assigned categories. Build this into a dataset for classifier training.")
+- [x] `model_training.classifier_dataset` + `repository.list_labelled_transactions`; 72 unit tests, 22 mutations caught; dataset `clf-377dcd9a3d28` written locally (7,230 rows, 768-d Gemini embeddings, 44 classes), verified against the database and Qdrant. PR open, NOT merged.
+- [x] `.gitignore` now covers `model-training/dataset/`, `model-training/output/` and `*.parquet`.
+- [ ] Awaiting the user: register the dataset in ClearML (hosted app.clear.ml, a third party) or keep it local; decide which `label_source` values to trust for training.
+- [ ] Not done: training or evaluating a classifier (not asked).
+
+## PR #47 and PR #48 merged (2026-10-18, user: "merge")
+- [x] #47 merged (f7cb0d8); main merged into the #48 branch, logs resolved keep-both in time order; #48 merged after its checks passed.
+- [ ] Still open for the user: ClearML registration of `clf-377dcd9a3d28` (hosted, real bank data), and which `label_source` values to trust for training.

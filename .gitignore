@@ -14,3 +14,8 @@ frontend/test-results/
 .claude/settings.local.json
 aidlc-workflows/
 values-local.yaml
+
+# Real bank data: exports and training outputs must never be committed (the repository is public)
+model-training/dataset/
+model-training/output/
+*.parquet
