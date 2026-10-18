@@ -669,3 +669,9 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 
 ## Claude usage tracker merged (2026-10-11, user: "Ok merge and push")
 - [x] PR #46 merged (f6a47af). Open and NOT merged: #41 (docs figures; main merged into its branch to clear log conflicts), #42, #43, #44, and draft #45.
+
+## Classifier dataset export (2026-10-18, user: "I've categorised all the transactions. Can you extract all the transactions details including embedding, and their assigned categories. Build this into a dataset for classifier training.")
+- [x] `model_training.classifier_dataset` + `repository.list_labelled_transactions`; 72 unit tests, 22 mutations caught; dataset `clf-377dcd9a3d28` written locally (7,230 rows, 768-d Gemini embeddings, 44 classes), verified against the database and Qdrant. PR open, NOT merged.
+- [x] `.gitignore` now covers `model-training/dataset/`, `model-training/output/` and `*.parquet`.
+- [ ] Awaiting the user: register the dataset in ClearML (hosted app.clear.ml, a third party) or keep it local; decide which `label_source` values to trust for training.
+- [ ] Not done: training or evaluating a classifier (not asked).
