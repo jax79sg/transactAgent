@@ -3919,3 +3919,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 1 (Planning) complete, awaiting approval. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 Frontend SPA: Code Generation Plan Approved With a Playwright Scenario Added (Part 1 complete); Part 2 Starts
+**Timestamp**: 2026-10-18T06:46:40Z
+**User Input**: "Approve, and add a Playwright scenario"
+**AI Response**: "Recorded the approval of the 19-step plan with the Playwright option chosen. Amended the plan: new Step 14 (e2e seed accounts in database/src/transactagent_db/seed_e2e_fixtures.py with a test, frontend/e2e/balances.spec.ts, serial and locating accounts by name, a one-line fix of the existing dashboard case, and one run of the existing nightly workflow on this branch through workflow_dispatch, since Playwright cannot be run on this machine); steps 14 to 19 renumbered 15 to 20; Decision 3 rewritten. FOUND WHILE DOING THIS: the nightly e2e job has failed on main every night for at least six runs (latest run 39065375384): of ten cases the four login cases and the dark-mode toggle pass and five fail (dashboard.spec.ts:10, settings.spec.ts:11 and :15, transactions.spec.ts:12 and :18). All specs come from the single commit d349289 and the pages have changed since, so this is spec drift and not an Epic 13 problem. Only the dashboard case is touched here (it is the page this unit changes); the Settings and Transactions specs are NOT repaired and were flagged to the user as a separate task. Part 2 (generation) begins with Step 1."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 1 complete and approved; Part 2 begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---

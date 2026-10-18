@@ -724,3 +724,5 @@ Resumes the approved build order for the two units never built. Read with the co
 - [x] (2026-10-18, user: "Approve") Frontend SPA Functional Design **approved**. Code Generation Part 1 (Planning) **started**.
 
 - [ ] (2026-10-18) Frontend SPA Code Generation **Part 1 (Planning) complete, awaiting the user's approval** of `construction/plans/frontend-account-balance-code-generation-plan.md` (19 steps). Part 2 (generation) not started; no code written.
+
+- [x] (2026-10-18, user: "Approve, and add a Playwright scenario") Frontend SPA Code Generation **Part 1 (Planning) complete and approved**, now 20 steps (a Playwright step added). Part 2 (generation) in progress; progress is ticked in `construction/plans/frontend-account-balance-code-generation-plan.md`. Noted: the nightly e2e job has failed every night since at least 13 Oct (pre-existing spec drift in the Settings, Transactions and Dashboard specs; offered as a separate task).
