@@ -3904,3 +3904,18 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 Frontend SPA: Functional Design Approved; Code Generation Planning Starts
+**Timestamp**: 2026-10-18T06:42:08Z
+**User Input**: "Approve"
+**AI Response**: "Recorded the approval of the Frontend SPA Functional Design for Epic 13 (including the corrections to the API contract document). Starting Code Generation Part 1 (Planning): reading construction/code-generation.md and the format of the earlier plans, then writing the plan with numbered checkbox steps for approval. No code is written until the plan is approved."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design approved; Code Generation Part 1 begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Code Generation Plan Written; Approval Requested
+**Timestamp**: 2026-10-18T06:44:28Z
+**AI Response**: "Wrote aidlc-docs/construction/plans/frontend-account-balance-code-generation-plan.md (19 steps, story traceability, completion criteria). Approach: bottom-up (contract and types, pure helpers, components leaf to tab, page wiring, verification). Five decisions found while planning, listed for review: (1) Node exists only in a container and a bind-mounted npm install can wedge the Docker VM, so all checks run in a scratchpad copy of frontend/ with the existing node_modules and no dependency change; (2) a two-sided contract guard, one new API test that compares real endpoint responses with committed fixtures in frontend/tests/fixtures/balances/, so a mismatch like start/end versus from/to fails a test on either side; (3) Playwright not extended in this unit (needs new seed data and cannot be run here), offered as an add-on; (4) baselines recorded before changing anything; (5) the browser check uses a throw-away database and API on free ports and never touches the live stack. Presented the plan summary and asked for approval; no code written."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 1 (Planning) complete, awaiting approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---

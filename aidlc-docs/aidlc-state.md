@@ -720,3 +720,7 @@ Resumes the approved build order for the two units never built. Read with the co
 - [x] (2026-10-18, user: "Approve") API Service Code Generation **approved**; API Service unit complete for Epic 13. Frontend SPA unit Functional Design **started**.
 
 - [x] (2026-10-18) Frontend SPA Functional Design: questions answered in chat (5 of 5: Balances as a fifth Dashboard tab, chart of combined total plus the 7 largest accounts plus "Other accounts", discrepancy summary line with details on request, an Accounts section with dialogs, no nav badge); design written as Epic 13 sections of `frontend-components.md` and `business-logic-model.md`; traceability of every US-13.2..13.6 criterion in the plan. **Found and corrected an API Service documentation error** while comparing the approved contract with the built DTOs (series range is `start`/`end`; discrepancy statement ids are nullable); no code changed. **Complete, pending the user's approval.** Code Generation not started.
+
+- [x] (2026-10-18, user: "Approve") Frontend SPA Functional Design **approved**. Code Generation Part 1 (Planning) **started**.
+
+- [ ] (2026-10-18) Frontend SPA Code Generation **Part 1 (Planning) complete, awaiting the user's approval** of `construction/plans/frontend-account-balance-code-generation-plan.md` (19 steps). Part 2 (generation) not started; no code written.
