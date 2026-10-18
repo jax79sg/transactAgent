@@ -174,14 +174,14 @@
    "day": "2026-10-11",
    "model": "claude-sonnet-5-5",
    "kind": "main",
-   "requests": 25,
-   "input": 50,
-   "output": 30388,
-   "thinking": 13907,
-   "cache_read": 10437419,
+   "requests": 31,
+   "input": 62,
+   "output": 34662,
+   "thinking": 14374,
+   "cache_read": 13306519,
    "cache_write_5m": 0,
-   "cache_write_1h": 840890,
-   "advisor_requests": 25
+   "cache_write_1h": 847979,
+   "advisor_requests": 31
   },
   {
    "session": "5bd88e90-f342-4fc9-a2d0-1e60f2a77216",

@@ -4,24 +4,24 @@ Collected by `scripts/claude_usage.py` from Claude Code's own transcripts into `
 
 | | |
 |---|---|
-| Estimated cost at API list prices | **$765.78** (a floor, see below) |
-| API requests | 6,100 in 11 sessions, 2026-08-15 to 2026-10-11 |
+| Estimated cost at API list prices | **$766.43** (a floor, see below) |
+| API requests | 6,106 in 11 sessions, 2026-08-15 to 2026-10-11 |
 
 ## Where the cost goes
 
 | Tokens | Count | Est. cost | Share |
 |---|---:|---:|---:|
-| Cache reads (the conversation so far, re-read every turn) | 2,724,352,473 | $544.87 | 71% |
-| Cache writes (new context stored) | 42,414,228 | $168.05 | 22% |
-| Output (of which thinking 2,011,211) | 5,276,606 | $52.77 | 7% |
-| Fresh input | 49,227 | $0.10 | 0% |
+| Cache reads (the conversation so far, re-read every turn) | 2,727,221,573 | $545.44 | 71% |
+| Cache writes (new context stored) | 42,421,317 | $168.07 | 22% |
+| Output (of which thinking 2,011,678) | 5,280,880 | $52.81 | 7% |
+| Fresh input | 49,239 | $0.10 | 0% |
 
 ## By model
 
 | Model | Requests | Output | Cache read | Cache write | Est. cost |
 |---|---:|---:|---:|---:|---:|
 | `claude-sonnet-5` | 4,474 | 2,779,505 | 1,908,406,101 | 26,562,623 | $514.21 |
-| `claude-sonnet-5-5` | 1,626 | 2,497,101 | 815,946,372 | 15,851,605 | $251.57 |
+| `claude-sonnet-5-5` | 1,632 | 2,501,375 | 818,815,472 | 15,858,694 | $252.22 |
 
 ## By month
 
@@ -29,7 +29,7 @@ Collected by `scripts/claude_usage.py` from Claude Code's own transcripts into `
 |---|---:|---:|---:|---:|
 | 2026-08 | 10 | 4,314 | 2,675,199 | $492.86 |
 | 2026-09 | 3 | 160 | 104,306 | $21.34 |
-| 2026-10 | 1 | 1,626 | 2,497,101 | $251.57 |
+| 2026-10 | 1 | 1,632 | 2,501,375 | $252.22 |
 
 ## By session
 
@@ -45,11 +45,11 @@ Collected by `scripts/claude_usage.py` from Claude Code's own transcripts into `
 | `af9826a9` | 2026-08-21 | 2026-08-27 | 1,406 | 1% | $182.82 |
 | `c9508019` | 2026-08-28 | 2026-09-14 | 624 | 1% | $76.04 |
 | `9bdb8fb5` | 2026-08-29 | 2026-09-02 | 221 | 0% | $10.48 |
-| `595b9799` | 2026-09-22 | 2026-10-11 | 1,646 | 0% | $252.73 |
+| `595b9799` | 2026-09-22 | 2026-10-11 | 1,652 | 0% | $253.37 |
 
 ## What these numbers are, and are not
 
 - **An estimate of API-equivalent cost, not a bill.** Tokens are priced at Anthropic's list prices (`scripts/claude_usage_prices.json`, as of 2026-10-06), today's prices applied to every date; a subscription plan is billed differently.
 - **A floor.** On the one session where Claude Code recorded its own cost, this method came out 2.5% to 9.0% below it: Claude Code also counts calls the transcripts do not record. The prices themselves reproduce Claude Code's figure exactly for the same tokens (checked 2026-10-10).
-- **Advisor calls are not counted.** 620 requests consulted a stronger advisor model; the transcripts record that it was consulted but not its tokens, so whatever it used is missing.
+- **Advisor calls are not counted.** 626 requests consulted a stronger advisor model; the transcripts record that it was consulted but not its tokens, so whatever it used is missing.
 - **Not complete: nothing before 2026-08-15.** The repository's first commit is on 2026-08-03, but the earliest transcript found is from 2026-08-15; the sessions in between, and any run on another machine, are not in the ledger.
