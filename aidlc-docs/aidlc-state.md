@@ -712,3 +712,7 @@ Resumes the approved build order for the two units never built. Read with the co
 
 - [x] (2026-10-18, user: "Approved") API Service Functional Design **approved**, including the amended requirements and stories.
 - [ ] (2026-10-18) API Service Code Generation: **Part 1 (Planning) complete, awaiting the user's approval** of `construction/plans/api-service-account-balance-code-generation-plan.md` (21 steps). Part 2 (generation) not started; no code written.
+
+- [x] (2026-10-18, user: "Approve, keep PATCH (Recommended)") API Service Code Generation **Part 1 (Planning) complete and approved**, PATCH kept. Part 2 (generation) in progress; progress is ticked in `construction/plans/api-service-account-balance-code-generation-plan.md`.
+
+- [x] (2026-10-18) API Service Code Generation **Part 2 complete, pending the user's approval**: 21 of 21 plan steps done; 713 tests pass (467 existing + 246 new) under both Hypothesis profiles; 45 of 45 mutations caught; real-data checks on a scratch copy all agree (28 of 113 period gaps, 125 of 125 closing dates, 480 of 480 independent balances, lookup 16 ms). Summary: `construction/api-service/code/account-balance-summary.md`. Frontend unit not started.

@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from hypothesis import settings as hypothesis_settings
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
@@ -14,6 +15,13 @@ os.environ.setdefault("JWT_SECRET", "test-secret-do-not-use-in-prod")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_ID", "test-client-id.apps.googleusercontent.com")
 os.environ.setdefault("GOOGLE_OAUTH_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+
+# Property-based tests (PBT-08). Shrinking stays on. `dev`: random examples, and a failure prints the blob that replays
+# it exactly. `ci`: derandomized, so every CI run is identical and a failure there replays locally with the same
+# command. GitHub Actions sets CI=true.
+hypothesis_settings.register_profile("dev", print_blob=True)
+hypothesis_settings.register_profile("ci", derandomize=True, print_blob=True)
+hypothesis_settings.load_profile("ci" if os.environ.get("CI") else "dev")
 
 
 @pytest.fixture(scope="session")
