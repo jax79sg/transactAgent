@@ -709,3 +709,6 @@ Resumes the approved build order for the two units never built. Read with the co
 - [ ] Build and Test (Epic 13 API and Frontend additions); the user's first anchors are entered at runtime through the new UI.
 
 - [x] (2026-10-18) API Service Functional Design: questions answered in chat (7 of 7), artifacts written (`business-rules.md` AR-51..AR-67, `business-logic-model.md`, `domain-entities.md`), upstream documents amended in place (requirements FR-AB-7/A-8/A-4/FR-AB-8, stories US-13.3..13.6, component-methods). **Complete, pending the user's approval**; the amended requirements are part of what is being approved. Code Generation not started.
+
+- [x] (2026-10-18, user: "Approved") API Service Functional Design **approved**, including the amended requirements and stories.
+- [ ] (2026-10-18) API Service Code Generation: **Part 1 (Planning) complete, awaiting the user's approval** of `construction/plans/api-service-account-balance-code-generation-plan.md` (21 steps). Part 2 (generation) not started; no code written.

@@ -3845,3 +3845,17 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: API Service, Functional Design complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 API Service: Functional Design Approved; Code Generation Part 1 (Planning)
+**Timestamp**: 2026-10-18T03:47:52Z
+**User Input**: "Approved"
+**AI Response**: "Read as the explicit approval of the API Service Functional Design that had just been presented with the 'Request Changes / Continue to Code Generation' choice, including the amendments made in place on 2026-10-18 to `account-balance-requirements.md` (FR-AB-7, A-8, A-4, FR-AB-8), `account-balance-stories.md` (US-13.3 to US-13.6) and `component-methods.md`, which the completion message said the approval covered. Functional Design marked complete for the API Service unit. NEXT STAGE per the plan: Code Generation, Part 1 (Planning): read `construction/code-generation.md` and the Property-Based Testing extension rules (enforced in Partial mode: PBT-02, PBT-03, PBT-07, PBT-08, PBT-09); read the API Service source (router, service, repository and schema layout, error types, settings catalog, CORS, test fixtures) and found four things that change the plan: (1) the approved design uses PATCH but the API's CORS configuration allows only GET, POST, PUT and DELETE, so a browser would refuse the call: the plan adds PATCH (the alternative is PUT, which every other update here uses); (2) hypothesis is used by the Ingestion Worker but is not an API Service dependency: added to the test extra only; (3) two tests pin the settings catalog size at 53: updated to 55 deliberately; (4) a `time_zone` value format is needed in the catalog validation. Also verified read-only that the running API container resolves Asia/Singapore (486 zones known), settling the design's open time-zone point. Wrote `aidlc-docs/construction/plans/api-service-account-balance-code-generation-plan.md`: 21 numbered steps (pure calculation module first and property-tested; repositories; services; HTTP layer; verification on a scratch copy of the real data so the live database is never written; documentation), story coverage for US-13.2 to US-13.6, completion criteria and scope estimate. Part 1 is complete; NO CODE HAS BEEN WRITTEN."
+**Context**: Construction loop, Epic 13, Unit: API Service, Code Generation Part 1 complete pending approval.
+
+---
+## Approval Prompt Logged Before Asking: API Service Code Generation Plan
+**Timestamp**: 2026-10-18T03:47:52Z
+**AI Response**: "Asked the user to approve `aidlc-docs/construction/plans/api-service-account-balance-code-generation-plan.md` (21 steps, the complete generation sequence) or to request changes; Part 2 (generation) does not start until the approval is explicit. Two points were put to the user for a choice inside that approval: PATCH versus PUT for renaming and retyping an account, and the new hypothesis test dependency."
+**Context**: Code Generation Part 1, Step 6 of `construction/code-generation.md`.
+
+---
