@@ -8,6 +8,9 @@ test.describe("Dashboard", () => {
   });
 
   test("loads with the recurring payments summary visible", async ({ page }) => {
+    // The Dashboard opens on Category Trends and Radix only renders the active tab, so the Recurring
+    // Payments tab has to be opened first (this case failed every night until it was).
+    await page.getByRole("tab", { name: "Recurring Payments" }).click();
     // No RecurringPayment fixtures are seeded, so the empty state is the
     // deterministic thing to assert on -- see seed_e2e_fixtures.py.
     await expect(page.getByTestId("recurring-payments-empty-state")).toBeVisible();
