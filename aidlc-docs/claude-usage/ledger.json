@@ -184,6 +184,20 @@
    "advisor_requests": 31
   },
   {
+   "session": "595b9799-e80a-432a-b43c-bd99863964a5",
+   "day": "2026-10-18",
+   "model": "claude-sonnet-5-5",
+   "kind": "main",
+   "requests": 305,
+   "input": 614,
+   "output": 740380,
+   "thinking": 291311,
+   "cache_read": 174339340,
+   "cache_write_5m": 0,
+   "cache_write_1h": 2732930,
+   "advisor_requests": 305
+  },
+  {
    "session": "5bd88e90-f342-4fc9-a2d0-1e60f2a77216",
    "day": "2026-08-16",
    "model": "claude-sonnet-5",
