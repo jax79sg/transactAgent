@@ -684,3 +684,12 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## PR #47 and PR #48 merged (2026-10-18, user: "merge")
 - [x] #47 merged (f7cb0d8); main merged into the #48 branch, logs resolved keep-both in time order; #48 merged after its checks passed.
 - [ ] Still open for the user: ClearML registration of `clf-377dcd9a3d28` (hosted, real bank data), and which `label_source` values to trust for training.
+
+## Epic 13 (Account Balance) status correction (2026-10-18, user: "Did i put a reqyureement to see the balance of my accounts? I don't see if implementation anywhere.")
+Older lines above are left as written; read them with this correction. Only part of Epic 13 was ever built.
+- [x] Database unit: tables `accounts`, `account_keys`, `statement_accounts`, `balance_anchors` (deployed).
+- [x] Ingestion Worker unit: account resolution, per-account closing-balance capture, one-time backfill (run 2026-10-05). Delivers US-13.1 and US-13.7.
+- [ ] API Service unit: NOT STARTED (no account, anchor or balance endpoints). US-13.2 to US-13.6 depend on it.
+- [ ] Frontend unit: NOT STARTED (no balance section on the Dashboard, no account management or anchor entry). US-13.2 to US-13.6.
+- [ ] Not implemented as a result: balance for a date or month (US-13.4), balance over time (US-13.5), discrepancy warning (US-13.6), account tidy-up (US-13.2), anchor entry (US-13.3; `balance_anchors` is empty).
+- Awaiting the user: whether to build the API Service and Frontend units (design is approved in `application-design.md`; Functional Design and Code Generation for both are still to do).
