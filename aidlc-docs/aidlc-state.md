@@ -693,3 +693,17 @@ Older lines above are left as written; read them with this correction. Only part
 - [ ] Frontend unit: NOT STARTED (no balance section on the Dashboard, no account management or anchor entry). US-13.2 to US-13.6.
 - [ ] Not implemented as a result: balance for a date or month (US-13.4), balance over time (US-13.5), discrepancy warning (US-13.6), account tidy-up (US-13.2), anchor entry (US-13.3; `balance_anchors` is empty).
 - Awaiting the user: whether to build the API Service and Frontend units (design is approved in `application-design.md`; Functional Design and Code Generation for both are still to do).
+
+## Epic 13 completion (2026-10-18, user: "continue the ai-dlc the missing parts")
+Resumes the approved build order for the two units never built. Read with the correction above.
+
+#### Unit: API Service (Epic 13)
+- [ ] Functional Design — IN PROGRESS: plan `construction/plans/api-service-account-balance-functional-design-plan.md` created with 7 questions; **awaiting the user's answers** (step 4 of 9). NFR Requirements, NFR Design, Infrastructure Design skipped per the approved execution plan. Security Baseline and Resiliency Baseline extensions: disabled, skipped. Property-Based Testing (Partial) applies at Code Generation to the balance function.
+- [ ] Code Generation — not started.
+
+#### Unit: Frontend SPA (Epic 13)
+- [ ] Functional Design — not started (follows the API Service so its endpoints are fixed).
+- [ ] Code Generation — not started.
+
+#### Then
+- [ ] Build and Test (Epic 13 API and Frontend additions); the user's first anchors are entered at runtime through the new UI.
