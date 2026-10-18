@@ -3,8 +3,17 @@
 // computes a balance.
 
 import { ApiError } from "../api/client";
-import type { AccountDTO, AccountType, AnchorResponse, BalancesResponse, BasisDTO } from "../api/types";
-import { errorCode, formatDay } from "./duplicates";
+import type {
+  AccountDTO,
+  AccountType,
+  AnchorResponse,
+  BalancesResponse,
+  BasisDTO,
+  ExcludedAccountDTO,
+  ExcludedReason,
+  UnlinkedNoticeDTO,
+} from "../api/types";
+import { errorCode, formatDay, formatPeriod } from "./duplicates";
 import { formatMoney } from "./money";
 
 const MONTH_NAMES = [
@@ -117,6 +126,38 @@ export const TYPE_NOUNS: Record<AccountType, string> = {
   credit_card: "a credit card",
   unknown: "an account of unknown type",
 };
+
+/** "a", "a and b", "a, b and c". */
+export function joinList(items: readonly string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** The notice for transactions linked to no account (AR-60): how many, from where, when, and the net per currency. */
+export function describeUnlinked(notice: UnlinkedNoticeDTO): string {
+  const one = notice.count === 1;
+  const from = notice.bankNames.length > 0 ? ` from ${joinList(notice.bankNames)}` : "";
+  const when =
+    notice.earliestDate === notice.latestDate
+      ? `dated ${formatDay(notice.earliestDate, true)}`
+      : `dated ${formatPeriod(notice.earliestDate, notice.latestDate)}`;
+  const net = joinList(notice.netByCurrency.map((entry) => formatMoney(entry.net, entry.currency)));
+  return (
+    `${pluralize(notice.count, "transaction", "transactions")}${from}, ${when} (net ${net}), ` +
+    `${one ? "belongs" : "belong"} to no account, so ${one ? "it is" : "they are"} left out of every balance.`
+  );
+}
+
+export const EXCLUSION_REASONS: Record<ExcludedReason, string> = {
+  anchor_required: "anchor required",
+  fx_unavailable: "no exchange rate",
+};
+
+/** Beside the total: every account left out of it, and why. Empty when none is. */
+export function describeExclusions(excluded: readonly ExcludedAccountDTO[]): string {
+  if (excluded.length === 0) return "";
+  return `Not included: ${excluded.map((e) => `${e.name} (${EXCLUSION_REASONS[e.reason]})`).join(", ")}`;
+}
 
 // ----------------------------------------------------------------------------------------- outcomes of the writes
 

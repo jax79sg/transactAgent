@@ -158,3 +158,8 @@ export function summarizeSeries(series: Pick<SeriesResponse, "points">): string 
     `to SGD ${formatAmount(last.combinedSgd)} on ${formatDay(last.date, true)} (${shown}).`
   );
 }
+
+/** An axis tick as a grouped number ("10,000", "-1,250.5"). Display only; en-US so the text is the same everywhere. */
+export function formatAxisTick(value: string | number): string {
+  return Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 });
+}

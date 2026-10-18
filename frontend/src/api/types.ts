@@ -666,8 +666,9 @@ export interface AccountBalanceDTO {
   bankName: string;
   currency: string;
   status: AccountBalanceStatus;
-  /** Null unless the status is "ok": a balance is never guessed. */
+  /** The account's own-currency balance: present for "ok" and "fx_unavailable" (only the conversion is missing), null for "anchor_required". */
   balanceNative: string | null;
+  /** Null unless the status is "ok": a converted balance is never guessed. */
   balanceSgd: string | null;
   isApproximate: boolean;
   fxRateDate: string | null;

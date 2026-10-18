@@ -10,8 +10,11 @@ import {
   balanceErrorMessage,
   dayBefore,
   describeBasis,
+  describeExclusions,
+  describeUnlinked,
   describeLookup,
   isAccountGone,
+  joinList,
   localToday,
   mergeTypeOutcome,
   monthOf,
@@ -257,5 +260,55 @@ describe("pluralize and TYPE_NOUNS", () => {
       credit_card: "a credit card",
       unknown: "an account of unknown type",
     });
+  });
+});
+
+describe("joinList", () => {
+  it("joins in plain English", () => {
+    expect(joinList([])).toBe("");
+    expect(joinList(["a"])).toBe("a");
+    expect(joinList(["a", "b"])).toBe("a and b");
+    expect(joinList(["a", "b", "c"])).toBe("a, b and c");
+  });
+});
+
+describe("describeUnlinked", () => {
+  const base = { count: 99, bankNames: ["GXS Bank"], earliestDate: "2026-07-01", latestDate: "2026-07-31", netByCurrency: [{ currency: "SGD", net: "18.65" }] };
+
+  it("states how many, from where, when, the net, and that they are left out", () => {
+    expect(describeUnlinked(base)).toBe(
+      "99 transactions from GXS Bank, dated 1 Jul to 31 Jul 2026 (net SGD 18.65), belong to no account, so they are left out of every balance.",
+    );
+  });
+  it("uses the singular for one transaction, with a single date", () => {
+    expect(describeUnlinked({ ...base, count: 1, earliestDate: "2026-07-31" })).toBe(
+      "1 transaction from GXS Bank, dated 31 Jul 2026 (net SGD 18.65), belongs to no account, so it is left out of every balance.",
+    );
+  });
+  it("lists several banks and keeps currencies apart rather than adding them", () => {
+    const text = describeUnlinked({
+      ...base,
+      bankNames: ["DBS", "GXS Bank"],
+      netByCurrency: [{ currency: "SGD", net: "100.00" }, { currency: "USD", net: "-5.50" }],
+    });
+    expect(text).toContain("from DBS and GXS Bank");
+    expect(text).toContain("(net SGD 100.00 and USD -5.50)");
+  });
+  it("spans a year end", () => {
+    expect(describeUnlinked({ ...base, earliestDate: "2025-12-30", latestDate: "2026-01-02" })).toContain("dated 30 Dec 2025 to 2 Jan 2026");
+  });
+});
+
+describe("describeExclusions", () => {
+  it("names every excluded account with its reason", () => {
+    expect(
+      describeExclusions([
+        { accountId: "1", name: "Fresh", reason: "anchor_required" },
+        { accountId: "2", name: "Offshore EUR", reason: "fx_unavailable" },
+      ]),
+    ).toBe("Not included: Fresh (anchor required), Offshore EUR (no exchange rate)");
+  });
+  it("is empty when nothing is excluded", () => {
+    expect(describeExclusions([])).toBe("");
   });
 });

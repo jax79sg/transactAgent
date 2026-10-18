@@ -6,6 +6,7 @@ import {
   buildBalanceLines,
   chartLabels,
   COMBINED_COLOR,
+  formatAxisTick,
   markerRadius,
   rankSeriesAccounts,
   summarizeSeries,
@@ -285,5 +286,15 @@ describe("toChartNumbers and markerRadius", () => {
     expect(markerRadius(40)).toBe(3);
     expect(markerRadius(41)).toBe(0);
     expect(markerRadius(1)).toBe(3);
+  });
+});
+
+describe("formatAxisTick", () => {
+  it("groups thousands and keeps at most two decimals", () => {
+    expect(formatAxisTick(0)).toBe("0");
+    expect(formatAxisTick(1100)).toBe("1,100");
+    expect(formatAxisTick("12345.678")).toBe("12,345.68");
+    expect(formatAxisTick(-1250.5)).toBe("-1,250.5");
+    expect(formatAxisTick(1000000)).toBe("1,000,000");
   });
 });
