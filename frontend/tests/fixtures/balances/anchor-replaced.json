@@ -1,0 +1,12 @@
+{
+  "anchor": {
+    "asOfDate": "2026-08-31",
+    "balance": "1200.00",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  "previous": {
+    "asOfDate": "2026-06-30",
+    "balance": "1000.00",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  }
+}

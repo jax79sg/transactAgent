@@ -1,0 +1,105 @@
+{
+  "accounts": [
+    {
+      "accountId": "00000000-0000-0000-0000-000000000004",
+      "balanceNative": null,
+      "balanceSgd": null,
+      "bankName": "OCBC",
+      "basis": null,
+      "currency": "SGD",
+      "fxRateDate": null,
+      "isApproximate": false,
+      "latestTransactionDate": null,
+      "name": "Fresh",
+      "status": "anchor_required"
+    },
+    {
+      "accountId": "00000000-0000-0000-0000-000000000001",
+      "balanceNative": "1100.00",
+      "balanceSgd": "1100.00",
+      "bankName": "DBS",
+      "basis": {
+        "date": "2026-07-31",
+        "source": "statement_closing",
+        "statementId": "00000000-0000-0000-0000-000000000066"
+      },
+      "currency": "SGD",
+      "fxRateDate": null,
+      "isApproximate": false,
+      "latestTransactionDate": "2026-07-20",
+      "name": "Main",
+      "status": "ok"
+    },
+    {
+      "accountId": "00000000-0000-0000-0000-000000000003",
+      "balanceNative": "200.00",
+      "balanceSgd": null,
+      "bankName": "Offshore",
+      "basis": {
+        "date": "2026-07-01",
+        "source": "anchor",
+        "statementId": null
+      },
+      "currency": "EUR",
+      "fxRateDate": null,
+      "isApproximate": false,
+      "latestTransactionDate": null,
+      "name": "Offshore EUR",
+      "status": "fx_unavailable"
+    },
+    {
+      "accountId": "00000000-0000-0000-0000-000000000002",
+      "balanceNative": "600.00",
+      "balanceSgd": "780.00",
+      "bankName": "Trust",
+      "basis": {
+        "date": "2026-07-01",
+        "source": "anchor",
+        "statementId": null
+      },
+      "currency": "USD",
+      "fxRateDate": "2026-07-20",
+      "isApproximate": true,
+      "latestTransactionDate": "2026-07-15",
+      "name": "Trust USD",
+      "status": "ok"
+    }
+  ],
+  "combinedIncludesCount": 2,
+  "combinedTotalSgd": "1880.00",
+  "excluded": [
+    {
+      "accountId": "00000000-0000-0000-0000-000000000004",
+      "name": "Fresh",
+      "reason": "anchor_required"
+    },
+    {
+      "accountId": "00000000-0000-0000-0000-000000000003",
+      "name": "Offshore EUR",
+      "reason": "fx_unavailable"
+    }
+  ],
+  "hasApproximate": true,
+  "ingestedThroughDate": "2026-07-31",
+  "requestedMonth": "2026-10",
+  "resolvedDate": "2026-10-18",
+  "today": "2026-10-18",
+  "unlinkedTransactions": {
+    "bankNames": [
+      "GXS Bank"
+    ],
+    "count": 2,
+    "earliestDate": "2026-07-15",
+    "latestDate": "2026-07-31",
+    "netByCurrency": [
+      {
+        "currency": "SGD",
+        "net": "100.00"
+      },
+      {
+        "currency": "USD",
+        "net": "-5.50"
+      }
+    ]
+  }
+}

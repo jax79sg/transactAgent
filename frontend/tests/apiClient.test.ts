@@ -72,4 +72,18 @@ describe("apiRequest", () => {
       body: { error: "duplicate_category_name" },
     });
   });
+
+  // Epic 13: the account rename/retype call is a PATCH, which the client did not offer before.
+  it("sends a PATCH with a JSON body and the content type", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await apiRequest("/accounts/abc", { method: "PATCH", body: { name: "Savings" } });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe("/accounts/abc");
+    expect(init.method).toBe("PATCH");
+    expect(init.body).toBe(JSON.stringify({ name: "Savings" }));
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+  });
 });

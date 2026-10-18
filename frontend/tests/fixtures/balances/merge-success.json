@@ -1,0 +1,19 @@
+{
+  "accountIdentifier": "6220",
+  "anchor": {
+    "asOfDate": "2026-07-01",
+    "balance": "500.00",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  "bankName": "DBS / POSB",
+  "canHaveAnchor": true,
+  "closingBalanceCount": 0,
+  "currency": "SGD",
+  "id": "00000000-0000-0000-0000-00000000000b",
+  "latestTransactionDate": null,
+  "name": "DBS / POSB 6220",
+  "statementCount": 2,
+  "transactionCount": 0,
+  "type": "deposit",
+  "typeSetByUser": false
+}

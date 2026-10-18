@@ -30,8 +30,10 @@ def category(db, name="Others"):
     return created
 
 
-def make_account(db, name="DBS 1234", account_type=AccountType.DEPOSIT, currency="SGD", bank="DBS", identifier="1234", user_set=False):
-    account = Account(name=name, bank_name=bank, account_type=account_type, currency=currency, type_user_set=user_set)
+def make_account(db, name="DBS 1234", account_type=AccountType.DEPOSIT, currency="SGD", bank="DBS", identifier="1234", user_set=False, account_id=None):
+    """`account_id` fixes the id, for tests that compare a response with a committed file (the contract fixtures)."""
+    fixed_id = {"id": account_id} if account_id is not None else {}
+    account = Account(name=name, bank_name=bank, account_type=account_type, currency=currency, type_user_set=user_set, **fixed_id)
     db.add(account)
     db.flush()
     db.add(AccountKey(account_id=account.id, bank_key=bank.lower(), account_identifier=identifier, currency=currency))
@@ -39,8 +41,9 @@ def make_account(db, name="DBS 1234", account_type=AccountType.DEPOSIT, currency
     return account
 
 
-def make_statement(db, bank="DBS"):
-    statement = BankStatement(drive_file_id="f-" + uuid.uuid4().hex[:8], pdf_content_hash=uuid.uuid4().hex + uuid.uuid4().hex[:32], bank_name=bank)
+def make_statement(db, bank="DBS", statement_id=None):
+    fixed_id = {"id": statement_id} if statement_id is not None else {}
+    statement = BankStatement(drive_file_id="f-" + uuid.uuid4().hex[:8], pdf_content_hash=uuid.uuid4().hex + uuid.uuid4().hex[:32], bank_name=bank, **fixed_id)
     db.add(statement)
     db.flush()
     return statement
