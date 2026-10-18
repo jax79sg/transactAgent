@@ -4,6 +4,8 @@
 
 import fc from "fast-check";
 
+import type { SeriesResponse } from "../src/api/types";
+import { addDays } from "../src/lib/balances";
 import { fromCents } from "../src/lib/money";
 
 const LIMIT = 10n ** 18n;
@@ -46,4 +48,45 @@ export const typedAmountArb: fc.Arbitrary<{ amount: string; typed: string }> = f
     const typedWhole = grouped ? groupWithCommas(whole) : whole;
     const typed = `${" ".repeat(before)}${negative ? "-" : ""}${typedWhole}${variants[fractionChoice % variants.length]}${" ".repeat(after)}`;
     return { amount, typed };
+  });
+
+// Repeated names (and one differing only in case) so that ties are common and the tie-break is really exercised.
+const ACCOUNT_NAMES = ["Alpha", "alpha", "Beta", "Savings", "Trust", "DBS", "OCBC"];
+
+/**
+ * A balance series as the API returns it: up to 15 accounts and up to 8 consecutive days, each account-day an exact
+ * amount or a gap (about one in five), combined totals independent of the account cells (the chart helpers must not
+ * assume they agree), and accounts that may never have a value at all.
+ */
+export const seriesArb: fc.Arbitrary<SeriesResponse> = fc
+  .record({ accountCount: fc.integer({ min: 0, max: 15 }), pointCount: fc.integer({ min: 1, max: 8 }) })
+  .chain(({ accountCount, pointCount }) => {
+    const ids = Array.from({ length: accountCount }, (_, i) => `acct-${String(i).padStart(2, "0")}`);
+    const cell = fc.option(amountArb, { nil: null, freq: 5 });
+    return fc
+      .record({
+        names: fc.array(fc.constantFrom(...ACCOUNT_NAMES), { minLength: accountCount, maxLength: accountCount }),
+        cells: fc.array(fc.array(cell, { minLength: accountCount, maxLength: accountCount }), {
+          minLength: pointCount,
+          maxLength: pointCount,
+        }),
+        combined: fc.array(cell, { minLength: pointCount, maxLength: pointCount }),
+        granularity: fc.constantFrom<"day" | "month">("day", "month"),
+      })
+      .map(({ names, cells, combined, granularity }) => {
+        const dates = Array.from({ length: pointCount }, (_, p) => addDays("2026-01-01", p));
+        return {
+          start: dates[0],
+          end: dates[dates.length - 1],
+          granularity,
+          accounts: ids.map((id, i) => ({ accountId: id, name: names[i], currency: "SGD" })),
+          missingAccounts: [],
+          points: dates.map((date, p) => ({
+            date,
+            combinedSgd: combined[p],
+            perAccount: Object.fromEntries(ids.map((id, i) => [id, cells[p][i]])),
+            approximateAccountIds: [],
+          })),
+        };
+      });
   });

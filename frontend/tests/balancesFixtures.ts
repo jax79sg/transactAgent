@@ -43,3 +43,10 @@ export const FIXTURE_ACCOUNT_IDS = {
   fresh: "00000000-0000-0000-0000-000000000004",
   card: "00000000-0000-0000-0000-000000000005",
 } as const;
+
+/** An account from the real fixture by role, with any field overridden (a copy, safe to change). */
+export function fixtureAccount(role: keyof typeof FIXTURE_ACCOUNT_IDS, overrides: Partial<AccountDTO> = {}): AccountDTO {
+  const found = accountsListFixture().items.find((account) => account.id === FIXTURE_ACCOUNT_IDS[role]);
+  if (!found) throw new Error(`no ${role} account in the accounts-list fixture`);
+  return { ...found, ...overrides };
+}
