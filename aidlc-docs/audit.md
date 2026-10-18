@@ -3941,3 +3941,10 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 2 resumed. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 Frontend SPA: Step 15 (Browser Check) Complete, No Defects
+**Timestamp**: 2026-10-18T11:50:45Z
+**AI Response**: "Rebuilt the scratch stack (Postgres, the real API, the built frontend, all on free ports, never the live database or running containers) and seeded 20 realistic accounts covering every state the design describes. Checked the Balances tab in the built-in browser in dark and light mode and at 375px phone width: lookup, ingested-through warning, unlinked notice, all three balance states, nearest-known-balance wording, the chart's fold and summary, the discrepancy panel's both views, the accounts list distinguishing two same-named accounts, the merge refusal for those two accounts, balance-dialog validation and a successful save with a live table refresh, and no horizontal page scroll on a phone. No defects found. Stopped and removed the scratch stack. Moving to Step 16 (static checks and the full suite)."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 2 continues. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
