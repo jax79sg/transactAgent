@@ -3874,3 +3874,33 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: API Service, Code Generation complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 API Service: Code Generation Approved; Frontend Unit Functional Design Starts
+**Timestamp**: 2026-10-18T04:59:15Z
+**User Input**: "Approve"
+**AI Response**: "Recorded the approval of the API Service Code Generation stage (Epic 13). Starting the Frontend SPA unit for Epic 13, beginning with Functional Design: reading the unit's rules and existing design, then asking the questions interactively (the user has no terminal access)."
+**Context**: Construction loop, Epic 13, API Service unit complete; Frontend SPA unit, Functional Design begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Plan Written; Questions Asked
+**Timestamp**: 2026-10-18T05:02:19Z
+**AI Response**: "Read the Functional Design rules, the Epic 13 requirements and stories (US-13.2 to US-13.6 are this unit's), the API Service design and its fixed endpoint contract, the existing Frontend design (through Epic 14) and source (Dashboard, NavBar, Settings, API client, chart helpers, tests). Wrote aidlc-docs/construction/plans/frontend-account-balance-functional-design-plan.md: what approved artifacts already settle (not asked again), six things the existing app and contract settle (listed for review, including that apiRequest has no PATCH and that the web app and API are different origins, that the older From/To box would mislead on a Balances tab, and how the first lookup's 'today' is found), what the live data implies for the screens, an 8-step checklist, and five questions: (1) where the balance section sits on the Dashboard, (2) which lines the chart draws given 14 deposit accounts and an eight-colour rule, (3) how prominent discrepancy warnings are given that 28 of 113 intervals do not reconcile, (4) where rename, retype, merge and balance entry live, (5) whether the Dashboard link gets a badge. Asking them interactively because the user has no terminal access."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design Part 1 (questions). Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Answers Received; API Contract Document Corrected
+**Timestamp**: 2026-10-18T05:49:40Z
+**User Input**: "Fifth tab, opens as today (Recommended)" (Placement); "Combined + 7 largest + Other (Recommended)" (Chart lines); "Summary line + Show details (Recommended)" (Warnings); "Accounts section in the tab (Recommended)" (Accounts); "No badge (Recommended)" (Nav badge)
+**AI Response**: "All five answers are listed options (the recommended ones), none vague, so no follow-up questions. Copied into aidlc-docs/construction/plans/frontend-account-balance-functional-design-plan.md. WHILE DESIGNING, compared domain-entities.md with the DTOs the API Service unit actually built and found two differences, both in the document and not in the code (the API's own tests pin the built shapes): SeriesResponse names its range start and end (the document said from and to; the query parameters are still from and to), and statementId, fromStatementId and toStatementId are nullable in the discrepancy DTOs (the document said always present). Corrected domain-entities.md in place, and corrected the sentence in account-balance-summary.md that said the shapes were exactly the document's, which I wrote and which was wrong. No code changed. The user approved the API Service stage a moment earlier, so this is reported to them in the Functional Design completion message."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design; correction to API Service documentation. Branch `feature/account-balance-completion`.
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Complete, Presented for Approval
+**Timestamp**: 2026-10-18T05:53:31Z
+**AI Response**: "Wrote the Epic 13 sections of construction/frontend/functional-design/frontend-components.md (shared types and API modules, DashboardPage fifth tab and hidden From/To box, BalanceLookup, IngestedThrough and UnlinkedNotice, BalancesTable, BalanceChart, DiscrepancyPanel, AccountsSection, BalanceDialog, RenameDialog and ChangeTypeDialog, MergeDialog, the Settings category, NavBar unchanged) and of business-logic-model.md (opening the tab and finding today, queries and invalidation, balance entry flow, merge flow, rename and retype, chart data preparation, display rules, error mapping, responsive/theme/accessibility, out of scope). The plan holds the traceability of every acceptance criterion of US-13.2 to US-13.6, ten design decisions made without asking (listed for review), and ten notes carried to Code Generation, the main ones being: add PATCH to the API client; derive test fixtures from responses the real API produces so a contract mismatch fails a test; property tests for the money and chart helpers; look at the result in a browser against a scratch API; rebuild the API and frontend images at deployment. No application code written or changed in this stage. The only non-design change: the approved API contract document and one sentence of the API code summary were corrected (see the previous entry). The Functional Design completion message was presented and the stage AWAITS THE USER'S EXPLICIT APPROVAL."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---

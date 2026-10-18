@@ -698,11 +698,11 @@ Older lines above are left as written; read them with this correction. Only part
 Resumes the approved build order for the two units never built. Read with the correction above.
 
 #### Unit: API Service (Epic 13)
-- [ ] Functional Design — IN PROGRESS: plan `construction/plans/api-service-account-balance-functional-design-plan.md` created with 7 questions; **awaiting the user's answers** (step 4 of 9). NFR Requirements, NFR Design, Infrastructure Design skipped per the approved execution plan. Security Baseline and Resiliency Baseline extensions: disabled, skipped. Property-Based Testing (Partial) applies at Code Generation to the balance function.
-- [ ] Code Generation — not started.
+- [x] Functional Design — Complete & Approved (2026-10-18, user: "Approved"; 7 questions answered in chat; `construction/api-service/functional-design/` AR-51..AR-67). NFR Requirements, NFR Design, Infrastructure Design skipped per the approved execution plan. Security Baseline and Resiliency Baseline extensions: disabled, skipped. Property-Based Testing (Partial) applies
+- [x] Code Generation — Complete & Approved (2026-10-18, user: "Approve"; 21 of 21 plan steps; 713 tests pass; `construction/api-service/code/account-balance-summary.md`). *(Corrected 2026-10-18: this line said "not started" and the one above "awaiting the user's answers" after both stages had been approved.)*
 
 #### Unit: Frontend SPA (Epic 13)
-- [ ] Functional Design — not started (follows the API Service so its endpoints are fixed).
+- [x] Functional Design — **Complete, pending the user's approval** (2026-10-18; plan `construction/plans/frontend-account-balance-functional-design-plan.md`, 5 questions all answered in chat; Epic 13 sections added to `construction/frontend/functional-design/frontend-components.md` and `business-logic-model.md`).
 - [ ] Code Generation — not started.
 
 #### Then
@@ -716,3 +716,7 @@ Resumes the approved build order for the two units never built. Read with the co
 - [x] (2026-10-18, user: "Approve, keep PATCH (Recommended)") API Service Code Generation **Part 1 (Planning) complete and approved**, PATCH kept. Part 2 (generation) in progress; progress is ticked in `construction/plans/api-service-account-balance-code-generation-plan.md`.
 
 - [x] (2026-10-18) API Service Code Generation **Part 2 complete, pending the user's approval**: 21 of 21 plan steps done; 713 tests pass (467 existing + 246 new) under both Hypothesis profiles; 45 of 45 mutations caught; real-data checks on a scratch copy all agree (28 of 113 period gaps, 125 of 125 closing dates, 480 of 480 independent balances, lookup 16 ms). Summary: `construction/api-service/code/account-balance-summary.md`. Frontend unit not started.
+
+- [x] (2026-10-18, user: "Approve") API Service Code Generation **approved**; API Service unit complete for Epic 13. Frontend SPA unit Functional Design **started**.
+
+- [x] (2026-10-18) Frontend SPA Functional Design: questions answered in chat (5 of 5: Balances as a fifth Dashboard tab, chart of combined total plus the 7 largest accounts plus "Other accounts", discrepancy summary line with details on request, an Accounts section with dialogs, no nav badge); design written as Epic 13 sections of `frontend-components.md` and `business-logic-model.md`; traceability of every US-13.2..13.6 criterion in the plan. **Found and corrected an API Service documentation error** while comparing the approved contract with the built DTOs (series range is `start`/`end`; discrepancy statement ids are nullable); no code changed. **Complete, pending the user's approval.** Code Generation not started.

@@ -48,7 +48,7 @@ A read-only dump of the live database was restored into a throw-away PostgreSQL 
 
 ## Contract for the Frontend unit
 
-Endpoint paths, request and response shapes and error codes are exactly those in `functional-design/domain-entities.md` and `business-rules.md` (AR-64). Points the Frontend must handle: an account's `basis` says what its figure was worked from; a null per-account value in the series is a gap, never zero; `combinedTotalSgd` is null when no account is included; the lookup's `unlinkedTransactions` notice and `excluded` list; `typeSetByUser`; money is always a string such as `"1030.00"`; a malformed date is a framework 422, every business-rule refusal is the usual `{error, message, details}`.
+Endpoint paths, request and response shapes and error codes are those in `functional-design/domain-entities.md` and `business-rules.md` (AR-64), **with two corrections found by the Frontend design on 2026-10-18** (this paragraph first said "exactly"): the series response names its range `start` and `end` (not `from` and `to`), and the statement ids in the discrepancy DTOs can be null. The document is corrected; the code and its tests were right. Points the Frontend must handle: an account's `basis` says what its figure was worked from; a null per-account value in the series is a gap, never zero; `combinedTotalSgd` is null when no account is included; the lookup's `unlinkedTransactions` notice and `excluded` list; `typeSetByUser`; money is always a string such as `"1030.00"`; a malformed date is a framework 422, every business-rule refusal is the usual `{error, message, details}`.
 
 ## Not done here
 

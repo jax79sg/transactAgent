@@ -132,9 +132,10 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `BalancesResponse`: `{ resolvedDate: date, today: date, requestedMonth: string | null, ingestedThroughDate: date | null, accounts: AccountBalanceDTO[], combinedTotalSgd: decimal | null, combinedIncludesCount: int, excluded: ExcludedAccountDTO[], hasApproximate: bool, unlinkedTransactions: UnlinkedNoticeDTO | null }` (AR-58).
 - `SeriesAccountDTO`: `{ accountId, name, currency }` — the accounts plotted.
 - `SeriesPointDTO`: `{ date: date, combinedSgd: decimal | null, perAccount: { [accountId]: decimal | null }, approximateAccountIds: uuid[] }` — a null per-account value is a gap (AR-61).
-- `SeriesResponse`: `{ from: date, to: date, granularity: 'day'|'month', accounts: SeriesAccountDTO[], missingAccounts: ExcludedAccountDTO[], points: SeriesPointDTO[] }`.
-- `StatementDifferenceDTO`: `{ statementId: uuid, closingDate: date, printedBalance: decimal, computedBalance: decimal, difference: decimal }` — `difference` is printed minus computed from the anchor (AR-62).
-- `PeriodGapDTO`: `{ fromStatementId: uuid, toStatementId: uuid, fromDate: date, toDate: date, printedChange: decimal, transactionNet: decimal, gap: decimal }`.
+- `SeriesResponse`: `{ start: date, end: date, granularity: 'day'|'month', accounts: SeriesAccountDTO[], missingAccounts: ExcludedAccountDTO[], points: SeriesPointDTO[] }` — *(corrected 2026-10-18: the range is `start` and `end`, as built and tested; this document first said `from` and `to`, which is still the name of the two query parameters)*. `granularity` is the resolved one, never `auto`.
+- `StatementDifferenceDTO`: `{ statementId: uuid | null, closingDate: date, printedBalance: decimal, computedBalance: decimal, difference: decimal }` — `difference` is printed minus computed from the anchor (AR-62).
+- `PeriodGapDTO`: `{ fromStatementId: uuid | null, toStatementId: uuid | null, fromDate: date, toDate: date, printedChange: decimal, transactionNet: decimal, gap: decimal }`.
+- *(Corrected 2026-10-18: the three statement ids above are nullable as built.)*
 - `AccountDiscrepancyDTO`: `{ accountId, name, currency, statementsChecked: int, periodsChecked: int, statementDifferences: StatementDifferenceDTO[], periodGaps: PeriodGapDTO[] }` — only accounts with at least one finding.
 - `DiscrepanciesResponse`: `{ tolerance: decimal, accountsChecked: int, items: AccountDiscrepancyDTO[] }`.
 
