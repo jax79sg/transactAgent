@@ -3927,3 +3927,10 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 1 complete and approved; Part 2 begins. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 Frontend SPA: Code Generation Paused (usage limit reached)
+**Timestamp**: 2026-10-18T07:19:22Z
+**AI Response**: "Steps 1 to 13 of the 20-step plan are done and ticked; Step 14 (Playwright scenario, e2e seed accounts, one-line fix of the existing dashboard e2e case) is committed but NOT ticked because its check, the nightly workflow dispatched on this branch as run 39107017262, was not read. Step 15 begun: scratch Postgres, the API from the working tree and the built frontend were running and the Dashboard loaded; the Balances tab was not yet inspected, and the scratch stack was stopped. Not done: browser check, the full-suite run twice and vite build (Step 16), the mutation check (17), the code summary and README (18), the progress and no-duplicates step (19, 20). Findings so far recorded in the plan's generation record: three corrections to the API contract document, a Dashboard test regression caught and fixed (memoised chart tabs), two dialog defects found by tests and fixed."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 2 paused. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
