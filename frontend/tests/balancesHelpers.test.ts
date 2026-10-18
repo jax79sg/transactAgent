@@ -10,6 +10,7 @@ import {
   balanceErrorMessage,
   dayBefore,
   describeBasis,
+  describeDiscrepancyCount,
   describeExclusions,
   describeUnlinked,
   describeLookup,
@@ -310,5 +311,12 @@ describe("describeExclusions", () => {
   });
   it("is empty when nothing is excluded", () => {
     expect(describeExclusions([])).toBe("");
+  });
+});
+
+describe("describeDiscrepancyCount", () => {
+  it("says it in the singular and the plural", () => {
+    expect(describeDiscrepancyCount(1)).toBe("1 account has differences with its statements.");
+    expect(describeDiscrepancyCount(4)).toBe("4 accounts have differences with their statements.");
   });
 });

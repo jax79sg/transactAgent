@@ -361,3 +361,60 @@ describe("SettingsPage About card (issue #27)", () => {
     expect(scroll).not.toHaveBeenCalled();
   });
 });
+
+// Epic 13: the two new settings appear through the existing catalog-driven rendering, under a "Balances" category that
+// sits between "Duplicate Statements" and "API & Access" (the page's own fixed order), with no new component.
+describe("SettingsPage Balances category (Epic 13)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const TIME_ZONE_SETTING: SettingDTO = {
+    name: "reporting_time_zone",
+    value: "Asia/Singapore",
+    isOverridden: false,
+    owningServices: ["api-service"],
+    classification: "standard",
+    category: "Balances",
+    description: "Decides what 'today' is for balances.",
+    type: "string",
+  };
+  const TOLERANCE_SETTING: SettingDTO = {
+    name: "balance_mismatch_tolerance",
+    value: "0.00",
+    isOverridden: false,
+    owningServices: ["api-service"],
+    classification: "standard",
+    category: "Balances",
+    description: "The difference up to which a closing balance still counts as agreeing.",
+    type: "float",
+    min: 0,
+    max: 1000,
+  };
+  const API_ACCESS_SETTING: SettingDTO = {
+    name: "jwt_expiry_minutes",
+    value: "60",
+    isOverridden: false,
+    owningServices: ["api-service"],
+    classification: "standard",
+    category: "API & Access",
+    description: "How long a login lasts.",
+    type: "int",
+    min: 1,
+    max: 10080,
+  };
+
+  it("shows both settings under Balances, placed after Duplicate Statements and before API & Access", async () => {
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    renderSettingsPage([API_ACCESS_SETTING, TOLERANCE_SETTING, DUPLICATE_SWITCH_SETTING, TIME_ZONE_SETTING, SIMILARITY_THRESHOLD_SETTING]);
+
+    await waitFor(() => expect(screen.getByTestId("setting-row-reporting_time_zone")).toBeInTheDocument());
+    expect(screen.getByTestId("setting-row-balance_mismatch_tolerance")).toHaveTextContent("0.00");
+    expect(screen.getByTestId("setting-row-reporting_time_zone")).toHaveTextContent("Asia/Singapore");
+
+    const order = Array.from(document.querySelectorAll('[data-testid^="setting-category-"]')).map((el) =>
+      el.getAttribute("data-testid")?.replace("setting-category-", ""),
+    );
+    expect(order).toEqual(["Matching & Categorization", "Duplicate Statements", "Balances", "API & Access"]);
+  });
+});

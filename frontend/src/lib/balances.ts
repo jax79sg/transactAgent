@@ -159,6 +159,13 @@ export function describeExclusions(excluded: readonly ExcludedAccountDTO[]): str
   return `Not included: ${excluded.map((e) => `${e.name} (${EXCLUSION_REASONS[e.reason]})`).join(", ")}`;
 }
 
+/** The one-line summary over the discrepancy details (Question 3 = A). */
+export function describeDiscrepancyCount(accounts: number): string {
+  return accounts === 1
+    ? "1 account has differences with its statements."
+    : `${accounts} accounts have differences with their statements.`;
+}
+
 // ----------------------------------------------------------------------------------------- outcomes of the writes
 
 /** The status line after a balance is saved: says which account, the new figure, and the one it replaced. */

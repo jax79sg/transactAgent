@@ -24,6 +24,7 @@ import type {
   RecurringPaymentFrequency,
   RecurringPaymentStatus,
 } from "../api/types";
+import { BalancesTab } from "../components/balances/BalancesTab";
 import { SortableTh } from "../components/SortableTh";
 import { useTheme } from "../context/ThemeContext";
 import { CATEGORICAL_PALETTE, OTHER_LABEL, barMarkStyle, buildCategoricalSeries, lineMarkStyle } from "../lib/chartColors";
@@ -659,37 +660,53 @@ function RecurringPaymentsTab() {
 export function DashboardPage() {
   const [filter, setFilter] = useState<DashboardFilterState>(defaultDateRange);
   const dashboardFilter = useMemo(() => filter, [filter]);
+  // Controlled, so the page knows when Balances is showing: its own date controls replace the From/To box, which
+  // belongs to the three older charts and would only mislead there (Epic 13).
+  const [tab, setTab] = useState("category-trends");
+  const trigger = "shrink-0 whitespace-nowrap px-2 py-2 data-[state=active]:font-semibold";
+  // Switching tabs now re-renders this page. The three chart tabs are memoised by their only input, the filter, so a
+  // tab switch does not re-render the outgoing chart on its way out (react-chartjs-2 would call update() on it, and
+  // does so on any re-render): the tab contents are exactly as stable as they were when Radix held the active tab.
+  const categoryTrends = useMemo(() => <CategoryTrendsTab filter={dashboardFilter} />, [dashboardFilter]);
+  const cashFlow = useMemo(() => <CashFlowTab filter={dashboardFilter} />, [dashboardFilter]);
+  const bankBreakdown = useMemo(() => <BankBreakdownTab filter={dashboardFilter} />, [dashboardFilter]);
 
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Dashboard</h1>
-      <DateRangeFilter filter={dashboardFilter} onChange={setFilter} />
-      <Tabs.Root defaultValue="category-trends">
-        <Tabs.List className="mb-4 flex gap-4 border-b border-slate-200 dark:border-slate-700">
-          <Tabs.Trigger value="category-trends" className="px-2 py-2 data-[state=active]:font-semibold">
+      {tab !== "balances" && <DateRangeFilter filter={dashboardFilter} onChange={setFilter} />}
+      <Tabs.Root value={tab} onValueChange={setTab}>
+        <Tabs.List className="mb-4 flex gap-4 overflow-x-auto border-b border-slate-200 dark:border-slate-700">
+          <Tabs.Trigger value="category-trends" className={trigger}>
             Category Trends
           </Tabs.Trigger>
-          <Tabs.Trigger value="cash-flow" className="px-2 py-2 data-[state=active]:font-semibold">
+          <Tabs.Trigger value="cash-flow" className={trigger}>
             Cash Flow
           </Tabs.Trigger>
-          <Tabs.Trigger value="bank-breakdown" className="px-2 py-2 data-[state=active]:font-semibold">
+          <Tabs.Trigger value="bank-breakdown" className={trigger}>
             Bank Breakdown
           </Tabs.Trigger>
-          <Tabs.Trigger value="recurring-payments" className="px-2 py-2 data-[state=active]:font-semibold">
+          <Tabs.Trigger value="recurring-payments" className={trigger}>
             Recurring Payments
+          </Tabs.Trigger>
+          <Tabs.Trigger value="balances" data-testid="dashboard-tab-balances" className={trigger}>
+            Balances
           </Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="category-trends">
-          <CategoryTrendsTab filter={dashboardFilter} />
+          {categoryTrends}
         </Tabs.Content>
         <Tabs.Content value="cash-flow">
-          <CashFlowTab filter={dashboardFilter} />
+          {cashFlow}
         </Tabs.Content>
         <Tabs.Content value="bank-breakdown">
-          <BankBreakdownTab filter={dashboardFilter} />
+          {bankBreakdown}
         </Tabs.Content>
         <Tabs.Content value="recurring-payments">
           <RecurringPaymentsTab />
+        </Tabs.Content>
+        <Tabs.Content value="balances">
+          <BalancesTab />
         </Tabs.Content>
       </Tabs.Root>
     </div>
