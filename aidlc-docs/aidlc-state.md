@@ -669,3 +669,9 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 
 ## Claude usage tracker merged (2026-10-11, user: "Ok merge and push")
 - [x] PR #46 merged (f6a47af). Open and NOT merged: #41 (docs figures; main merged into its branch to clear log conflicts), #42, #43, #44, and draft #45.
+
+## All security PRs merged; final figures (2026-10-11, user: "merge them and turn on auto-fix from now on.")
+- [x] #42, #43, #44, #45 and #41 merged. GitHub rescan: Dependabot 0 open (79 fixed, braces auto-dismissed, no patch), CodeQL 0 open (11 fixed), secret scanning 0. 90 fixed, none open, one unpatched.
+- [x] Auto-fix switched on for the bound PR; standing practice for every PR opened from now on (no global setting exists).
+- [x] README and guide updated to the final figures in `docs/security-all-resolved` (PR open, NOT merged).
+- [ ] Not done: Tailwind 3 to 4 (braces); a real model-training fine-tune against the two overrides; the nightly browser tests against React Router 7.
