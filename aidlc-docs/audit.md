@@ -4006,3 +4006,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Epic 13 deployed. PR #52 merged (settings config). Live stack: api-service and frontend rebuilt and restarted; database, ingestion-worker, vector-db unchanged in image, database container recreated by compose but confirmed healthy with data intact.
 
 ---
+
+## Epic 13: Release 1.2.0 Cut, Tagged and Deployed
+**Timestamp**: 2026-10-19T09:54:02Z
+**User Input**: "make sure there's a upgrade in the release as well." / "and finally, the guide also needs to be updated."
+**AI Response**: "Added a 'Balances' entry to the user guide's Dashboard section (describing the anchor balance, lookup, chart, discrepancy warnings and account management), with a real screenshot against a dedicated scratch stack (own Postgres container, own data directory, never shared with the live one, torn down afterward). Bumped VERSION to 1.2.0 (MINOR, a new feature per RELEASING.md), cut the release with scripts/guide.py snapshot (docs/v1.2.0/index.html, releases.json, releases.html), verified with scripts/guide.py check (ok) and its own 54-test suite (all pass). Committed via branch+PR (#54), merged. Tagged the merge commit v1.2.0 and pushed the tag. Rebuilt and restarted the live api-service and frontend containers; GET /version now reports 1.2.0, the live database is confirmed intact (7230 transactions), both containers healthy."
+**Context**: Epic 13 and its release complete. Branch `docs/release-1.2.0-record` for this entry.
+
+---
