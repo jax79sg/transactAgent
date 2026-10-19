@@ -4240,3 +4240,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Epic 13 and its release complete. Branch `docs/release-1.2.0-record` for this entry.
 
 ---
+
+## PR #3 (Kubernetes Deployment Support) Merged
+**Timestamp**: 2026-10-19T10:06:07Z
+**User Input**: "ok merge all."
+**AI Response**: "PR #3 (Kubernetes deployment support, open since 2026-08-21, unrelated to Epic 13) had merge conflicts against about two months of work on main. Checked out its branch, merged main, and resolved all six conflicting files: aidlc-docs/aidlc-state.md and audit.md (both sides had appended entries at the same point; kept both, in chronological order), .gitignore and README.md (git's recursive merge combined non-overlapping additions automatically, verified by reading the result), frontend/src/api/client.ts (main's PATCH addition to the method union plus the PR's buildUrl() path-prefix fix, non-overlapping, both kept), and ingestion-worker's orchestrator/pipeline.py (the PR's touch_heartbeat() call applied cleanly onto main's current per-file loop). Verified before merging: ingestion-worker's full suite (734 pass), the frontend's full suite (651 pass) and tsc, and helm lint --strict on the chart, all clean. Merged. docker-compose.yml is untouched by this PR (Kubernetes is an additional path via deploy/helm/, not a replacement), so the live stack was not rebuilt or restarted and needed no changes; confirmed still healthy throughout, never touched by any command in this resolution."
+**Context**: All open PRs (#3, and earlier #50-#55 for Epic 13 and its release) are now merged. Zero open PRs.
+
+---
