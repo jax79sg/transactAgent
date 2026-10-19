@@ -43,6 +43,7 @@ Established by inspecting the code and live data before asking questions:
   - if D is on or after T: A + (inflows − outflows) for transactions dated after T up to and including D;
   - if D is before T: A − (inflows − outflows) for transactions dated after D up to and including T.
   Amounts use the original (account-currency) flows, not the converted SGD amounts.
+  - **Amended 2026-10-18 (API Service Functional Design, Question 5 = B; see the Amendment section below)**: the figure is worked from the **nearest known balance** (the manual anchor or a printed closing balance, whichever is closest to D), by the same two formulas above. With only an anchor it is exactly as originally written.
 - **FR-AB-8**: Each captured closing balance (FR-AB-5), one per account section of a statement, shall be used as a cross-check against the anchor-based computation (FR-AB-7) for that account on that closing date. A mismatch shall be surfaced to the user as a visible discrepancy warning identifying the account, the statement, and the size of the difference. It shall not block the feature or silently change any balance. (Assumption: see A-4.)
 - **FR-AB-9**: All balances shown, per account and combined, are in SGD. A balance computed in a non-SGD account currency is converted to SGD at the FX rate for the requested date (not the transaction dates' rates). If no usable rate exists for that date, the account's balance is shown as unavailable and excluded from the combined total, with the exclusion made visible, consistent with the existing "conversion unavailable" concept for transactions.
   - **Refinement (2026-10-02, Application Design Question 1 = A)**: the rate is looked up **cache-only** from the existing `fx_rate_cache`, using the nearest *earlier* cached rate for that currency pair on or before the requested date. When that rate's date differs from the requested date, the converted figure is marked **approximate** (mirroring the existing `conversion_is_approximate` concept for transactions). When no such cached rate exists at all, the balance is unavailable as stated above. Consequence: `fx_rate_cache` is populated only by the Ingestion Worker, and only for dates of foreign-currency transactions that needed converting, so a foreign-currency account can show approximate or unavailable balances for dates far from any cached rate. SGD accounts are unaffected.
@@ -80,17 +81,19 @@ These were not explicitly decided by the user and are included for review at app
 - **A-2 (No account identifier on a statement)**: If a statement prints no recognizable account identifier, it is attached to an auto-created account keyed on the normalized bank name alone, and the user sorts it out with the merge/rename UI (FR-AB-3).
 - **A-3 (Unknown account type)**: If the type cannot be determined, the account is treated as non-deposit (excluded from balances) until the user corrects its type (FR-AB-3).
 - **A-4 (Cross-check presentation)**: A discrepancy is a warning, not an error. The tolerance (exact-to-the-cent or a small configured rounding allowance) is decided at Functional Design.
+  - **Resolved 2026-10-18 (Question 3 = C)**: a Settings value, `balance_mismatch_tolerance`, default 0.00 (any difference of one cent or more).
 - **A-5 (Month shortcut)**: A past month resolves to its last day; the in-progress month resolves to today.
 - **A-6 (One currency and one anchor per account)**: An account has a single currency and one active anchor, replaceable by the user. Multiple simultaneous anchors are out of scope. *(Amended 2026-10-03: the original wording also assumed one account per statement and one statement currency; that is dropped — each account section of a statement carries its own currency, and one account number held in several currencies is simply several accounts, one per currency, per the account-key design. Multi-currency balances inside one account remain represented that way, not as one account with several balances.)*
 - **A-7 (Anchor currency)**: The anchor is entered in the account's own currency.
 - **A-8 (No anchor, no balance)**: An account with no anchor has no balance, even if it has captured closing balances. Closing balances serve as the cross-check only (per the user's answer), not as a fallback source.
+  - **Amended 2026-10-18 (Question 5 = B)**: the first sentence stands. The second changes: once an account has an anchor, its printed closing balances are also **reference points** for the balance (nearest known balance), as well as the cross-check. A closing balance still never switches an account on by itself.
 
 ## Open Items Deferred to Functional Design
 
-- Chart point granularity (daily vs month-end) and default date range.
+- ~~Chart point granularity (daily vs month-end) and default date range.~~ Resolved at API Service Functional Design (2026-10-18): automatic (daily for 92 days or fewer, else month-end) with a user toggle (Question 1 = D); default range the last 12 months (Question 2 = A).
 - ~~Where the API Service obtains an FX rate for an arbitrary as-of date, and the fallback when the exact date has no rate.~~ Resolved at Application Design (Question 1 = A): cache-only, nearest earlier cached rate, marked approximate, else unavailable. See the refinement under FR-AB-9.
 - ~~Whether the backfill is a script, an admin endpoint, or a CLI command.~~ Resolved at Application Design (Question 2 = A): a single command-line tool in the Ingestion Worker's image. **Where the pre-wipe backup is written, and how, remains open** (the existing nightly backup covers only the `transactions` table, and the worker image has no `pg_dump`).
-- Cross-check tolerance (A-4).
+- ~~Cross-check tolerance (A-4).~~ Resolved 2026-10-18 (Question 3 = C), see A-4.
 - ~~Schema shape for the account identifier (stored in full or masked to the last digits).~~ Resolved at Database Functional Design (Question 1 = B): stored as printed, normalized only for spacing and hyphens. See the refinement under FR-AB-2.
 
 ## Scope Change (2026-10-03): Several Accounts per PDF
@@ -107,6 +110,21 @@ These were not explicitly decided by the user and are included for review at app
 - **Not changed**: A-1..A-5, A-7, A-8; the anchor, the FX behavior, the cross-check's role, Questions 3 to 6 of Round 1, and Round 2's answers all stand.
 
 **Risk accepted by the user**: the extraction prompt and parsing become more complex in the area where this project has had real date-misread incidents (NFR-AB-3, now stated to require a real-statement comparison). Whether any PDF is actually multi-account is not yet known.
+
+## Amendment (2026-10-18): Nearest Known Balance, Two Discrepancy Views, Notices and Settings
+
+**Source**: API Service Functional Design for Epic 13 (`construction/plans/api-service-account-balance-functional-design-plan.md`), answers given in chat on 2026-10-18. **Why it was raised**: a read-only check of the live data found that only 75% (85 of 113) of consecutive printed closing balances agree to the cent with the transactions between them (GXS 6 of 18, OCBC 8 of 19), so a balance worked from one anchor alone is wrong across any month with incomplete transactions, and 99 transactions are linked to no account.
+
+**What changes**
+- **FR-AB-7 / A-8 (Question 5 = B)**: for an account that has an anchor, the balance on date D is worked from the **nearest known balance** (manual anchor or a printed closing balance, by calendar distance; ties go to the anchor, then the earlier date). On a statement's closing date the result equals the statement. The anchor remains required to switch an account on, and each balance states what it was worked from.
+- **FR-AB-8 (Question 4 = C)**: two views. The per-statement difference exactly as written (printed closing balance versus the balance computed **from the anchor alone**), plus a **per-period gap** (the change between two consecutive printed closing balances versus the transactions between them), which points at the interval where transactions are missing. Accounts without an anchor are checked by neither.
+- **A-4 (Question 3 = C)**: tolerance is a Settings value, default exact.
+- **FR-AB-12 (Questions 1 = D, 2 = A)**: the chart plots daily points for ranges of 92 days or fewer and month-end points for longer ones, the user can switch between them, and it opens on the last 12 months.
+- **New (Question 6 = A)**: the balance lookup carries a notice for transactions linked to no account (count, banks, dates, net per currency); they are left out of every balance and nothing is guessed.
+- **New (Question 7 = D)**: "today" is the date in a **reporting time zone** setting, default `Asia/Singapore`, for the current-month shortcut (A-5) and for rejecting a future anchor date (FR-AB-6).
+- **Design decision (not asked)**: a lookup date after today is refused.
+
+**Not changed**: FR-AB-1..6, 9..15, NFR-AB-1..8, A-1..A-3, A-5..A-7. No new table or column.
 
 ## Answers to Clarifying Questions (source of truth)
 
@@ -132,6 +150,8 @@ These were not explicitly decided by the user and are included for review at app
 | 5 | Backfill approach | B: wipe and reingest, first capturing manual category corrections and re-applying them best-effort, reporting any that cannot be matched |
 
 ### Later design-stage answers that changed or settled requirements
+
+*(API Service Functional Design, 2026-10-18: Questions 1 to 7 are in the Amendment section above and in `api-service-account-balance-functional-design-plan.md`.)*
 
 | Where | Question (short) | Answer |
 |---|---|---|

@@ -169,8 +169,8 @@ class TestCrossFieldValidation:
         assert check_cross_field(spec, 90.0, None) is None
 
 
-def test_catalog_has_exactly_53_settings():
-    assert len(SETTINGS_BY_NAME) == 53
+def test_catalog_has_exactly_55_settings():
+    assert len(SETTINGS_BY_NAME) == 55
 
 
 def test_every_setting_has_a_category_and_description():
@@ -286,3 +286,51 @@ class TestModelCostSettings:
         fields = Settings.model_fields
         for name in self._PRICES:
             assert fields[name].default == SETTINGS_BY_NAME[name].default
+
+
+class TestBalancesSettings:
+    """Epic 13, AR-63: the reporting time zone and the mismatch tolerance."""
+
+    def test_both_are_standard_api_owned_settings_in_the_balances_category(self):
+        from transactagent_db.models import SettingOwningService
+
+        for name in ("reporting_time_zone", "balance_mismatch_tolerance"):
+            spec = SETTINGS_BY_NAME[name]
+            assert (spec.classification, spec.category, spec.owning_services) == (
+                "standard",
+                "Balances",
+                (SettingOwningService.API_SERVICE,),
+            )
+
+    def test_the_defaults_are_singapore_and_exact(self):
+        assert SETTINGS_BY_NAME["reporting_time_zone"].default == "Asia/Singapore"
+        assert SETTINGS_BY_NAME["balance_mismatch_tolerance"].default == 0.0
+
+    @pytest.mark.parametrize("name", ["Asia/Singapore", "UTC", "America/New_York", "Europe/Dublin"])
+    def test_a_known_time_zone_is_accepted(self, name):
+        parsed, error = parse_and_validate(SETTINGS_BY_NAME["reporting_time_zone"], name)
+        assert (parsed, error) == (name, None)
+
+    @pytest.mark.parametrize("name", ["Mars/Olympus_Mons", "", "Singapore Standard Time", "../etc/passwd", "Asia/"])
+    def test_an_unknown_or_malformed_time_zone_is_rejected(self, name):
+        parsed, error = parse_and_validate(SETTINGS_BY_NAME["reporting_time_zone"], name)
+        assert parsed is None and error is not None
+
+    @pytest.mark.parametrize("value", ["0", "0.0", "0.5", "1", "1000"])
+    def test_a_tolerance_from_zero_to_one_thousand_is_accepted(self, value):
+        parsed, error = parse_and_validate(SETTINGS_BY_NAME["balance_mismatch_tolerance"], value)
+        assert error is None and parsed == float(value)
+
+    @pytest.mark.parametrize("value", ["-0.01", "1000.01", "abc", ""])
+    def test_a_negative_oversized_or_non_numeric_tolerance_is_rejected(self, value):
+        parsed, error = parse_and_validate(SETTINGS_BY_NAME["balance_mismatch_tolerance"], value)
+        assert parsed is None and error is not None
+
+    def test_the_config_fields_have_the_same_defaults_as_the_catalog(self):
+        from decimal import Decimal
+
+        from api_service.config import Settings
+
+        fields = Settings.model_fields
+        assert fields["reporting_time_zone"].default == SETTINGS_BY_NAME["reporting_time_zone"].default
+        assert fields["balance_mismatch_tolerance"].default == Decimal("0.00")

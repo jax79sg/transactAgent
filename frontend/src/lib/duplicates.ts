@@ -15,7 +15,7 @@ function parseDate(iso: string): { year: number; month: number; day: number } {
   return { year, month, day };
 }
 
-function formatDay(iso: string, withYear: boolean): string {
+export function formatDay(iso: string, withYear: boolean): string {
   const { year, month, day } = parseDate(iso);
   return `${day} ${MONTHS[month - 1]}${withYear ? ` ${year}` : ""}`;
 }

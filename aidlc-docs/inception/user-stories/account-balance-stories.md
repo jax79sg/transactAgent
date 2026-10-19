@@ -54,6 +54,7 @@ Appends **Epic 13** to the project's existing story set (`stories.md` Epics 1–
 - *Edge case, invalid input*: Given I enter a value that is not a number or an as-of date in the future, When I try to save, Then it is rejected with a clear message and nothing is saved.
 - *Edge case, not a deposit account*: Given a credit-card or unknown-type account, When I look for an anchor option, Then none is offered, since those accounts never have balances.
 - *Prompting*: Given a deposit account without an anchor, When I view the Dashboard balance section, Then that account is shown with an "anchor required" prompt that takes me to anchor entry.
+- *End of day* (added 2026-10-18): Given I enter a balance and a date, Then it is taken as the balance at the **end of that day**, after that day's transactions, and the entry form says so.
 
 ### US-13.4: I can look up my balances for a date or month
 **As** the Account Owner, **I want** to pick an exact date, or a month, and see each savings account's balance plus a combined total in SGD **so that** I know how much I had at any point in time.
@@ -64,6 +65,9 @@ Appends **Epic 13** to the project's existing story set (`stories.md` Epics 1–
 - *Happy path, exact date*: Given my accounts have anchors, When I choose a calendar date, Then I see each deposit account's end-of-day balance for that date in SGD, plus an all-accounts-combined total, on the Dashboard.
 - *Happy path, month shortcut*: Given I choose a past month, When the lookup runs, Then it uses the last day of that month. Given I choose the current, still-in-progress month, Then it uses today (A-5).
 - *Anchor date*: Given an account's anchor is dated T, When I look up T, Then the balance equals the anchor value (converted to SGD where needed).
+- *Nearest known balance* (added 2026-10-18, Question 5 = B): Given an account has printed closing balances as well as an anchor, When I look up a date, Then the balance is worked from whichever of the anchor or a printed closing balance is nearest that date, so on a statement's closing date the balance equals the statement; and each account's figure says what it was worked from.
+- *Transactions linked to no account* (added 2026-10-18, Question 6 = A): Given some transactions belong to no account, When I look up a date, Then a notice states how many, from which banks, between which dates and their net amount, and they are left out of every balance.
+- *Date rules* (added 2026-10-18, Question 7 = D): Given a date after today (in the reporting time zone), Then it is refused; "today" and the current month follow the reporting time zone setting, which defaults to Singapore.
 - *After the anchor*: Given a date after T, When I look it up, Then the balance is the anchor plus the net of that account's inflows minus outflows after T up to and including the date.
 - *Before the anchor*: Given a date before T, When I look it up, Then the balance is the anchor minus the net of that account's inflows minus outflows after the date up to and including T.
 - *Foreign-currency account*: Given an account in a non-SGD currency, When I look up a date, Then its balance is worked out in its own currency and converted to SGD at the FX rate for the requested date, not the rates of the individual transactions.
@@ -86,7 +90,8 @@ Appends **Epic 13** to the project's existing story set (`stories.md` Epics 1–
 - *Edge case, excluded accounts*: Given an account with no anchor, When the chart renders, Then it is not plotted and the chart says which accounts are missing and why.
 - *Edge case, missing FX rate*: Given a foreign-currency account has no usable FX rate for some date in the range, When the chart renders, Then that date is shown as a gap for that account rather than a guessed value.
 - *Presentation*: Given light or dark mode on a phone or a desktop, When I view the chart, Then axes, labels, legend, and tooltips are legible in each, matching the Dashboard's existing chart theming (NFR-AB-7).
-- *Granularity*: Whether the chart plots daily or month-end points is a Functional Design decision; whichever is chosen, every plotted point must satisfy the consistency criterion above.
+- *Granularity* (resolved 2026-10-18, Question 1 = D): the chart plots every day for ranges of 92 days or fewer and month-end points for longer ranges, and I can switch between daily and month-end; every plotted point satisfies the consistency criterion above.
+- *Default range* (added 2026-10-18, Question 2 = A): the chart opens on the last 12 months.
 
 ### US-13.6: I'm warned when a statement's closing balance disagrees with my computed balance
 **As** the Account Owner, **I want** each statement's printed closing balance checked against what the app computed from my anchor **so that** a wrong anchor or a missing transaction is flagged instead of silently producing a wrong balance.
@@ -100,7 +105,9 @@ Appends **Epic 13** to the project's existing story set (`stories.md` Epics 1–
 - *Edge case, no closing balance printed*: Given a statement that prints no closing balance, When it is ingested, Then it ingests normally and that statement simply has no cross-check.
 - *Edge case, no anchor*: Given an account with no anchor, When the checks run, Then no cross-check is attempted and no spurious warning is raised for that account.
 - *Resolution*: Given a discrepancy caused by a wrong anchor, When I correct the anchor so the figures agree, Then the warning disappears without any further action.
-- *Tolerance*: Given a difference of a fraction of a cent or a rounding allowance, Then whether it counts as a mismatch follows the tolerance decided at Functional Design (A-4).
+- *Tolerance* (resolved 2026-10-18, Question 3 = C): a difference counts as a mismatch when it is greater than the `balance_mismatch_tolerance` setting, whose default is 0.00 (one cent or more).
+- *Where it started* (added 2026-10-18, Question 4 = C): Given several statements disagree, Then besides each statement's difference I am shown the **statement interval** whose transactions do not explain the change in the printed balance, so I can see where transactions are missing rather than a trail of identical differences.
+- *Which view needs an anchor*: both views are shown only for accounts that have an anchor.
 
 ### US-13.7: I can safely re-ingest my existing statements so history gains accounts and balances
 **As** the Account Owner, **I want** to re-ingest every statement I've already loaded, without losing the category corrections I made by hand, **so that** my history gains accounts, account types, and closing balances.

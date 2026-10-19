@@ -587,3 +587,195 @@ export interface CostsResponse {
   series: CostPoint[];
   groups: CostGroupTotal[];
 }
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Epic 13: Account Balance at a Point in Time. Mirrors the DTOs the API Service builds (and its tests pin); the
+// design document is construction/api-service/functional-design/domain-entities.md as corrected on 2026-10-18 (the
+// series range is `start`/`end`; the statement ids in the discrepancy DTOs may be null). Every amount is the API's
+// two-place decimal STRING and stays a string until it is displayed; tests/contract.test.ts checks these shapes
+// against responses the real API produced (tests/fixtures/balances/), so a drift fails a test.
+// ---------------------------------------------------------------------------------------------------------------------
+
+export type AccountType = "deposit" | "credit_card" | "unknown";
+
+export interface AnchorDTO {
+  balance: string;
+  asOfDate: string;
+  updatedAt: string;
+}
+
+export interface AccountDTO {
+  id: string;
+  name: string;
+  bankName: string;
+  accountIdentifier: string | null;
+  type: AccountType;
+  /** True once the owner has chosen the type, so a later statement never overwrites it. */
+  typeSetByUser: boolean;
+  currency: string;
+  anchor: AnchorDTO | null;
+  /** True only for a deposit account. */
+  canHaveAnchor: boolean;
+  statementCount: number;
+  transactionCount: number;
+  closingBalanceCount: number;
+  latestTransactionDate: string | null;
+}
+
+export interface AccountListResponse {
+  items: AccountDTO[];
+}
+
+/** At least one field; the request changes exactly what it names. */
+export interface AccountUpdateRequest {
+  name?: string;
+  type?: AccountType;
+}
+
+export interface AnchorRequest {
+  balance: string;
+  asOfDate: string;
+}
+
+export interface AnchorResponse {
+  anchor: AnchorDTO;
+  previous: AnchorDTO | null;
+}
+
+/** The surviving account is the one in the request path. */
+export interface MergeRequest {
+  absorbedAccountId: string;
+  keepAnchorFrom?: string;
+}
+
+export type AccountBalanceStatus = "ok" | "anchor_required" | "fx_unavailable";
+export type BalanceBasisSource = "anchor" | "statement_closing";
+export type ExcludedReason = "anchor_required" | "fx_unavailable";
+
+/** What a balance was worked from. */
+export interface BasisDTO {
+  source: BalanceBasisSource;
+  date: string;
+  statementId: string | null;
+}
+
+export interface AccountBalanceDTO {
+  accountId: string;
+  name: string;
+  bankName: string;
+  currency: string;
+  status: AccountBalanceStatus;
+  /** The account's own-currency balance: present for "ok" and "fx_unavailable" (only the conversion is missing), null for "anchor_required". */
+  balanceNative: string | null;
+  /** Null unless the status is "ok": a converted balance is never guessed. */
+  balanceSgd: string | null;
+  isApproximate: boolean;
+  fxRateDate: string | null;
+  basis: BasisDTO | null;
+  latestTransactionDate: string | null;
+}
+
+export interface ExcludedAccountDTO {
+  accountId: string;
+  name: string;
+  reason: ExcludedReason;
+}
+
+export interface CurrencyNetDTO {
+  currency: string;
+  net: string;
+}
+
+export interface UnlinkedNoticeDTO {
+  count: number;
+  bankNames: string[];
+  earliestDate: string;
+  latestDate: string;
+  netByCurrency: CurrencyNetDTO[];
+}
+
+export interface BalancesResponse {
+  resolvedDate: string;
+  /** The date "today" is in the API's reporting time zone: the Frontend never uses its own clock after the first answer. */
+  today: string;
+  requestedMonth: string | null;
+  ingestedThroughDate: string | null;
+  accounts: AccountBalanceDTO[];
+  combinedTotalSgd: string | null;
+  combinedIncludesCount: number;
+  excluded: ExcludedAccountDTO[];
+  hasApproximate: boolean;
+  unlinkedTransactions: UnlinkedNoticeDTO | null;
+}
+
+/** What is asked of GET /balances: exactly one of a date or a month. */
+export type BalanceLookupParams = { date: string } | { month: string };
+
+export type BalanceGranularity = "auto" | "day" | "month";
+
+export interface SeriesParams {
+  from?: string;
+  to?: string;
+  granularity?: BalanceGranularity;
+}
+
+export interface SeriesAccountDTO {
+  accountId: string;
+  name: string;
+  currency: string;
+}
+
+export interface SeriesPointDTO {
+  date: string;
+  combinedSgd: string | null;
+  /** SGD value per plotted account; null is a gap (no usable exchange rate that day), never zero. */
+  perAccount: Record<string, string | null>;
+  approximateAccountIds: string[];
+}
+
+export interface SeriesResponse {
+  start: string;
+  end: string;
+  /** The resolved granularity, never "auto". */
+  granularity: "day" | "month";
+  accounts: SeriesAccountDTO[];
+  missingAccounts: ExcludedAccountDTO[];
+  points: SeriesPointDTO[];
+}
+
+export interface StatementDifferenceDTO {
+  statementId: string | null;
+  closingDate: string;
+  printedBalance: string;
+  computedBalance: string;
+  /** Printed minus computed from the anchor alone. */
+  difference: string;
+}
+
+export interface PeriodGapDTO {
+  fromStatementId: string | null;
+  toStatementId: string | null;
+  fromDate: string;
+  toDate: string;
+  printedChange: string;
+  transactionNet: string;
+  /** Printed change minus the net of the transactions between the two closing dates. */
+  gap: string;
+}
+
+export interface AccountDiscrepancyDTO {
+  accountId: string;
+  name: string;
+  currency: string;
+  statementsChecked: number;
+  periodsChecked: number;
+  statementDifferences: StatementDifferenceDTO[];
+  periodGaps: PeriodGapDTO[];
+}
+
+export interface DiscrepanciesResponse {
+  tolerance: string;
+  accountsChecked: number;
+  items: AccountDiscrepancyDTO[];
+}

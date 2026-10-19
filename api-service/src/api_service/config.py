@@ -1,5 +1,7 @@
 """Environment-sourced configuration (NFR-4.1 — no secrets hardcoded)."""
 
+from decimal import Decimal
+
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -45,6 +47,12 @@ class Settings(BaseSettings):
     default_page_size: int = 50
     max_page_size: int = 200
     csv_export_max_rows: int = 50_000
+
+    # Epic 13 (AR-63): what "today" is for balances (the current-month shortcut, and whether an anchor date is in the
+    # future), and how far a printed closing balance may differ from the computed one before it counts as a mismatch,
+    # in the account's own currency. Both are read when the API starts, like the other API-owned settings.
+    reporting_time_zone: str = "Asia/Singapore"
+    balance_mismatch_tolerance: Decimal = Decimal("0.00")
 
     # Ask AI (US-6.1): synchronous Gemini text call from api-service itself, not
     # routed through ingestion-worker's job queue -- that queue processes one

@@ -105,3 +105,51 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 ## Error Shape (all endpoints)
 
 - `ErrorResponse`: `{ error: string, message: string, details?: object }` — consistent shape across all `400`/`401`/`404`/`409` responses so the Frontend has one error-handling code path.
+
+
+---
+
+# Epic 13 — Account Management and Balance (added 2026-10-18)
+
+*Field names are camelCase like every DTO here; money and balances are decimals carried as strings with two decimal places (exact, NFR-AB-1); dates are `YYYY-MM-DD`; enumerated values are the stored snake_case strings.*
+
+## Account Management
+
+- `AnchorDTO`: `{ balance: decimal, asOfDate: date, updatedAt: datetime }`.
+- `AccountDTO`: `{ id, name, bankName, accountIdentifier: string | null, type: 'deposit'|'credit_card'|'unknown', typeSetByUser: bool, currency, anchor: AnchorDTO | null, canHaveAnchor: bool, statementCount: int, transactionCount: int, closingBalanceCount: int, latestTransactionDate: date | null }` (AR-51). `canHaveAnchor` is true only for a deposit account.
+- `AccountListResponse`: `{ items: AccountDTO[] }` (small and unpaged: tens of accounts).
+- `AccountUpdateRequest`: `{ name?: string, type?: 'deposit'|'credit_card'|'unknown' }` — at least one (AR-52).
+- `AnchorRequest`: `{ balance: decimal (string), asOfDate: date }` (AR-53).
+- `AnchorResponse`: `{ anchor: AnchorDTO, previous: AnchorDTO | null }`.
+- `MergeRequest`: `{ absorbedAccountId: uuid, keepAnchorFrom?: uuid }` — the surviving account is the one in the path (AR-54).
+
+## Balances
+
+- `BasisDTO`: `{ source: 'anchor'|'statement_closing', date: date, statementId: uuid | null }` — what the figure was worked from (AR-55).
+- `AccountBalanceDTO`: `{ accountId, name, bankName, currency, status: 'ok'|'anchor_required'|'fx_unavailable', balanceNative: decimal | null, balanceSgd: decimal | null, isApproximate: bool, fxRateDate: date | null, basis: BasisDTO | null, latestTransactionDate: date | null }` (AR-58). `balanceSgd` is null unless the status is `ok` (a balance is never guessed). `balanceNative` is present whenever the account has a balance (status `ok` **or** `fx_unavailable`: the account's own-currency figure is known, only its conversion is missing) and null only for `anchor_required` *(corrected 2026-10-18: this first said both were null unless `ok`; the built service and its test return the native figure for `fx_unavailable`)*.
+- `ExcludedAccountDTO`: `{ accountId, name, reason: 'anchor_required'|'fx_unavailable' }`.
+- `UnlinkedNoticeDTO`: `{ count: int, bankNames: string[], earliestDate: date, latestDate: date, netByCurrency: { currency: string, net: decimal }[] }` (AR-60).
+- `BalancesResponse`: `{ resolvedDate: date, today: date, requestedMonth: string | null, ingestedThroughDate: date | null, accounts: AccountBalanceDTO[], combinedTotalSgd: decimal | null, combinedIncludesCount: int, excluded: ExcludedAccountDTO[], hasApproximate: bool, unlinkedTransactions: UnlinkedNoticeDTO | null }` (AR-58).
+- `SeriesAccountDTO`: `{ accountId, name, currency }` — the accounts plotted.
+- `SeriesPointDTO`: `{ date: date, combinedSgd: decimal | null, perAccount: { [accountId]: decimal | null }, approximateAccountIds: uuid[] }` — a null per-account value is a gap (AR-61).
+- `SeriesResponse`: `{ start: date, end: date, granularity: 'day'|'month', accounts: SeriesAccountDTO[], missingAccounts: ExcludedAccountDTO[], points: SeriesPointDTO[] }` — *(corrected 2026-10-18: the range is `start` and `end`, as built and tested; this document first said `from` and `to`, which is still the name of the two query parameters)*. `granularity` is the resolved one, never `auto`.
+- `StatementDifferenceDTO`: `{ statementId: uuid | null, closingDate: date, printedBalance: decimal, computedBalance: decimal, difference: decimal }` — `difference` is printed minus computed from the anchor (AR-62).
+- `PeriodGapDTO`: `{ fromStatementId: uuid | null, toStatementId: uuid | null, fromDate: date, toDate: date, printedChange: decimal, transactionNet: decimal, gap: decimal }`.
+- *(Corrected 2026-10-18: the three statement ids above are nullable as built.)*
+- `AccountDiscrepancyDTO`: `{ accountId, name, currency, statementsChecked: int, periodsChecked: int, statementDifferences: StatementDifferenceDTO[], periodGaps: PeriodGapDTO[] }` — only accounts with at least one finding.
+- `DiscrepanciesResponse`: `{ tolerance: decimal, accountsChecked: int, items: AccountDiscrepancyDTO[] }`.
+
+## Endpoint paths (fixed here so the Frontend unit agrees; all require login)
+
+| Method and path | Purpose | Request | Success | Errors (AR-64) |
+|---|---|---|---|---|
+| `GET /accounts` | list accounts | — | `AccountListResponse` | — |
+| `PATCH /accounts/{accountId}` | rename and/or retype | `AccountUpdateRequest` | `AccountDTO` | 404, 400 |
+| `PUT /accounts/{accountId}/anchor` | set or replace the anchor | `AnchorRequest` | `AnchorResponse` | 404, 409 `not_a_deposit_account`, 400 |
+| `POST /accounts/{accountId}/merge` | merge `absorbedAccountId` into this account | `MergeRequest` | `AccountDTO` (the survivor) | 404, 400, 409 |
+| `GET /balances?date=YYYY-MM-DD` or `?month=YYYY-MM` | balances on a date or month | — | `BalancesResponse` | 400 |
+| `GET /balances/series?from=&to=&granularity=auto\|day\|month` | balance over time | — | `SeriesResponse` | 400 |
+| `GET /balances/discrepancies` | statement differences and period gaps | — | `DiscrepanciesResponse` | — |
+
+- **Settings (addendum to Configurable Application Settings)**: the catalog gains `reporting_time_zone` (string, default `Asia/Singapore`) and `balance_mismatch_tolerance` (decimal 0.00 to 1000.00, default `0.00`), category "Balances", owned by the API Service (AR-63).
+- **Existing entities touched, none changed in shape**: `accounts`, `account_keys`, `balance_anchors`, `statement_accounts` (merge re-points rows; anchors are upserted), read-only use of `transactions`, `bank_statements`, `fx_rate_cache`. No new table, column or migration.

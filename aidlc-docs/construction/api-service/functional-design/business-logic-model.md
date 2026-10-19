@@ -115,3 +115,105 @@ Listing a run's files also returns, for a file whose outcome is `skipped_probabl
 
 Three catalog entries and a lowercase-boolean display fix (AR-48). Everything else about Configurable Application Settings is unchanged: validation by the existing enumerated, decimal, and whole-number rules; the override-file write; the restart guidance (owning service: the Ingestion Worker); and the history row. The effective value of `duplicate_detection_enabled` is also read by the scan-status endpoint (AR-46).
 
+
+
+---
+
+# Epic 13 — Account Management and Balance Components (added 2026-10-18)
+
+*Two new components of the API Service, each under its own router, reading and writing only the shared data store (AR-67). Both are new; neither changes an existing flow. Nothing is stored that can be computed (AR-66).*
+
+## Account Management Component: Flows
+
+**List accounts** (AR-51) — read the accounts, their keys, anchors, statement sections and a per-account transaction summary; order deposit, credit card, unknown, then by name; return each with `canHaveAnchor`.
+
+**Rename / retype** (AR-52)
+```
+account = find(accountId)                        -> 404 account_not_found
+request names name and/or type                   -> 400 nothing_to_change
+name: trimmed, 1..255 characters                 -> 400 invalid_account_name
+type: deposit | credit_card | unknown            -> 400 invalid_account_type
+write name and/or type; a type change sets type_user_set (BR-34); the anchor row is left alone
+return the account entry
+```
+
+**Set or replace the anchor** (AR-53)
+```
+account = find(accountId)                        -> 404 account_not_found
+account.type == deposit                          -> 409 not_a_deposit_account
+balance parses as a decimal, <= 2 places, in range  -> 400 invalid_anchor_value
+asOfDate >= 2000-01-01                           -> 400 anchor_date_out_of_range
+asOfDate <= today(reportingTimeZone)             -> 400 anchor_date_in_future
+previous = current anchor (or none)
+upsert the single anchor (balance, asOfDate)     -- one conditional write
+return { anchor, previous }
+```
+
+**Merge** (AR-54, AR-65)
+```
+lock both accounts
+survivor, absorbed exist                         -> 404 account_not_found
+survivor != absorbed                             -> 400 merge_same_account
+currencies equal                                 -> 409 merge_currency_mismatch
+no statement has a section for both              -> 409 merge_appear_together
+anchors: both present  -> keepAnchorFrom is one of the two          -> 409 merge_anchor_choice_required
+         one present   -> keepAnchorFrom absent or that account      -> 400 merge_anchor_choice_invalid
+         none          -> keepAnchorFrom absent                      -> 400 merge_anchor_choice_invalid
+re-point the absorbed account's statement sections and keys to the survivor
+keep the chosen anchor (delete the other, re-point if it was the absorbed account's)
+reconcile the type (user-set choice wins) and the flag
+delete the absorbed account
+return the survivor's account entry
+```
+
+## Balance Component: Flows
+
+**Reference point and balance** (AR-55, AR-56) — pure and shared by every read below.
+```
+knownBalances(account) = [anchor] + [printed closing balances with a date]   (same-date: anchor, else last recorded)
+reference = the known balance nearest to D in days (tie: anchor, else earlier)
+net       = inflows - outflows of the account's transactions strictly after the earlier of
+            (reference.date, D) up to and including the later of the two
+balance   = reference.value + net   if D >= reference.date
+          = reference.value - net   if D <  reference.date
+```
+
+**Lookup** (AR-57, AR-58, AR-59, AR-60)
+```
+exactly one of date | month                      -> 400 date_or_month_required
+D = date, or month -> last day (today for the current month)   -> 400 date_in_future / month_in_future
+for each deposit account:
+    no anchor                                    -> status anchor_required (excluded from the total)
+    else balance in the account's currency (above)
+         SGD account: as is
+         other: nearest earlier cached rate on or before D -> SGD, rounded half-up to 2 places,
+                approximate if the rate's date != D; none -> status fx_unavailable (excluded)
+combined total = sum of the SGD balances of the ok accounts (rows add up exactly)
+ingestedThrough = latest transaction date overall, and each account's own
+unlinked notice = count, banks, dates, net per currency of transactions with no account link (or absent)
+```
+
+**Series** (AR-61)
+```
+from, to default: to = today, from = to minus 12 months; from <= to <= today; points <= 1,500   -> 400 invalid_date_range / range_too_large
+granularity: auto -> day when (to - from) <= 92 days, else month; or the one asked for
+dates: every day in [from, to]  |  every month end in [from, to] plus `to`
+for each plotted account and date: exactly the lookup's balance for that date (same functions)
+a date with no usable rate is a gap for that account; the combined value leaves that account out
+accounts without an anchor: not plotted, listed once
+```
+
+**Discrepancies** (AR-62)
+```
+tolerance = balance_mismatch_tolerance (default 0.00)
+for each deposit account with an anchor:
+    statement differences: for each printed closing balance,
+        computedFromAnchor = balanceFromKnown(anchor, closingDate, net)     -- anchor only
+        difference = printed - computedFromAnchor ; listed when |difference| > tolerance
+    period gaps: for each consecutive pair of printed closing balances (c1,p1) -> (c2,p2),
+        gap = (p2 - p1) - net(transactions in (c1, c2]) ; listed when |gap| > tolerance
+accounts without an anchor: nothing is checked, nothing is raised
+```
+
+## Configuration Component: Balances Settings Addendum (added 2026-10-18 — Epic 13)
+Two catalog entries (AR-63), owned by the API Service; everything else about Configurable Application Settings is unchanged (validation rules, the override-file write, the restart guidance, the history row). The API reads `reporting_time_zone` for "today" (AR-57) and `balance_mismatch_tolerance` for AR-62 when it starts.

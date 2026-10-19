@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from api_service.app_settings.catalog import SettingSpec
 
@@ -51,6 +52,11 @@ def validate_format(spec: SettingSpec, value: str) -> str | None:
             return "boundaries must be strictly ascending"
     elif spec.format == "non_empty" and not value.strip():
         return "must not be empty"
+    elif spec.format == "time_zone":
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            return f"'{value}' is not a known time zone (use a name such as Asia/Singapore)"
     return None
 
 

@@ -88,3 +88,24 @@ Used on 2026-10-04 and torn down afterwards: start a throwaway PostgreSQL on a s
 
 ### Not run (live-system steps, need a decision)
 Rebuild and redeploy; `check-duplicates` against real statements (the CLI migrates the live database to 0019 and 0020 first); switching detection on; the real backfill.
+
+---
+
+## Addendum (2026-10-19) — Account Balance (Epic 13): API Service and Frontend SPA completion
+
+Both remaining units of Epic 13 (API Service, Frontend SPA) were built and each did its own real-data/real-browser verification during Code Generation, in each case against a **dedicated scratch PostgreSQL on a `docker run` container with its own data directory, never the live one and never a bind mount shared with `docker-compose.yml`**:
+
+### Scenario 8: API Service against a read-only dump of the real data
+A read-only dump of the live database was restored into a throw-away PostgreSQL (its own container, its own data, deleted afterwards); the real API code ran against it with an anchor entered for each deposit account. **Result**: the service's computed period gaps matched a separately-run independent analysis exactly (28 of 113 statement intervals, including the two under SGD 1); every balance on every printed closing date equalled the statement (125 of 125); an independently written SQL-and-Python recomputation matched 480 of 480 sampled balances; a lookup took 16 ms and the default 12-month series 11 ms (NFR-AB-5's under-one-second target). Full detail: `construction/api-service/code/account-balance-summary.md`.
+
+### Scenario 9: Frontend contract check against real API responses
+`api-service/tests/test_contract_fixtures.py` builds a fixed scenario and compares the real API's responses with 11 committed JSON fixtures (`frontend/tests/fixtures/balances/`); `frontend/tests/contract.test.ts` checks the Frontend's own DTO types against the same files. **This is what caught three real places the written API design document had drifted from what was actually built** (the series range's field names, nullable statement ids, and a conversion-unavailable account's own-currency figure) — all corrected in the design documents, none in the code. Regenerate with `UPDATE_CONTRACT_FIXTURES=1 pytest api-service/tests/test_contract_fixtures.py`.
+
+### Scenario 10: Frontend against a scratch stack with invented data
+A scratch PostgreSQL (own container, own data), the real `api-service` code, and a `vite build` of the real frontend (served statically) were run on free ports and seeded with 20 accounts covering every state the design describes (anchored and unanchored accounts, a deliberately missing transaction to trigger a discrepancy, two same-named accounts sharing one statement, foreign currency with and without a cached exchange rate, credit cards). Looked at in the built-in browser: dark mode, light mode, 375 px phone width (no horizontal page scroll). **No defects found.** Full detail, including every screen checked: `construction/frontend/code/account-balance-summary.md`.
+
+### Scenario 11: End to end, the real nightly workflow
+`frontend/e2e/balances.spec.ts` (new) plus three accounts added to the CI-only `seed_e2e_fixtures.py`, run by dispatching the project's actual nightly e2e GitHub Actions workflow on this feature branch — [run 39107017262](https://github.com/jax79sg/transactAgent/actions/runs/39107017262). All 6 new cases passed, plus the one existing Dashboard case fixed as part of this work; only the pre-existing, unrelated Settings/Transactions spec-drift failures occurred (a separate task has been offered for those, not part of Epic 13).
+
+### Scenario 12 (attempted, not completed — see the warning in `build-instructions.md`)
+A real-image, full-`docker-compose` integration check (the actual `api-service` and `frontend` Dockerfiles, nginx's static serving and `config.js` generation, and the real inter-container network, all together, as Scenario 3 above does for the existing app) was attempted and **caused the live `transactagent-db` container to restart** because the isolated copy's database service shared the live `./data/postgres` bind mount by mistake. The live stack recovered with no data loss (confirmed immediately: `pg_is_in_recovery()` false, clean startup log, intact table counts, no errors in the API or worker logs). All scratch containers, images, networks and the scratch compose file were removed. **The user was told immediately and chose to skip retrying this scenario**, relying instead on Scenarios 8–11 above. If you want this scenario run before Operations/deployment, redo it with the database service pointed at its own, non-shared data directory (see the warning in `build-instructions.md`) — it is the one thing about the real built images serving together, through nginx and real inter-container networking, that none of Scenarios 8–11 cover.

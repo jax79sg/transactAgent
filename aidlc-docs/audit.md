@@ -3821,3 +3821,172 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Merges on the user's explicit request. The record rides on the #48 branch so that nothing is committed straight to main.
 
 ---
+
+## Question: Did I Put a Requirement to See the Balance of My Accounts?
+**Timestamp**: 2026-10-18T01:52:20Z
+**User Input**: "Did i put a reqyureement to see the balance of my accounts? I don't see if implementation anywhere."
+**AI Response**: "Yes. The request is on record (account-balance-requirements.md): 'I would like to add a new feature that is able to determine the balance of my accounts in a particular time.' It became Epic 13, Account Balance at a Point in Time: FR-AB-1 to FR-AB-15 and stories US-13.1 to US-13.7, with the balance lookup, chart, warnings, account management and anchor entry on the existing Dashboard (FR-AB-13). It is only half built. BUILT AND DEPLOYED: the Database unit (tables accounts, account_keys, statement_accounts, balance_anchors) and the Ingestion Worker (accounts resolved and created at ingestion, closing balances captured, the one-time backfill): live data holds 14 deposit and 6 credit-card accounts, 204 statement sections, 125 of 133 deposit sections with a captured closing balance. That delivers US-13.1 (accounts identified, credit cards excluded) and US-13.7 (safe re-ingest). NEVER BUILT: the API Service (no accounts, anchors or balance routes exist; its only mention is a settings catalogue entry) and the Frontend (no file in frontend/src mentions balances; the Dashboard page has no such section). That leaves US-13.2 (rename, merge, retype accounts), US-13.3 (enter a known real balance, the anchor: balance_anchors has 0 rows), US-13.4 (look up a balance for a date or month), US-13.5 (balance over time) and US-13.6 (warning when a statement's closing balance disagrees: the closing balance is stored but nothing compares it) not implemented. HOW IT HAPPENED, from the records: the approved plan was Database, then Ingestion Worker and API Service, then Frontend; Code Generation finished for the first two (the worker's approval line still reads pending), then the 'One pr.' decision of 2026-10-03 brought Epic 14 (probable duplicate statements, which has its own API and screens) in ahead; Epic 13's API Service and Frontend units never started, and no decision to defer them is recorded. The 'Build and Test: Epics 13 and 14' approval covered only what had been built; its API and Frontend test counts are Epic 14's. The user guide does not promise balances (its two hits for the word are a CSS property). My own memory note had described Epic 13 as shipped, which was wrong, and has been corrected. NOT DONE: nothing was built; the user is asked whether to build the two missing units. The state file gets a dated correction below (append-only; the older lines are left as they were)."
+**Context**: Question answered from the records and the code; no feature work. Branch `docs/epic-13-status`, PR open, not merged.
+
+---
+
+## Epic 13 Completion: Resume the Construction Loop at the API Service Unit (Functional Design)
+**Timestamp**: 2026-10-18T02:59:44Z
+**User Input**: "The balance can be filled at runtime, with a date and balance for each account. Then the balance per date for the past can be worked backwards. Also continue the ai-dlc the missing parts."
+**AI Response**: "Read the first two sentences as confirmation of FR-AB-6 and FR-AB-7 (one manual anchor per deposit account entered in the UI; the balance on any other date worked from it, backwards before the anchor date and forwards after), so no requirement changes. Read the last sentence as: resume the AI-DLC construction loop for the two Epic 13 units that were never built, API Service then Frontend SPA (approved order Database, then Ingestion Worker and API Service, then Frontend). Existing project, so no welcome message and no reverse engineering; the user stated the resume point, so the welcome-back prompt was not presented. Loaded the approved artifacts (requirements, stories, application design, database functional design, the existing API Service records up to AR-50 and its source layout) and the rule files (process overview, session continuity, content validation, question format, functional design). EXTENSIONS: Security Baseline = No and Resiliency Baseline = No, skipped for this unit (logged); Property-Based Testing = Partial applies at Code Generation to the pure balance function (NFR-AB-4). LIVE DATA READ (read-only) TO GROUND THE DESIGN: 14 deposit and 6 credit-card accounts, all SGD, no anchors; the account list needs the tidy-up US-13.2 provides (two accounts both named 'GXS Bank cket', 'DBS 6220' beside 'DBS / POSB 6220', 'MariBank 8101' with no transactions); 99 transactions (one GXS statement, July 2026) are linked to no account; and consecutive printed closing balances reconcile with the transactions between them in only 85 of 113 intervals (75%): GXS 6 of 18, OCBC 8 of 19, the others mostly complete; of the 28 that do not, 2 are under SGD 1 (0.15 and 0.16, GXS) and 16 are over SGD 100. A first draft of the plan wrongly said no mismatch was between 0 and SGD 1; checked against the data before it reached the user and corrected. OUTPUT: `aidlc-docs/construction/plans/api-service-account-balance-functional-design-plan.md`: what is already settled, the data findings, a nine-step checklist, and seven questions with [Answer]: tags (chart point granularity; chart default range; mismatch tolerance; how a discrepancy is reported, cumulative versus per period; whether statement closing balances may also set the balance, which would amend FR-AB-7 and A-8 and is therefore flagged for the user's explicit choice; what to do with transactions linked to no account; what 'today' means). STOPPED at step 4, awaiting the user's answers; nothing designed or built yet."
+**Context**: Construction loop, Epic 13, Unit: API Service, Functional Design, questions pending. Branch `feature/account-balance-completion`.
+
+---
+
+## Epic 13 API Service Functional Design: Questions Answered in Chat, Design Written
+**Timestamp**: 2026-10-18T03:16:12Z
+**User Input**: "Ask the questions interactively as i dint have access to terminal."
+**AI Response**: "Asked the seven plan questions through the interactive question tool, in two batches (the AI-DLC question rules normally put questions in files; the user has no terminal access to edit them, so this was done at the user's request and the answers were copied into the plan file). ANSWERS (the user's selections, every one the option marked Recommended): Q5 Nearest known balance (printed closing balances may also set a balance); Q4 Both views (per-statement difference and per-period gap); Q6 Show a notice for the transactions linked to no account; Q3 Settings value, default exact; Q1 Automatic plus the user's toggle; Q2 Last 12 months; Q7 Setting, default Singapore. None was vague, so no follow-up questions. ARTIFACTS: `business-rules.md` rules AR-51 to AR-67 (accounts list, rename and retype, anchor, merge, nearest known balance, the pure balance functions, today and date resolution, the lookup result, FX, unlinked-transactions notice, the series, discrepancies and tolerance, two new settings, error codes, one transaction per action, performance, access); `business-logic-model.md` and `domain-entities.md` (flows, request and response shapes, seven endpoint paths, settings), all updated in place with dated addenda as for earlier epics. AMENDMENTS TO APPROVED DOCUMENTS made in place and dated 2026-10-18, flagged for approval: `account-balance-requirements.md` (FR-AB-7, A-8, A-4, FR-AB-8 and the open items, with an Amendment section), `account-balance-stories.md` (US-13.3, 13.4, 13.5, 13.6) and `component-methods.md` (Balance Component addendum). DESIGN DECISIONS NOT ASKED, listed so they can be reviewed: a lookup date after today is refused; ties between two equally near known balances go to the manual anchor, then the earlier date; the survivor of a merge keeps its own type unless only the absorbed account's type was set by the user; names need not be unique (the existing duplicates are told apart by rename); there is no request to clear an anchor (change the type or replace it); both discrepancy views need an anchor; tolerance is in the account's own currency; the two new settings take effect on API restart. SKIPPED, logged: Security Baseline and Resiliency Baseline extensions (disabled in the project's configuration); NFR Requirements, NFR Design and Infrastructure Design (per the approved execution plan). Traceability table added to the plan; every API-carried requirement maps to a rule. The Functional Design completion message was presented and the stage is AWAITING THE USER'S EXPLICIT APPROVAL; Code Generation has not started."
+**Context**: Construction loop, Epic 13, Unit: API Service, Functional Design complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 API Service: Functional Design Approved; Code Generation Part 1 (Planning)
+**Timestamp**: 2026-10-18T03:47:52Z
+**User Input**: "Approved"
+**AI Response**: "Read as the explicit approval of the API Service Functional Design that had just been presented with the 'Request Changes / Continue to Code Generation' choice, including the amendments made in place on 2026-10-18 to `account-balance-requirements.md` (FR-AB-7, A-8, A-4, FR-AB-8), `account-balance-stories.md` (US-13.3 to US-13.6) and `component-methods.md`, which the completion message said the approval covered. Functional Design marked complete for the API Service unit. NEXT STAGE per the plan: Code Generation, Part 1 (Planning): read `construction/code-generation.md` and the Property-Based Testing extension rules (enforced in Partial mode: PBT-02, PBT-03, PBT-07, PBT-08, PBT-09); read the API Service source (router, service, repository and schema layout, error types, settings catalog, CORS, test fixtures) and found four things that change the plan: (1) the approved design uses PATCH but the API's CORS configuration allows only GET, POST, PUT and DELETE, so a browser would refuse the call: the plan adds PATCH (the alternative is PUT, which every other update here uses); (2) hypothesis is used by the Ingestion Worker but is not an API Service dependency: added to the test extra only; (3) two tests pin the settings catalog size at 53: updated to 55 deliberately; (4) a `time_zone` value format is needed in the catalog validation. Also verified read-only that the running API container resolves Asia/Singapore (486 zones known), settling the design's open time-zone point. Wrote `aidlc-docs/construction/plans/api-service-account-balance-code-generation-plan.md`: 21 numbered steps (pure calculation module first and property-tested; repositories; services; HTTP layer; verification on a scratch copy of the real data so the live database is never written; documentation), story coverage for US-13.2 to US-13.6, completion criteria and scope estimate. Part 1 is complete; NO CODE HAS BEEN WRITTEN."
+**Context**: Construction loop, Epic 13, Unit: API Service, Code Generation Part 1 complete pending approval.
+
+---
+## Approval Prompt Logged Before Asking: API Service Code Generation Plan
+**Timestamp**: 2026-10-18T03:47:52Z
+**AI Response**: "Asked the user to approve `aidlc-docs/construction/plans/api-service-account-balance-code-generation-plan.md` (21 steps, the complete generation sequence) or to request changes; Part 2 (generation) does not start until the approval is explicit. Two points were put to the user for a choice inside that approval: PATCH versus PUT for renaming and retyping an account, and the new hypothesis test dependency."
+**Context**: Code Generation Part 1, Step 6 of `construction/code-generation.md`.
+
+---
+
+## API Service Code Generation Plan Approved (Part 1 complete); Part 2 Starts
+**Timestamp**: 2026-10-18T04:33:44Z
+**User Input**: "Approve, keep PATCH (Recommended)" (the user's selection in the interactive question 'Do you approve the API Service Code Generation plan (21 steps)? The PATCH-versus-PUT choice for renaming and retyping accounts is part of it.'; the other options were 'Approve, but use PUT' and 'Request changes')
+**AI Response**: "Approval recorded for the whole 21-step plan and generation sequence, with PATCH kept: `PATCH` is added to the API's CORS allowed methods, with a test of the preflight response. The test-only `hypothesis` dependency, stated in the plan summary with no objection, is part of the approved plan. Code Generation Part 1 (Planning) marked complete in aidlc-state.md. Part 2 (generation) begins at Step 2 of the plan and follows it exactly, ticking each step as it completes."
+**Context**: Construction loop, Epic 13, Unit: API Service, Code Generation Part 2 in progress.
+
+---
+
+## Epic 13 API Service: Code Generation Part 2 Complete, Presented for Approval
+**Timestamp**: 2026-10-18T04:56:38Z
+**AI Response**: "Executed the approved 21-step plan in order, ticking each step as it finished. CREATED (api-service/src/api_service): accounts/{__init__,repository,schemas,service,router}.py and balances/{__init__,calculation,repository,schemas,service,router}.py (11 files; calculation.py is pure: no database, no clock). MODIFIED: errors.py (17 typed errors), config.py (two settings), main.py (routers registered; PATCH added to the CORS methods), schemas.py (the shared Money type; one small file not named in the plan), app_settings/catalog.py and validation.py (two entries, a time_zone format, size 53 to 55 including the module's own import-time assertion the plan had not named), pyproject.toml and uv.lock (hypothesis in the test extra only; two packages added). TESTS: 246 new (467 existing unchanged apart from the two catalog-count assertions): 59 pure-module tests with 18 property-based ones, 27 repository tests, 44 and 42 service tests (including a real two-connection race), 26 and 27 API tests (including the CORS preflight), 21 settings tests; reusable generators in tests/balance_strategies.py (PBT-07), Hypothesis dev and ci profiles in conftest (PBT-08), hypothesis as a declared dependency (PBT-09). 713 pass under both profiles; ruff clean. MUTATION CHECK: 20 deliberate defects on the pure module and 25 on the services, repositories, routers and CORS configuration, 45 of 45 caught; the first run found nothing missed. A DEFECT FOUND AND FIXED BY MY OWN RE-READ before any test run: the prefix-sum index built its list one element off from how it was read. Test mistakes, not code mistakes, accounted for every test failure along the way (two accounts built with one bank and identifier, an expectation that dropped September from a list of twelve month ends, a 89-day range expected to be monthly). REAL-DATA VERIFICATION on a scratch copy restored from a read-only dump of the live database (the live database was never written; the copy and the dump were deleted): period gaps 28 of 113 intervals, exactly as found independently before the design (two under SGD 1: 0.15 and 0.16; 16 over SGD 100); the balance equals the printed closing balance on all 125 closing dates; an independent recomputation written from the requirement in plain SQL and Python matched all 480 balances on 40 random dates; the series equalled the lookup at all 25 sampled dates; lookup 16 ms, default 12-month series 11 ms, 12-month daily series 32 ms, discrepancies 11 ms (the target is under one second); the unlinked notice reported exactly the 99 July 2026 GXS Bank transactions (net SGD 18.65); merging DBS 6220 into DBS / POSB 6220 works, and merging the two GXS Bank cket accounts is correctly refused because one statement lists both. NOT DONE, by design: the screens (Frontend unit), the API image rebuild and restart (at deployment), the user guide. DOCUMENTATION: aidlc-docs/construction/api-service/code/account-balance-summary.md and the code README. The Code Generation completion message was presented and the stage AWAITS THE USER'S EXPLICIT APPROVAL; the Frontend unit has not started."
+**Context**: Construction loop, Epic 13, Unit: API Service, Code Generation complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 API Service: Code Generation Approved; Frontend Unit Functional Design Starts
+**Timestamp**: 2026-10-18T04:59:15Z
+**User Input**: "Approve"
+**AI Response**: "Recorded the approval of the API Service Code Generation stage (Epic 13). Starting the Frontend SPA unit for Epic 13, beginning with Functional Design: reading the unit's rules and existing design, then asking the questions interactively (the user has no terminal access)."
+**Context**: Construction loop, Epic 13, API Service unit complete; Frontend SPA unit, Functional Design begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Plan Written; Questions Asked
+**Timestamp**: 2026-10-18T05:02:19Z
+**AI Response**: "Read the Functional Design rules, the Epic 13 requirements and stories (US-13.2 to US-13.6 are this unit's), the API Service design and its fixed endpoint contract, the existing Frontend design (through Epic 14) and source (Dashboard, NavBar, Settings, API client, chart helpers, tests). Wrote aidlc-docs/construction/plans/frontend-account-balance-functional-design-plan.md: what approved artifacts already settle (not asked again), six things the existing app and contract settle (listed for review, including that apiRequest has no PATCH and that the web app and API are different origins, that the older From/To box would mislead on a Balances tab, and how the first lookup's 'today' is found), what the live data implies for the screens, an 8-step checklist, and five questions: (1) where the balance section sits on the Dashboard, (2) which lines the chart draws given 14 deposit accounts and an eight-colour rule, (3) how prominent discrepancy warnings are given that 28 of 113 intervals do not reconcile, (4) where rename, retype, merge and balance entry live, (5) whether the Dashboard link gets a badge. Asking them interactively because the user has no terminal access."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design Part 1 (questions). Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Answers Received; API Contract Document Corrected
+**Timestamp**: 2026-10-18T05:49:40Z
+**User Input**: "Fifth tab, opens as today (Recommended)" (Placement); "Combined + 7 largest + Other (Recommended)" (Chart lines); "Summary line + Show details (Recommended)" (Warnings); "Accounts section in the tab (Recommended)" (Accounts); "No badge (Recommended)" (Nav badge)
+**AI Response**: "All five answers are listed options (the recommended ones), none vague, so no follow-up questions. Copied into aidlc-docs/construction/plans/frontend-account-balance-functional-design-plan.md. WHILE DESIGNING, compared domain-entities.md with the DTOs the API Service unit actually built and found two differences, both in the document and not in the code (the API's own tests pin the built shapes): SeriesResponse names its range start and end (the document said from and to; the query parameters are still from and to), and statementId, fromStatementId and toStatementId are nullable in the discrepancy DTOs (the document said always present). Corrected domain-entities.md in place, and corrected the sentence in account-balance-summary.md that said the shapes were exactly the document's, which I wrote and which was wrong. No code changed. The user approved the API Service stage a moment earlier, so this is reported to them in the Functional Design completion message."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design; correction to API Service documentation. Branch `feature/account-balance-completion`.
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Complete, Presented for Approval
+**Timestamp**: 2026-10-18T05:53:31Z
+**AI Response**: "Wrote the Epic 13 sections of construction/frontend/functional-design/frontend-components.md (shared types and API modules, DashboardPage fifth tab and hidden From/To box, BalanceLookup, IngestedThrough and UnlinkedNotice, BalancesTable, BalanceChart, DiscrepancyPanel, AccountsSection, BalanceDialog, RenameDialog and ChangeTypeDialog, MergeDialog, the Settings category, NavBar unchanged) and of business-logic-model.md (opening the tab and finding today, queries and invalidation, balance entry flow, merge flow, rename and retype, chart data preparation, display rules, error mapping, responsive/theme/accessibility, out of scope). The plan holds the traceability of every acceptance criterion of US-13.2 to US-13.6, ten design decisions made without asking (listed for review), and ten notes carried to Code Generation, the main ones being: add PATCH to the API client; derive test fixtures from responses the real API produces so a contract mismatch fails a test; property tests for the money and chart helpers; look at the result in a browser against a scratch API; rebuild the API and frontend images at deployment. No application code written or changed in this stage. The only non-design change: the approved API contract document and one sentence of the API code summary were corrected (see the previous entry). The Functional Design completion message was presented and the stage AWAITS THE USER'S EXPLICIT APPROVAL."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Functional Design Approved; Code Generation Planning Starts
+**Timestamp**: 2026-10-18T06:42:08Z
+**User Input**: "Approve"
+**AI Response**: "Recorded the approval of the Frontend SPA Functional Design for Epic 13 (including the corrections to the API contract document). Starting Code Generation Part 1 (Planning): reading construction/code-generation.md and the format of the earlier plans, then writing the plan with numbered checkbox steps for approval. No code is written until the plan is approved."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Functional Design approved; Code Generation Part 1 begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Code Generation Plan Written; Approval Requested
+**Timestamp**: 2026-10-18T06:44:28Z
+**AI Response**: "Wrote aidlc-docs/construction/plans/frontend-account-balance-code-generation-plan.md (19 steps, story traceability, completion criteria). Approach: bottom-up (contract and types, pure helpers, components leaf to tab, page wiring, verification). Five decisions found while planning, listed for review: (1) Node exists only in a container and a bind-mounted npm install can wedge the Docker VM, so all checks run in a scratchpad copy of frontend/ with the existing node_modules and no dependency change; (2) a two-sided contract guard, one new API test that compares real endpoint responses with committed fixtures in frontend/tests/fixtures/balances/, so a mismatch like start/end versus from/to fails a test on either side; (3) Playwright not extended in this unit (needs new seed data and cannot be run here), offered as an add-on; (4) baselines recorded before changing anything; (5) the browser check uses a throw-away database and API on free ports and never touches the live stack. Presented the plan summary and asked for approval; no code written."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 1 (Planning) complete, awaiting approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Code Generation Plan Approved With a Playwright Scenario Added (Part 1 complete); Part 2 Starts
+**Timestamp**: 2026-10-18T06:46:40Z
+**User Input**: "Approve, and add a Playwright scenario"
+**AI Response**: "Recorded the approval of the 19-step plan with the Playwright option chosen. Amended the plan: new Step 14 (e2e seed accounts in database/src/transactagent_db/seed_e2e_fixtures.py with a test, frontend/e2e/balances.spec.ts, serial and locating accounts by name, a one-line fix of the existing dashboard case, and one run of the existing nightly workflow on this branch through workflow_dispatch, since Playwright cannot be run on this machine); steps 14 to 19 renumbered 15 to 20; Decision 3 rewritten. FOUND WHILE DOING THIS: the nightly e2e job has failed on main every night for at least six runs (latest run 39065375384): of ten cases the four login cases and the dark-mode toggle pass and five fail (dashboard.spec.ts:10, settings.spec.ts:11 and :15, transactions.spec.ts:12 and :18). All specs come from the single commit d349289 and the pages have changed since, so this is spec drift and not an Epic 13 problem. Only the dashboard case is touched here (it is the page this unit changes); the Settings and Transactions specs are NOT repaired and were flagged to the user as a separate task. Part 2 (generation) begins with Step 1."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 1 complete and approved; Part 2 begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Code Generation Paused (usage limit reached)
+**Timestamp**: 2026-10-18T07:19:22Z
+**AI Response**: "Steps 1 to 13 of the 20-step plan are done and ticked; Step 14 (Playwright scenario, e2e seed accounts, one-line fix of the existing dashboard e2e case) is committed but NOT ticked because its check, the nightly workflow dispatched on this branch as run 39107017262, was not read. Step 15 begun: scratch Postgres, the API from the working tree and the built frontend were running and the Dashboard loaded; the Balances tab was not yet inspected, and the scratch stack was stopped. Not done: browser check, the full-suite run twice and vite build (Step 16), the mutation check (17), the code summary and README (18), the progress and no-duplicates step (19, 20). Findings so far recorded in the plan's generation record: three corrections to the API contract document, a Dashboard test regression caught and fixed (memoised chart tabs), two dialog defects found by tests and fixed."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 2 paused. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Step 14 (Playwright) Verified; Resuming Code Generation
+**Timestamp**: 2026-10-18T11:45:28Z
+**AI Response**: "Read the dispatched nightly workflow (run 39107017262): all 6 new balances.spec.ts cases passed, the fixed dashboard.spec.ts case passed, and only the pre-existing Settings/Transactions spec-drift failures occurred (already flagged separately, unrelated to Epic 13). Step 14 ticked. Resuming at Step 15 (look at it in a browser)."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 2 resumed. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Step 15 (Browser Check) Complete, No Defects
+**Timestamp**: 2026-10-18T11:50:45Z
+**AI Response**: "Rebuilt the scratch stack (Postgres, the real API, the built frontend, all on free ports, never the live database or running containers) and seeded 20 realistic accounts covering every state the design describes. Checked the Balances tab in the built-in browser in dark and light mode and at 375px phone width: lookup, ingested-through warning, unlinked notice, all three balance states, nearest-known-balance wording, the chart's fold and summary, the discrepancy panel's both views, the accounts list distinguishing two same-named accounts, the merge refusal for those two accounts, balance-dialog validation and a successful save with a live table refresh, and no horizontal page scroll on a phone. No defects found. Stopped and removed the scratch stack. Moving to Step 16 (static checks and the full suite)."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation Part 2 continues. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Code Generation Complete, Presented for Approval
+**Timestamp**: 2026-10-18T11:56:47Z
+**AI Response**: "Completed the remaining steps of the 20-step plan: Step 16 (whole suite twice, 651/651; tsc clean; eslint unchanged; vite build succeeds), Step 17 (25 deliberate mutations, 25 caught, with two replaced after an honest first run showed they were poorly chosen rather than claiming a false catch), Step 18 (account-balance-summary.md and the README updated), Step 19 (deployment artifacts confirmed N/A), Step 20 (all five stories ticked, no duplicate or *_modified files, scope confirmed as only frontend/, the one API test file, the e2e seed and its test, and aidlc-docs/, aidlc-state.md and this entry written). Epic 13 is now functionally complete across all four units. The Code Generation completion message was presented and the stage AWAITS THE USER'S EXPLICIT APPROVAL; Build and Test has not started."
+**Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Epic 13 Frontend SPA: Code Generation Approved; All Units Complete; Build and Test Starts
+**Timestamp**: 2026-10-19T08:36:15Z
+**User Input**: "Approve"
+**AI Response**: "Recorded the approval of the Frontend SPA Code Generation stage. Both units of the Epic 13 build order (API Service, Frontend SPA) are now complete and approved; Database and Ingestion Worker were already built. Starting the Build and Test phase: reading construction/build-and-test.md and generating build/unit-test/integration-test instructions covering the Epic 13 additions across all four units."
+**Context**: Construction loop, Epic 13, Frontend SPA unit complete; all units complete; Build and Test phase begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Build and Test: Live Database Restart Caused by a Mistake, Disclosed and Resolved
+**Timestamp**: 2026-10-19T08:43:10Z
+**AI Response**: "While attempting a real-image cross-service integration check (building the actual api-service and frontend Docker images and bringing up an isolated copy of docker-compose.yml with remapped ports and container names), the database service's `./data/postgres` bind mount was a relative path that resolved to the SAME host directory the live transactagent-db container uses. The isolated database container started against that shared data directory; PostgreSQL detected the live process's lock file as invalid from its own container's perspective and performed an immediate shutdown, which crashed the live transactagent-db container (Docker's `unless-stopped` policy then restarted it automatically, about 12 seconds of downtime). Immediately verified afterward: transactagent-db recovered cleanly (pg_is_in_recovery = false, clean startup log), data counts are plausible (7230 transactions, 188 statements, 20 accounts, 56 categories, 1 user), no errors in api-service or ingestion-worker logs around the incident, and all five live containers are healthy with the live API and frontend answering normally. Told the user plainly before doing anything else. Removed every container, image, network, volume and scratch file from the attempt. Asked the user how to proceed; they chose to skip the real-image integration check and rely on the per-unit verification already done (the API unit's and Frontend unit's own scratch-database checks, both using dedicated, non-shared data directories, plus the dispatched nightly e2e run). Continuing Build and Test on that basis."
+**Context**: Build and Test phase, Epic 13. Live incident, self-resolved, confirmed no data loss. Branch `feature/account-balance-completion`, PR #50 (draft). No code changed.
+
+---
+
+## Build and Test Stage
+**Timestamp**: 2026-10-19T08:45:43Z
+**Build Status**: Success (api-service and frontend images build cleanly against the working tree)
+**Test Status**: Pass (2,372 unit tests across all four units: Database 262, Ingestion Worker 734, API Service 725, Frontend 651; 4 of 5 planned integration/contract checks pass; the 5th, a real-image docker-compose check, was attempted, caused a brief live database restart, self-healed with no data loss, was disclosed immediately, and was not retried at the user's choice)
+**Files Generated**:
+- build-instructions.md (addendum: current build status, the new settings, a hazard warning about bind-mounting an isolated database onto the live data directory)
+- unit-test-instructions.md (addendum: current totals, how to run each unit, mutation-check summary)
+- integration-test-instructions.md (addendum: Scenarios 8-11 run and passing, Scenario 12 attempted and not completed, with the incident described)
+- account-balance-api-frontend-completion-build-and-test-summary.md (new)
+
+---
+
+## Epic 13: Build and Test Approved; Construction Phase Complete
+**Timestamp**: 2026-10-19T08:46:52Z
+**User Input**: "Approved."
+**AI Response**: "Recorded the approval of the Build and Test stage. Epic 13's construction loop is now complete across all four units (Database, Ingestion Worker, API Service, Frontend SPA): Functional Design, Code Generation and Build and Test all approved for each. Per this project's CLAUDE.md, the Operations phase is a placeholder with no defined workflow; deployment (rebuilding and restarting the live containers) is a real, outward-facing action on the user's live system, not something to do without the user's explicit instruction, particularly after today's live-database incident. Asked the user how they want to proceed: deploy now, merge first and deploy later, or stop here with the PR ready."
+**Context**: Construction loop complete for Epic 13. Branch `feature/account-balance-completion`, PR #50 (draft, not merged).
+
+---

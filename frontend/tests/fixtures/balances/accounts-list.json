@@ -1,0 +1,91 @@
+{
+  "items": [
+    {
+      "accountIdentifier": "f001",
+      "anchor": null,
+      "bankName": "OCBC",
+      "canHaveAnchor": true,
+      "closingBalanceCount": 0,
+      "currency": "SGD",
+      "id": "00000000-0000-0000-0000-000000000004",
+      "latestTransactionDate": null,
+      "name": "Fresh",
+      "statementCount": 1,
+      "transactionCount": 0,
+      "type": "deposit",
+      "typeSetByUser": false
+    },
+    {
+      "accountIdentifier": "1234",
+      "anchor": {
+        "asOfDate": "2026-06-30",
+        "balance": "1000.00",
+        "updatedAt": "2026-01-01T00:00:00Z"
+      },
+      "bankName": "DBS",
+      "canHaveAnchor": true,
+      "closingBalanceCount": 2,
+      "currency": "SGD",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "latestTransactionDate": "2026-07-20",
+      "name": "Main",
+      "statementCount": 2,
+      "transactionCount": 4,
+      "type": "deposit",
+      "typeSetByUser": false
+    },
+    {
+      "accountIdentifier": "eur1",
+      "anchor": {
+        "asOfDate": "2026-07-01",
+        "balance": "200.00",
+        "updatedAt": "2026-01-01T00:00:00Z"
+      },
+      "bankName": "Offshore",
+      "canHaveAnchor": true,
+      "closingBalanceCount": 0,
+      "currency": "EUR",
+      "id": "00000000-0000-0000-0000-000000000003",
+      "latestTransactionDate": null,
+      "name": "Offshore EUR",
+      "statementCount": 1,
+      "transactionCount": 0,
+      "type": "deposit",
+      "typeSetByUser": false
+    },
+    {
+      "accountIdentifier": "usd9",
+      "anchor": {
+        "asOfDate": "2026-07-01",
+        "balance": "500.00",
+        "updatedAt": "2026-01-01T00:00:00Z"
+      },
+      "bankName": "Trust",
+      "canHaveAnchor": true,
+      "closingBalanceCount": 0,
+      "currency": "USD",
+      "id": "00000000-0000-0000-0000-000000000002",
+      "latestTransactionDate": "2026-07-15",
+      "name": "Trust USD",
+      "statementCount": 1,
+      "transactionCount": 1,
+      "type": "deposit",
+      "typeSetByUser": false
+    },
+    {
+      "accountIdentifier": "9999",
+      "anchor": null,
+      "bankName": "DBS",
+      "canHaveAnchor": false,
+      "closingBalanceCount": 0,
+      "currency": "SGD",
+      "id": "00000000-0000-0000-0000-000000000005",
+      "latestTransactionDate": null,
+      "name": "Visa Card",
+      "statementCount": 1,
+      "transactionCount": 0,
+      "type": "credit_card",
+      "typeSetByUser": true
+    }
+  ]
+}

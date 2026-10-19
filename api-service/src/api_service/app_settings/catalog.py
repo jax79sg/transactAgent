@@ -60,7 +60,7 @@ class SettingSpec:
     max: float | None = None
     min_exclusive: bool = False
     allowed_values: tuple[str, ...] | None = None
-    format: str | None = None  # "currency_code" | "url" | "url_or_empty" | "url_list" | "ascending_number_list" | "non_empty"
+    format: str | None = None  # "currency_code" | "url" | "url_or_empty" | "url_list" | "ascending_number_list" | "non_empty" | "time_zone"
     cross_field: str | None = None  # "less_than" | "greater_than" | "less_or_equal" | "greater_or_equal"
     cross_field_partner: str | None = None
 
@@ -74,6 +74,7 @@ _DUPLICATES = "Duplicate Statements"
 _API_ACCESS = "API & Access"
 _ASK_AI = "Ask AI"
 _MODEL_COSTS = "Model Costs"
+_BALANCES = "Balances"
 
 _SPECS: tuple[SettingSpec, ...] = (
     # --- Matching & Categorization ---
@@ -381,6 +382,21 @@ _SPECS: tuple[SettingSpec, ...] = (
         "gemini-embedding-2 as checked 2026-10-07.",
         "float", 0.20, min=0.0,
     ),
+    # --- Balances (Epic 13, AR-63) ---
+    SettingSpec(
+        "reporting_time_zone", (_API,), "standard", _BALANCES,
+        "The time zone that decides what \"today\" is for account balances: the current-month shortcut, and whether a balance "
+        "or an anchor date is in the future. A name from the standard time-zone list, e.g. Asia/Singapore. Takes effect "
+        "when the API is restarted.",
+        "string", "Asia/Singapore", format="time_zone",
+    ),
+    SettingSpec(
+        "balance_mismatch_tolerance", (_API,), "standard", _BALANCES,
+        "How far a statement's printed closing balance may differ from the computed balance, in the account's own currency, "
+        "before it is reported as a discrepancy. 0 means any difference of one cent or more. Takes effect when the API is "
+        "restarted.",
+        "float", 0.0, min=0.0, max=1000.0,
+    ),
 )
 
 SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
@@ -391,4 +407,5 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 53, f"expected 53 settings, got {len(SETTINGS_BY_NAME)}"
+# 55 since Epic 13 (2026-10-18): reporting_time_zone and balance_mismatch_tolerance (AR-63).
+assert len(SETTINGS_BY_NAME) == 55, f"expected 55 settings, got {len(SETTINGS_BY_NAME)}"

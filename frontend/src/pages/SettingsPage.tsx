@@ -193,6 +193,7 @@ const CATEGORY_ORDER = [
   "Backup",
   "Ingestion",
   "Duplicate Statements",
+  "Balances",
   "API & Access",
   "Ask AI",
   "Model Costs",

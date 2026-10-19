@@ -684,3 +684,55 @@ Tracked separately (base project, all prior post-completion changes, and the in-
 ## PR #47 and PR #48 merged (2026-10-18, user: "merge")
 - [x] #47 merged (f7cb0d8); main merged into the #48 branch, logs resolved keep-both in time order; #48 merged after its checks passed.
 - [ ] Still open for the user: ClearML registration of `clf-377dcd9a3d28` (hosted, real bank data), and which `label_source` values to trust for training.
+
+## Epic 13 (Account Balance) status correction (2026-10-18, user: "Did i put a reqyureement to see the balance of my accounts? I don't see if implementation anywhere.")
+Older lines above are left as written; read them with this correction. Only part of Epic 13 was ever built.
+- [x] Database unit: tables `accounts`, `account_keys`, `statement_accounts`, `balance_anchors` (deployed).
+- [x] Ingestion Worker unit: account resolution, per-account closing-balance capture, one-time backfill (run 2026-10-05). Delivers US-13.1 and US-13.7.
+- [ ] API Service unit: NOT STARTED (no account, anchor or balance endpoints). US-13.2 to US-13.6 depend on it.
+- [ ] Frontend unit: NOT STARTED (no balance section on the Dashboard, no account management or anchor entry). US-13.2 to US-13.6.
+- [ ] Not implemented as a result: balance for a date or month (US-13.4), balance over time (US-13.5), discrepancy warning (US-13.6), account tidy-up (US-13.2), anchor entry (US-13.3; `balance_anchors` is empty).
+- Awaiting the user: whether to build the API Service and Frontend units (design is approved in `application-design.md`; Functional Design and Code Generation for both are still to do).
+
+## Epic 13 completion (2026-10-18, user: "continue the ai-dlc the missing parts")
+Resumes the approved build order for the two units never built. Read with the correction above.
+
+#### Unit: API Service (Epic 13)
+- [x] Functional Design — Complete & Approved (2026-10-18, user: "Approved"; 7 questions answered in chat; `construction/api-service/functional-design/` AR-51..AR-67). NFR Requirements, NFR Design, Infrastructure Design skipped per the approved execution plan. Security Baseline and Resiliency Baseline extensions: disabled, skipped. Property-Based Testing (Partial) applies
+- [x] Code Generation — Complete & Approved (2026-10-18, user: "Approve"; 21 of 21 plan steps; 713 tests pass; `construction/api-service/code/account-balance-summary.md`). *(Corrected 2026-10-18: this line said "not started" and the one above "awaiting the user's answers" after both stages had been approved.)*
+
+#### Unit: Frontend SPA (Epic 13)
+- [x] Functional Design — **Complete, pending the user's approval** (2026-10-18; plan `construction/plans/frontend-account-balance-functional-design-plan.md`, 5 questions all answered in chat; Epic 13 sections added to `construction/frontend/functional-design/frontend-components.md` and `business-logic-model.md`).
+- [x] Code Generation — **Complete, pending the user's approval** (2026-10-18; 20 of 20 plan steps; 651 Frontend tests pass [327 baseline + 324 new], run twice; `tsc`/`eslint`/`vite build` clean; 25 of 25 mutations caught; browser check and the dispatched nightly e2e run both clean, no defects; `construction/frontend/code/account-balance-summary.md`). US-13.2..13.6 implemented.
+
+#### Then
+- [x] Build and Test — **Complete and approved** (2026-10-19, user: "Approved.") (2026-10-19; `construction/build-and-test/account-balance-api-frontend-completion-build-and-test-summary.md`). 2,372 unit tests pass across all four units; 4 integration/contract checks pass; a 5th (a real-image docker-compose integration check) was attempted, caused a ~12s live database restart (self-healed, no data loss, fully disclosed and documented), and was not retried at the user's choice. **Epic 13 is functionally complete.** Not deployed; see the summary's 5 open decisions.
+
+- [x] (2026-10-18) API Service Functional Design: questions answered in chat (7 of 7), artifacts written (`business-rules.md` AR-51..AR-67, `business-logic-model.md`, `domain-entities.md`), upstream documents amended in place (requirements FR-AB-7/A-8/A-4/FR-AB-8, stories US-13.3..13.6, component-methods). **Complete, pending the user's approval**; the amended requirements are part of what is being approved. Code Generation not started.
+
+- [x] (2026-10-18, user: "Approved") API Service Functional Design **approved**, including the amended requirements and stories.
+- [ ] (2026-10-18) API Service Code Generation: **Part 1 (Planning) complete, awaiting the user's approval** of `construction/plans/api-service-account-balance-code-generation-plan.md` (21 steps). Part 2 (generation) not started; no code written.
+
+- [x] (2026-10-18, user: "Approve, keep PATCH (Recommended)") API Service Code Generation **Part 1 (Planning) complete and approved**, PATCH kept. Part 2 (generation) in progress; progress is ticked in `construction/plans/api-service-account-balance-code-generation-plan.md`.
+
+- [x] (2026-10-18) API Service Code Generation **Part 2 complete, pending the user's approval**: 21 of 21 plan steps done; 713 tests pass (467 existing + 246 new) under both Hypothesis profiles; 45 of 45 mutations caught; real-data checks on a scratch copy all agree (28 of 113 period gaps, 125 of 125 closing dates, 480 of 480 independent balances, lookup 16 ms). Summary: `construction/api-service/code/account-balance-summary.md`. Frontend unit not started.
+
+- [x] (2026-10-18, user: "Approve") API Service Code Generation **approved**; API Service unit complete for Epic 13. Frontend SPA unit Functional Design **started**.
+
+- [x] (2026-10-18) Frontend SPA Functional Design: questions answered in chat (5 of 5: Balances as a fifth Dashboard tab, chart of combined total plus the 7 largest accounts plus "Other accounts", discrepancy summary line with details on request, an Accounts section with dialogs, no nav badge); design written as Epic 13 sections of `frontend-components.md` and `business-logic-model.md`; traceability of every US-13.2..13.6 criterion in the plan. **Found and corrected an API Service documentation error** while comparing the approved contract with the built DTOs (series range is `start`/`end`; discrepancy statement ids are nullable); no code changed. **Complete, pending the user's approval.** Code Generation not started.
+
+- [x] (2026-10-18, user: "Approve") Frontend SPA Functional Design **approved**. Code Generation Part 1 (Planning) **started**.
+
+- [ ] (2026-10-18) Frontend SPA Code Generation **Part 1 (Planning) complete, awaiting the user's approval** of `construction/plans/frontend-account-balance-code-generation-plan.md` (19 steps). Part 2 (generation) not started; no code written.
+
+- [x] (2026-10-18, user: "Approve, and add a Playwright scenario") Frontend SPA Code Generation **Part 1 (Planning) complete and approved**, now 20 steps (a Playwright step added). Part 2 (generation) in progress; progress is ticked in `construction/plans/frontend-account-balance-code-generation-plan.md`. Noted: the nightly e2e job has failed every night since at least 13 Oct (pre-existing spec drift in the Settings, Transactions and Dashboard specs; offered as a separate task).
+
+- [ ] (2026-10-18) Frontend SPA Code Generation **Part 2 in progress: steps 1-13 done, 14 written but not yet verified, 15-20 not done** (plan: `construction/plans/frontend-account-balance-code-generation-plan.md`). Frontend suite 651 pass (327 baseline unchanged); `tsc` clean; `eslint` unchanged (5 baseline warnings); API suite 725 pass; database suite 262 pass. Step 14: the Playwright scenario and e2e seed accounts are committed; the nightly workflow was dispatched on this branch (run 39107017262) and its result had NOT been read when work stopped. Step 15 (look at it in a browser) was started: a scratch stack was built and the Dashboard loaded and signed in, but the Balances tab itself was not yet looked at; the scratch stack has been stopped and removed. Stopped because the usage limit was reached.
+
+- [x] (2026-10-18) Frontend SPA Code Generation: all 20 plan steps complete. 651 tests pass (327 baseline unchanged + 324 new, run twice); `tsc` clean; `eslint` unchanged (5 baseline warnings); `vite build` succeeds; 25 of 25 deliberate mutations caught; the dispatched nightly e2e workflow passed (6 new cases + the fixed dashboard case, only pre-existing unrelated Settings/Transactions failures); the browser check against a scratch stack found no defects. **Epic 13 is functionally complete** across all four units (Database, Ingestion Worker, API Service, Frontend SPA), **pending the user's approval of this stage** and then Build and Test. Deployment (API and frontend image rebuilds, the API restart) and the user guide remain, as does repairing the pre-existing Settings/Transactions e2e spec drift (offered separately, not part of Epic 13).
+
+- [x] (2026-10-19, user: "Approve") Frontend SPA Code Generation **approved**. **All Epic 13 units complete** (Database, Ingestion Worker, API Service, Frontend SPA). Build and Test phase **started**.
+
+- [x] (2026-10-19) Build and Test for Epic 13's API Service and Frontend SPA completion: 2,372 tests pass across all four units (262 + 734 + 725 + 651); build/lint/type-check clean; integration checks (API live-data, Frontend contract, Frontend browser check, the real dispatched nightly e2e run) all pass. A real-image docker-compose integration check caused a brief live database restart (self-healed, no data loss, disclosed immediately, documented as a warning); the user chose not to retry it. **Awaiting the user's approval** to proceed to Operations (deployment: rebuild and restart the API and frontend images, add the two new settings to `.env.example`/`docker-compose.yml`).
+
+- [x] (2026-10-19, user: "Approved.") Build and Test **approved**. **Epic 13 construction loop complete across all four units.** Operations is a placeholder phase in this project (no defined workflow); deployment is a real action on the live system and awaits the user's explicit instruction.
