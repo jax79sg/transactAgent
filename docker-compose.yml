@@ -51,6 +51,10 @@ services:
       DEFAULT_PAGE_SIZE: ${DEFAULT_PAGE_SIZE:-50}
       MAX_PAGE_SIZE: ${MAX_PAGE_SIZE:-200}
       CSV_EXPORT_MAX_ROWS: ${CSV_EXPORT_MAX_ROWS:-50000}
+      # Epic 13 (AR-63): owned by the API Service alone, unlike most settings here which are mirrored
+      # for Ingestion Worker too.
+      REPORTING_TIME_ZONE: ${REPORTING_TIME_ZONE:-Asia/Singapore}
+      BALANCE_MISMATCH_TOLERANCE: ${BALANCE_MISMATCH_TOLERANCE:-0.00}
       RECURRING_PAYMENT_DUE_SOON_LEAD_DAYS: ${RECURRING_PAYMENT_DUE_SOON_LEAD_DAYS:-5}
       # Duplicated from ingestion-worker below, display-only (api-service/config.py's
       # "Display-only mirror" block) -- lets the Settings page report Ingestion
