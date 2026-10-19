@@ -3990,3 +3990,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop complete for Epic 13. Branch `feature/account-balance-completion`, PR #50 (draft, not merged).
 
 ---
+
+## Epic 13: Deployed to the Live Stack
+**Timestamp**: 2026-10-19T09:08:08Z
+**User Input**: "Go ahead deploy."
+**AI Response**: "Added REPORTING_TIME_ZONE and BALANCE_MISMATCH_TOLERANCE to .env.example and docker-compose.yml's api-service block via a branch+PR (#52), merged (explicitly authorized as part of 'deploy'). Built the real api-service and frontend images from main (docker compose build api-service frontend): both built cleanly. Restarted the live stack with docker compose up -d api-service frontend; compose also recreated the already-healthy transactagent-db container (not requested, not investigated further since it came back healthy with intact data - 7230 transactions, 20 accounts, pg_is_in_recovery=false - verified immediately). All five containers now healthy. Verified live: GET /health ok; the frontend answers 200; the CORS preflight for PATCH now allows it; the two new settings are loaded into the api-service container's environment; the four new endpoints (/accounts, /balances, /balances/series, /balances/discrepancies) are live and correctly require authentication (401 without a token). No login credential used or requested. Epic 13 (Account Balance at a Point in Time) is now live in production: the Balances tab is reachable on the Dashboard, account management and balance entry work through the real API."
+**Context**: Epic 13 deployed. PR #52 merged (settings config). Live stack: api-service and frontend rebuilt and restarted; database, ingestion-worker, vector-db unchanged in image, database container recreated by compose but confirmed healthy with data intact.
+
+---
