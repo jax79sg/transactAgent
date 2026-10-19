@@ -3990,3 +3990,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop complete for Epic 13. Branch `feature/account-balance-completion`, PR #50 (draft, not merged).
 
 ---
+
+## Epic 13: PR #50 Merged (Code Only, Not Deployed)
+**Timestamp**: 2026-10-19T09:04:32Z
+**User Input**: "Merge the PR only" (interactive choice)
+**AI Response**: "Marked PR #50 ready for review and merged it into main with a merge commit (3b880210), matching the project's established merge style. Confirmed the live containers are untouched and healthy (api-service, frontend, ingestion-worker, vector-db unchanged; database still the one that recovered from today's earlier incident, now 24+ minutes healthy). The merge is a git-only action: main now has the API Service and Frontend SPA code for Epic 13, but the running deployment still serves the previous images. Deployment (rebuild/restart, adding the two new settings) was explicitly not requested and not done."
+**Context**: Epic 13 complete and merged to main. Not deployed. feature/account-balance-completion branch left in place (not deleted).
+
+---
