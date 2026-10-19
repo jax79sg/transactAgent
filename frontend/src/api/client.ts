@@ -50,7 +50,18 @@ export function toSnakeCase(key: string): string {
  * happens.
  */
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(path, apiBaseUrl);
+  // `new URL(path, apiBaseUrl)` was used here previously, but the two-argument form
+  // treats a leading-slash `path` as absolute-from-origin, silently discarding any
+  // path component `apiBaseUrl` itself has (e.g. apiBaseUrl "https://host/api" +
+  // path "/auth/login" resolved to "https://host/auth/login", dropping "/api"
+  // entirely). This went unnoticed because every prior deployment's apiBaseUrl was a
+  // bare origin with no path -- found only once a real deployment (Kubernetes, behind
+  // a single Ingress routing "/api" to api-service) set apiBaseUrl to a path-prefixed
+  // URL for the first time, via a live login attempt that 405'd. Joining the strings
+  // directly before parsing preserves apiBaseUrl's own path component correctly in
+  // both cases.
+  const base = apiBaseUrl.endsWith("/") ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
+  const url = new URL(`${base}${path}`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== "") {

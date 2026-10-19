@@ -1,0 +1,52 @@
+# Fixed at 1 replica -- singleton stateful service, same as today's docker-compose
+# `vector-db` service.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vector-db
+  namespace: {{ .Values.namespace }}
+spec:
+  serviceName: vector-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vector-db
+  template:
+    metadata:
+      labels:
+        app: vector-db
+    spec:
+      containers:
+        - name: vector-db
+          image: qdrant/qdrant:latest
+          ports:
+            - containerPort: 6333
+          volumeMounts:
+            - name: data
+              mountPath: /qdrant/storage
+          resources:
+            {{- toYaml .Values.vectorDb.resources | nindent 12 }}
+          # qdrant/qdrant has neither curl nor wget (verified when this same check was
+          # first designed for Docker Compose) -- a raw TCP connect is the reliable probe.
+          readinessProbe:
+            tcpSocket:
+              port: 6333
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            tcpSocket:
+              port: 6333
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.vectorDb.storage.size }}

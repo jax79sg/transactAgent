@@ -1,0 +1,7 @@
+# Values for the official ingress-nginx chart (repo: https://kubernetes.github.io/ingress-nginx).
+# Install: see README.md in this directory. No transactagent-specific customization
+# needed beyond defaults -- this is generic, reusable by any other app on the cluster.
+
+controller:
+  service:
+    type: LoadBalancer  # OrbStack auto-assigns a reachable address to LoadBalancer Services
