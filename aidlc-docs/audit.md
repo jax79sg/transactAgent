@@ -3970,3 +3970,15 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Build and Test phase, Epic 13. Live incident, self-resolved, confirmed no data loss. Branch `feature/account-balance-completion`, PR #50 (draft). No code changed.
 
 ---
+
+## Build and Test Stage
+**Timestamp**: 2026-10-19T08:45:43Z
+**Build Status**: Success (api-service and frontend images build cleanly against the working tree)
+**Test Status**: Pass (2,372 unit tests across all four units: Database 262, Ingestion Worker 734, API Service 725, Frontend 651; 4 of 5 planned integration/contract checks pass; the 5th, a real-image docker-compose check, was attempted, caused a brief live database restart, self-healed with no data loss, was disclosed immediately, and was not retried at the user's choice)
+**Files Generated**:
+- build-instructions.md (addendum: current build status, the new settings, a hazard warning about bind-mounting an isolated database onto the live data directory)
+- unit-test-instructions.md (addendum: current totals, how to run each unit, mutation-check summary)
+- integration-test-instructions.md (addendum: Scenarios 8-11 run and passing, Scenario 12 attempted and not completed, with the incident described)
+- account-balance-api-frontend-completion-build-and-test-summary.md (new)
+
+---

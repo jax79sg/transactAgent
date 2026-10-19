@@ -84,3 +84,38 @@ docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "npx vitest run; npx
 ```
 
 Mutation checks (one deliberate defect at a time in a scratch copy, each must fail a test) were run at each unit's Code Generation and are described in that unit's `probable-duplicate-summary.md`.
+
+---
+
+## Addendum (2026-10-19) — Account Balance (Epic 13): API Service and Frontend SPA completion
+
+Epic 13's Database and Ingestion Worker units were built 2026-10-02/03; the API Service and Frontend SPA units (the account-management and balance screens) were built 2026-10-18/19, completing the epic across all four units. Database and Ingestion Worker were not touched by this stage; re-run to confirm.
+
+**Expected results now**: Database **262**, Ingestion Worker **734**, API Service **725**, Frontend **651** — **2,372 tests passing in total**. `ruff check src tests` clean in the three Python units; `tsc -b`, `eslint .` (0 errors, the same 5 pre-existing warnings) and `vite build` clean in the Frontend.
+
+```bash
+(cd database         && <env>/bin/python -m pytest -q)
+(cd ingestion-worker  && .venv/bin/python -m pytest -q)
+(cd api-service       && CI=1 <env>/bin/python -m pytest -q)   # CI=1 selects the derandomized Hypothesis profile
+```
+
+API Service additionally needs `hypothesis` (added to its `test` extra at Epic 13 Code Generation); run with both the `dev` and `ci` Hypothesis profiles before relying on a green run (`CI=1 pytest` for `ci`, plain `pytest` for `dev`).
+
+**The Frontend needs a dependency the host's `node_modules` was missing** (`vitest`'s own CLI, an `eslint` transitive dependency) — build a throwaway image rather than running `npm ci`/`npm install` directly against the bind-mounted `node_modules` (that can wedge the Docker VM on this kind of setup):
+
+```bash
+cd frontend
+cat > /tmp/Dockerfile.test <<'DOCKERFILE'
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+DOCKERFILE
+docker build -f /tmp/Dockerfile.test -t ta-frontend-test .
+docker run --rm ta-frontend-test sh -c "npx vitest run && npx tsc -b && npx eslint . && npx vite build"
+```
+
+**Replaying a failing fast-check property test**: it prints the failing input and, on request, a `seed`/`path`; re-run with `fc.assert(property, { seed, path })` to reproduce exactly.
+
+**Mutation checks**: 45 of 45 on the API Service (20 pure-module, 25 services/repositories/routers/CORS), 25 of 25 on the Frontend (one deliberate defect at a time, reverted before the next; two early picks were found to be poorly chosen — one unreachable, one invisible to the test tool's batching — and were honestly replaced rather than counted as false catches). Both described in full in `construction/api-service/code/account-balance-summary.md` and `construction/frontend/code/account-balance-summary.md`.
