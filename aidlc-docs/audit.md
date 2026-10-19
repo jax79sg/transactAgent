@@ -3955,3 +3955,18 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction loop, Epic 13, Unit: Frontend SPA, Code Generation complete pending approval. Branch `feature/account-balance-completion`, PR #50 (draft).
 
 ---
+
+## Epic 13 Frontend SPA: Code Generation Approved; All Units Complete; Build and Test Starts
+**Timestamp**: 2026-10-19T08:36:15Z
+**User Input**: "Approve"
+**AI Response**: "Recorded the approval of the Frontend SPA Code Generation stage. Both units of the Epic 13 build order (API Service, Frontend SPA) are now complete and approved; Database and Ingestion Worker were already built. Starting the Build and Test phase: reading construction/build-and-test.md and generating build/unit-test/integration-test instructions covering the Epic 13 additions across all four units."
+**Context**: Construction loop, Epic 13, Frontend SPA unit complete; all units complete; Build and Test phase begins. Branch `feature/account-balance-completion`, PR #50 (draft).
+
+---
+
+## Build and Test: Live Database Restart Caused by a Mistake, Disclosed and Resolved
+**Timestamp**: 2026-10-19T08:43:10Z
+**AI Response**: "While attempting a real-image cross-service integration check (building the actual api-service and frontend Docker images and bringing up an isolated copy of docker-compose.yml with remapped ports and container names), the database service's `./data/postgres` bind mount was a relative path that resolved to the SAME host directory the live transactagent-db container uses. The isolated database container started against that shared data directory; PostgreSQL detected the live process's lock file as invalid from its own container's perspective and performed an immediate shutdown, which crashed the live transactagent-db container (Docker's `unless-stopped` policy then restarted it automatically, about 12 seconds of downtime). Immediately verified afterward: transactagent-db recovered cleanly (pg_is_in_recovery = false, clean startup log), data counts are plausible (7230 transactions, 188 statements, 20 accounts, 56 categories, 1 user), no errors in api-service or ingestion-worker logs around the incident, and all five live containers are healthy with the live API and frontend answering normally. Told the user plainly before doing anything else. Removed every container, image, network, volume and scratch file from the attempt. Asked the user how to proceed; they chose to skip the real-image integration check and rely on the per-unit verification already done (the API unit's and Frontend unit's own scratch-database checks, both using dedicated, non-shared data directories, plus the dispatched nightly e2e run). Continuing Build and Test on that basis."
+**Context**: Build and Test phase, Epic 13. Live incident, self-resolved, confirmed no data loss. Branch `feature/account-balance-completion`, PR #50 (draft). No code changed.
+
+---
