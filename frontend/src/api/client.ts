@@ -26,7 +26,7 @@ export function setToken(token: string | null): void {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   // `unknown` rather than a narrower value type: callers pass filter-state objects
   // (TransactionFilterState, DashboardFilterState) whose fields are typed unions

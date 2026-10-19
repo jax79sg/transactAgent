@@ -62,6 +62,34 @@ def _make_pending_proposal(db, description="IKEA #2"):
     return proposal, candidate, household
 
 
+class TestProposalSortParameter:
+    """The three text columns are accepted by the endpoint; anything else is still refused."""
+
+    def test_every_sort_column_is_accepted_in_both_directions(self, client, auth_headers, db_session):
+        _make_pending_proposal(db_session)
+
+        for sort_by in ("date", "amount", "score", "source", "description", "currentCategory", "proposedCategory"):
+            for sort_dir in ("asc", "desc"):
+                response = client.get(
+                    "/recategorization/proposals", params={"sort_by": sort_by, "sort_dir": sort_dir}, headers=auth_headers
+                )
+                assert response.status_code == 200, (sort_by, sort_dir, response.text)
+                assert response.json()["totalCount"] == 1
+
+    def test_an_unknown_column_is_refused(self, client, auth_headers):
+        response = client.get("/recategorization/proposals", params={"sort_by": "colour"}, headers=auth_headers)
+
+        assert response.status_code == 422
+
+    def test_descriptions_come_back_in_alphabetical_order_over_the_wire(self, client, auth_headers, db_session):
+        for description in ("zebra cafe", "Apple Store", "cherry bar"):
+            _make_pending_proposal(db_session, description=description)
+
+        asc = client.get("/recategorization/proposals", params={"sort_by": "description", "sort_dir": "asc"}, headers=auth_headers)
+
+        assert [i["candidateTransaction"]["description"] for i in asc.json()["items"]] == ["Apple Store", "cherry bar", "zebra cafe"]
+
+
 class TestListProposalsApi:
     def test_requires_auth(self, client):
         response = client.get("/recategorization/proposals")

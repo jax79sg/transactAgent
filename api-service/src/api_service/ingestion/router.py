@@ -64,6 +64,7 @@ def list_run_history(
 @router.get("/runs/{run_id}/files", response_model=list[RunFileDetail])
 def list_run_files(run_id: UUID, db: Session = Depends(get_db)) -> list[RunFileDetail]:
     files = service.list_run_files(db, run_id)
+    matched = service.matched_statements_for(db, files)  # Epic 14, AR-47
     return [
         RunFileDetail(
             id=f.id,
@@ -72,6 +73,8 @@ def list_run_files(run_id: UUID, db: Session = Depends(get_db)) -> list[RunFileD
             failure_reason=f.failure_reason,
             transactions_extracted_count=f.transactions_extracted_count,
             processed_at=f.processed_at,
+            duplicate_comparison_id=f.duplicate_comparison_id,
+            matched_statement=matched.get(f.duplicate_comparison_id),
         )
         for f in files
     ]

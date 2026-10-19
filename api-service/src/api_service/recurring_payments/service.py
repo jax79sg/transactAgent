@@ -74,20 +74,30 @@ def _to_category_ref(category: Category | None) -> CategoryRef | None:
     return CategoryRef(id=category.id, name=category.name) if category is not None else None
 
 
+def _resolve_lead_days(payment: RecurringPayment) -> int:
+    """Issue #15: a per-payment override (payment.due_soon_lead_days) wins if set;
+    otherwise falls back to the frequency-based default -- a single global default
+    couldn't give an annual bill meaningfully more advance notice than a monthly
+    one, which was the original complaint."""
+    if payment.due_soon_lead_days is not None:
+        return payment.due_soon_lead_days
+    if payment.frequency == RecurringPaymentFrequency.ANNUAL:
+        return settings.recurring_payment_due_soon_lead_days_annual
+    return settings.recurring_payment_due_soon_lead_days
+
+
 def _compute_status_and_set_aside(db: Session, payment: RecurringPayment, today: date) -> tuple[str, Decimal | None]:
     """AR-15/AR-16."""
     current_instance = cycle.latest_instance_on_or_before(payment.frequency, payment.due_month, payment.due_day, today)
     current_cycle_period = cycle.cycle_period_for(payment.frequency, current_instance)
     match = repository.find_match_for_cycle(db, payment.id, current_cycle_period)
+    lead_days = _resolve_lead_days(payment)
 
     if match is not None and match.status == RecurringPaymentMatchStatus.PENDING:
         status_str = "pending_review"
     elif match is not None:  # approved or auto_applied
         next_instance = cycle.next_instance_after(payment.frequency, payment.due_month, payment.due_day, current_instance)
-        if (next_instance - today).days <= settings.recurring_payment_due_soon_lead_days:
-            status_str = "due_soon"
-        else:
-            status_str = "paid"
+        status_str = "due_soon" if (next_instance - today).days <= lead_days else "paid"
     elif current_instance < today:
         status_str = "overdue"
     else:
@@ -112,6 +122,7 @@ def _to_payment_dto(db: Session, payment: RecurringPayment, today: date) -> Recu
         is_trusted=payment.is_trusted,
         status=status_str,
         monthly_set_aside=monthly_set_aside,
+        due_soon_lead_days=payment.due_soon_lead_days,
     )
 
 
@@ -142,6 +153,7 @@ def create_recurring_payment(db: Session, request: RecurringPaymentCreateRequest
         due_month=request.due_month,
         due_day=request.due_day,
         category_id=request.category_id,
+        due_soon_lead_days=request.due_soon_lead_days,
     )
     return _to_payment_dto(db, payment, date.today())
 
@@ -157,6 +169,7 @@ def update_recurring_payment(db: Session, payment_id: UUID, request: RecurringPa
         "due_month": request.due_month,
         "due_day": request.due_day,
         "category_id": request.category_id,
+        "due_soon_lead_days": request.due_soon_lead_days,
     }
     # AR-22 (Epic 9): a name change invalidates whatever embedding is currently
     # stored (or pending) for this payment -- reset so the Ingestion Worker's
@@ -284,6 +297,9 @@ def _to_suggestion_dto(suggestion: DetectionSuggestion) -> DetectionSuggestionDT
         suggested_category=_to_category_ref(suggestion.suggested_category),
         occurrence_count=suggestion.occurrence_count,
         status=suggestion.status.value,
+        detected_frequency=suggestion.detected_frequency.value if suggestion.detected_frequency else None,
+        suggested_due_month=suggestion.suggested_due_month,
+        suggested_due_day=suggestion.suggested_due_day,
     )
 
 
@@ -314,9 +330,24 @@ def add_from_detection_suggestion(
 
     name = overrides.name or suggestion.description_pattern
     expected_amount = overrides.expected_amount if overrides.expected_amount is not None else suggestion.suggested_amount
-    frequency_raw = overrides.frequency or "monthly"  # FR-12: detection is monthly-cadence only
-    due_month = overrides.due_month
-    due_day = overrides.due_day if overrides.due_day is not None else date.today().day
+    # Issue #15: defaults to whatever cadence the detection scan actually matched
+    # (see ingestion_worker/recurring_payments/service.py's _has_monthly_cadence/
+    # _has_annual_cadence) rather than always assuming monthly -- a suggestion
+    # recorded before detected_frequency existed still falls back to "monthly"
+    # (FR-12's original, only-ever-monthly behavior).
+    frequency_raw = overrides.frequency or (
+        suggestion.detected_frequency.value if suggestion.detected_frequency else "monthly"
+    )
+    # Issue #15: defaults to the actual detected occurrence's calendar day, not
+    # "whatever day the user happens to click Add" (the previous behavior for
+    # due_day, date.today().day) -- a suggestion recorded before these columns
+    # existed still falls back to today's day, same as before.
+    due_month = overrides.due_month if overrides.due_month is not None else suggestion.suggested_due_month
+    due_day = (
+        overrides.due_day
+        if overrides.due_day is not None
+        else (suggestion.suggested_due_day if suggestion.suggested_due_day is not None else date.today().day)
+    )
     category_id = overrides.category_id if overrides.category_id is not None else suggestion.suggested_category_id
 
     frequency = _validate_frequency_shape(frequency_raw, due_month, due_day)
@@ -329,6 +360,7 @@ def add_from_detection_suggestion(
         due_month=due_month,
         due_day=due_day,
         category_id=category_id,
+        due_soon_lead_days=overrides.due_soon_lead_days,
     )
     repository.resolve_detection_suggestion(db, suggestion, DetectionSuggestionStatus.ADDED)
     return _to_payment_dto(db, payment, date.today())

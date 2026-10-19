@@ -1,0 +1,16 @@
+{
+  "detail": [
+    {
+      "ctx": {
+        "error": "invalid character in year"
+      },
+      "input": "not-a-date",
+      "loc": [
+        "query",
+        "date"
+      ],
+      "msg": "Input should be a valid date or datetime, invalid character in year",
+      "type": "date_from_datetime_parsing"
+    }
+  ]
+}

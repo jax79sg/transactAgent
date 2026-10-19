@@ -47,3 +47,15 @@ def db_session(engine):
     if transaction.is_active:
         transaction.rollback()
     connection.close()
+
+
+@pytest.fixture(autouse=True)
+def recorded_usage(monkeypatch):
+    """Issue #28 (Costs page): every model client records what a paid call cost. No test may reach a real database
+    through that, so the recorder is replaced by a collector for every test; a test reads the list to see what would
+    have been recorded, and the tests of the recorder itself put the real one back."""
+    from ingestion_worker import usage
+
+    collected: list[dict] = []
+    monkeypatch.setattr(usage, "record_model_usage", lambda session_factory, **fields: collected.append(fields))
+    return collected

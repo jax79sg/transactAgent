@@ -1,4 +1,13 @@
 import "@testing-library/jest-dom/vitest";
+import { afterEach, vi } from "vitest";
+
+// vitest 4 changed vi.restoreAllMocks(): it now only restores spies made with vi.spyOn and no longer clears the call
+// history of automocked modules (vi.mock("../src/api/...")), so calls made in one test leaked into the next ("expected
+// to be called 1 times, but got 3"). vitest 3's restoreAllMocks did both; this puts the reset back, once, for every
+// test. Test files' own afterEach hooks (restoreAllMocks) run first, then this one.
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 // jsdom doesn't implement scrollIntoView, which @radix-ui/react-select calls when
 // its content actually opens (e.g. via defaultOpen) -- no test exercised that path

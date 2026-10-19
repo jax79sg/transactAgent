@@ -15,8 +15,17 @@ import {
   listPendingMatches,
   listRecurringPayments,
   rejectMatch,
+  updateRecurringPayment,
 } from "../api/recurringPayments";
-import type { BulkImportRow, DashboardFilterState, RecurringPaymentFrequency, RecurringPaymentStatus } from "../api/types";
+import type {
+  BulkImportRow,
+  DashboardFilterState,
+  RecurringPaymentDTO,
+  RecurringPaymentFrequency,
+  RecurringPaymentStatus,
+} from "../api/types";
+import { BalancesTab } from "../components/balances/BalancesTab";
+import { SortableTh } from "../components/SortableTh";
 import { useTheme } from "../context/ThemeContext";
 import { CATEGORICAL_PALETTE, OTHER_LABEL, barMarkStyle, buildCategoricalSeries, lineMarkStyle } from "../lib/chartColors";
 import { getChartTheme } from "../lib/chartTheme";
@@ -102,20 +111,22 @@ function CategoryTrendsTab({ filter }: { filter: DashboardFilterState }) {
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
-      <Bar
-        data={{ labels: months, datasets }}
-        options={{
-          ...getChartTheme<"bar">(theme).options,
-          onClick: (_evt, elements) => {
-            if (elements.length === 0) return;
-            const { datasetIndex, index } = elements[0];
-            const category = series[datasetIndex].label;
-            if (category === OTHER_LABEL) return; // no single category to filter by
-            const { dateFrom, dateTo } = monthBounds(months[index]);
-            navigate(`/transactions?category=${encodeURIComponent(category)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
-          },
-        }}
-      />
+      <div className="relative h-72 w-full">
+        <Bar
+          data={{ labels: months, datasets }}
+          options={{
+            ...getChartTheme<"bar">(theme).options,
+            onClick: (_evt, elements) => {
+              if (elements.length === 0) return;
+              const { datasetIndex, index } = elements[0];
+              const category = series[datasetIndex].label;
+              if (category === OTHER_LABEL) return; // no single category to filter by
+              const { dateFrom, dateTo } = monthBounds(months[index]);
+              navigate(`/transactions?category=${encodeURIComponent(category)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
+            },
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -135,29 +146,31 @@ function CashFlowTab({ filter }: { filter: DashboardFilterState }) {
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
-      <Line
-        data={{
-          labels: data.series.map((p) => p.month),
-          datasets: [
-            {
-              label: "Income",
-              data: data.series.map((p) => Number(p.incomeSgd)),
-              ...lineMarkStyle(CATEGORICAL_PALETTE[0], chartTheme.surfaceColor),
-            },
-            {
-              label: "Expenses",
-              data: data.series.map((p) => Number(p.expenseSgd)),
-              ...lineMarkStyle(CATEGORICAL_PALETTE[1], chartTheme.surfaceColor),
-            },
-            {
-              label: "Net",
-              data: data.series.map((p) => Number(p.netSgd)),
-              ...lineMarkStyle(CATEGORICAL_PALETTE[2], chartTheme.surfaceColor),
-            },
-          ],
-        }}
-        options={chartTheme.options}
-      />
+      <div className="relative h-72 w-full">
+        <Line
+          data={{
+            labels: data.series.map((p) => p.month),
+            datasets: [
+              {
+                label: "Income",
+                data: data.series.map((p) => Number(p.incomeSgd)),
+                ...lineMarkStyle(CATEGORICAL_PALETTE[0], chartTheme.surfaceColor),
+              },
+              {
+                label: "Expenses",
+                data: data.series.map((p) => Number(p.expenseSgd)),
+                ...lineMarkStyle(CATEGORICAL_PALETTE[1], chartTheme.surfaceColor),
+              },
+              {
+                label: "Net",
+                data: data.series.map((p) => Number(p.netSgd)),
+                ...lineMarkStyle(CATEGORICAL_PALETTE[2], chartTheme.surfaceColor),
+              },
+            ],
+          }}
+          options={chartTheme.options}
+        />
+      </div>
     </div>
   );
 }
@@ -186,20 +199,22 @@ function BankBreakdownTab({ filter }: { filter: DashboardFilterState }) {
   return (
     <div>
       <DisclosureBanner {...data.disclosure} />
-      <Bar
-        data={{ labels: months, datasets }}
-        options={{
-          ...getChartTheme<"bar">(theme).options,
-          onClick: (_evt, elements) => {
-            if (elements.length === 0) return;
-            const { datasetIndex, index } = elements[0];
-            const bank = series[datasetIndex].label;
-            if (bank === OTHER_LABEL) return; // no single bank to filter by
-            const { dateFrom, dateTo } = monthBounds(months[index]);
-            navigate(`/transactions?bank=${encodeURIComponent(bank)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
-          },
-        }}
-      />
+      <div className="relative h-72 w-full">
+        <Bar
+          data={{ labels: months, datasets }}
+          options={{
+            ...getChartTheme<"bar">(theme).options,
+            onClick: (_evt, elements) => {
+              if (elements.length === 0) return;
+              const { datasetIndex, index } = elements[0];
+              const bank = series[datasetIndex].label;
+              if (bank === OTHER_LABEL) return; // no single bank to filter by
+              const { dateFrom, dateTo } = monthBounds(months[index]);
+              navigate(`/transactions?bank=${encodeURIComponent(bank)}&dateFrom=${dateFrom}&dateTo=${dateTo}`);
+            },
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -244,13 +259,81 @@ function parseBulkImportText(text: string): BulkImportRow[] {
     });
 }
 
+type RecurringPaymentSortKey = "name" | "amount" | "dueDay" | "monthlySetAside" | "status";
+
+function sortPayments(
+  payments: RecurringPaymentDTO[],
+  sortKey: RecurringPaymentSortKey,
+  sortDir: "asc" | "desc",
+): RecurringPaymentDTO[] {
+  const sorted = [...payments].sort((a, b) => {
+    switch (sortKey) {
+      case "name":
+        return a.name.localeCompare(b.name);
+      case "amount":
+        return Number(a.expectedAmount) - Number(b.expectedAmount);
+      case "dueDay":
+        return a.dueDay - b.dueDay;
+      case "monthlySetAside":
+        return Number(a.monthlySetAside ?? 0) - Number(b.monthlySetAside ?? 0);
+      case "status":
+        return a.status.localeCompare(b.status);
+    }
+  });
+  return sortDir === "asc" ? sorted : sorted.reverse();
+}
+
+/** Issue #15: per-payment "notify me X days before due" override -- blank shows
+ * the frequency-based default is in effect; a value shows the override in place.
+ * Commits on blur/Enter, not per-keystroke -- RecurringPaymentUpdateRequest is a
+ * full PUT (see updateLeadDaysMutation), no reason to fire it on every digit. */
+function LeadDaysCell({
+  payment,
+  onCommit,
+}: {
+  payment: RecurringPaymentDTO;
+  onCommit: (dueSoonLeadDays: number | null) => void;
+}) {
+  const [value, setValue] = useState(payment.dueSoonLeadDays?.toString() ?? "");
+  const defaultLeadDays = payment.frequency === "annual" ? 30 : 5;
+
+  const commit = () => {
+    const trimmed = value.trim();
+    onCommit(trimmed === "" ? null : Number(trimmed));
+  };
+
+  return (
+    <input
+      data-testid={`lead-days-input-${payment.id}`}
+      type="number"
+      min={0}
+      placeholder={`default: ${defaultLeadDays}`}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      className="w-24 rounded border px-1 py-0.5 text-xs dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+    />
+  );
+}
+
 function RecurringPaymentsTab() {
   const queryClient = useQueryClient();
+  const [sortKey, setSortKey] = useState<RecurringPaymentSortKey>("dueDay");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const handleSort = (key: RecurringPaymentSortKey, dir: "asc" | "desc") => {
+    setSortKey(key);
+    setSortDir(dir);
+  };
   const [newName, setNewName] = useState("");
   const [newAmount, setNewAmount] = useState("");
   const [newFrequency, setNewFrequency] = useState<RecurringPaymentFrequency>("monthly");
   const [newDueMonth, setNewDueMonth] = useState("");
   const [newDueDay, setNewDueDay] = useState("");
+  // Issue #15: blank means "use the frequency-based default" -- left empty by
+  // default rather than pre-filled with a number, so a blank field unambiguously
+  // means "no override," not "override of 0".
+  const [newDueSoonLeadDays, setNewDueSoonLeadDays] = useState("");
   const [bulkText, setBulkText] = useState("");
   const [bulkResult, setBulkResult] = useState<{ createdCount: number; failed: { row: number; reason: string }[] } | null>(null);
 
@@ -272,8 +355,26 @@ function RecurringPaymentsTab() {
       setNewAmount("");
       setNewDueMonth("");
       setNewDueDay("");
+      setNewDueSoonLeadDays("");
       invalidateAll();
     },
+  });
+
+  // Issue #15: RecurringPaymentUpdateRequest is a full PUT, not a per-field PATCH
+  // -- re-sends the payment's own current values for every other field, changing
+  // only dueSoonLeadDays, so this can't accidentally clobber anything else.
+  const updateLeadDaysMutation = useMutation({
+    mutationFn: ({ payment, dueSoonLeadDays }: { payment: RecurringPaymentDTO; dueSoonLeadDays: number | null }) =>
+      updateRecurringPayment(payment.id, {
+        name: payment.name,
+        expectedAmount: payment.expectedAmount,
+        frequency: payment.frequency,
+        dueMonth: payment.dueMonth,
+        dueDay: payment.dueDay,
+        categoryId: payment.category?.id ?? null,
+        dueSoonLeadDays,
+      }),
+    onSuccess: invalidateAll,
   });
 
   const bulkImportMutation = useMutation({
@@ -312,15 +413,46 @@ function RecurringPaymentsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-slate-500 dark:text-slate-400">
-                <th>Name</th>
-                <th>Amount</th>
-                <th>Due</th>
-                <th>Set aside/mo</th>
-                <th>Status</th>
+                <SortableTh
+                  label="Name"
+                  sortKey="name"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Amount"
+                  sortKey="amount"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Due"
+                  sortKey="dueDay"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Set aside/mo"
+                  sortKey="monthlySetAside"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Status"
+                  sortKey="status"
+                  activeSortKey={sortKey}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <th>Notify</th>
               </tr>
             </thead>
             <tbody>
-              {payments!.map((payment) => (
+              {sortPayments(payments!, sortKey, sortDir).map((payment) => (
                 <tr
                   key={payment.id}
                   data-testid={`recurring-payment-row-${payment.id}`}
@@ -334,6 +466,12 @@ function RecurringPaymentsTab() {
                   <td>{payment.monthlySetAside ?? "-"}</td>
                   <td>
                     <StatusBadge status={payment.status} />
+                  </td>
+                  <td>
+                    <LeadDaysCell
+                      payment={payment}
+                      onCommit={(dueSoonLeadDays) => updateLeadDaysMutation.mutate({ payment, dueSoonLeadDays })}
+                    />
                   </td>
                 </tr>
               ))}
@@ -351,6 +489,7 @@ function RecurringPaymentsTab() {
               frequency: newFrequency,
               dueMonth: newFrequency === "annual" ? Number(newDueMonth) : null,
               dueDay: Number(newDueDay),
+              dueSoonLeadDays: newDueSoonLeadDays === "" ? null : Number(newDueSoonLeadDays),
             });
           }}
         >
@@ -392,6 +531,13 @@ function RecurringPaymentsTab() {
             value={newDueDay}
             onChange={(e) => setNewDueDay(e.target.value)}
             className="w-24 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          />
+          <input
+            data-testid="new-recurring-payment-lead-days"
+            placeholder={`Notify Xd before (default: ${newFrequency === "annual" ? "30" : "5"})`}
+            value={newDueSoonLeadDays}
+            onChange={(e) => setNewDueSoonLeadDays(e.target.value)}
+            className="w-44 rounded border px-2 py-1 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
           <button
             type="submit"
@@ -514,37 +660,53 @@ function RecurringPaymentsTab() {
 export function DashboardPage() {
   const [filter, setFilter] = useState<DashboardFilterState>(defaultDateRange);
   const dashboardFilter = useMemo(() => filter, [filter]);
+  // Controlled, so the page knows when Balances is showing: its own date controls replace the From/To box, which
+  // belongs to the three older charts and would only mislead there (Epic 13).
+  const [tab, setTab] = useState("category-trends");
+  const trigger = "shrink-0 whitespace-nowrap px-2 py-2 data-[state=active]:font-semibold";
+  // Switching tabs now re-renders this page. The three chart tabs are memoised by their only input, the filter, so a
+  // tab switch does not re-render the outgoing chart on its way out (react-chartjs-2 would call update() on it, and
+  // does so on any re-render): the tab contents are exactly as stable as they were when Radix held the active tab.
+  const categoryTrends = useMemo(() => <CategoryTrendsTab filter={dashboardFilter} />, [dashboardFilter]);
+  const cashFlow = useMemo(() => <CashFlowTab filter={dashboardFilter} />, [dashboardFilter]);
+  const bankBreakdown = useMemo(() => <BankBreakdownTab filter={dashboardFilter} />, [dashboardFilter]);
 
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Dashboard</h1>
-      <DateRangeFilter filter={dashboardFilter} onChange={setFilter} />
-      <Tabs.Root defaultValue="category-trends">
-        <Tabs.List className="mb-4 flex gap-4 border-b border-slate-200 dark:border-slate-700">
-          <Tabs.Trigger value="category-trends" className="px-2 py-2 data-[state=active]:font-semibold">
+      {tab !== "balances" && <DateRangeFilter filter={dashboardFilter} onChange={setFilter} />}
+      <Tabs.Root value={tab} onValueChange={setTab}>
+        <Tabs.List className="mb-4 flex gap-4 overflow-x-auto border-b border-slate-200 dark:border-slate-700">
+          <Tabs.Trigger value="category-trends" className={trigger}>
             Category Trends
           </Tabs.Trigger>
-          <Tabs.Trigger value="cash-flow" className="px-2 py-2 data-[state=active]:font-semibold">
+          <Tabs.Trigger value="cash-flow" className={trigger}>
             Cash Flow
           </Tabs.Trigger>
-          <Tabs.Trigger value="bank-breakdown" className="px-2 py-2 data-[state=active]:font-semibold">
+          <Tabs.Trigger value="bank-breakdown" className={trigger}>
             Bank Breakdown
           </Tabs.Trigger>
-          <Tabs.Trigger value="recurring-payments" className="px-2 py-2 data-[state=active]:font-semibold">
+          <Tabs.Trigger value="recurring-payments" className={trigger}>
             Recurring Payments
+          </Tabs.Trigger>
+          <Tabs.Trigger value="balances" data-testid="dashboard-tab-balances" className={trigger}>
+            Balances
           </Tabs.Trigger>
         </Tabs.List>
         <Tabs.Content value="category-trends">
-          <CategoryTrendsTab filter={dashboardFilter} />
+          {categoryTrends}
         </Tabs.Content>
         <Tabs.Content value="cash-flow">
-          <CashFlowTab filter={dashboardFilter} />
+          {cashFlow}
         </Tabs.Content>
         <Tabs.Content value="bank-breakdown">
-          <BankBreakdownTab filter={dashboardFilter} />
+          {bankBreakdown}
         </Tabs.Content>
         <Tabs.Content value="recurring-payments">
           <RecurringPaymentsTab />
+        </Tabs.Content>
+        <Tabs.Content value="balances">
+          <BalancesTab />
         </Tabs.Content>
       </Tabs.Root>
     </div>

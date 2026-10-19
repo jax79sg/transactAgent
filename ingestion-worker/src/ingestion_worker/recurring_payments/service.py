@@ -7,6 +7,7 @@ lowest-priority branch (services.md addendum).
 import logging
 import re
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -14,6 +15,7 @@ from uuid import UUID
 from rapidfuzz import fuzz
 from transactagent_db.models import (
     RecurringPayment,
+    RecurringPaymentFrequency,
     RecurringPaymentMatchStatus,
     Transaction,
 )
@@ -34,6 +36,11 @@ def _transaction_amount(transaction: Transaction) -> Decimal:
     return transaction.out_flow if transaction.out_flow is not None else transaction.in_flow
 
 
+def _transaction_direction(transaction: Transaction) -> str:
+    """WR-36: "outflow"/"inflow" mirroring _transaction_amount's out_flow/in_flow check."""
+    return "outflow" if transaction.out_flow is not None else "inflow"
+
+
 def _embedding_candidate_scores(description: str, amount: Decimal) -> dict[UUID, float] | None:
     """WR-21/22 (Epic 9), WR-29/30 (Matching Precision Refinement): searches the
     `recurring_payment_names` vector-store collection using price-bucketed query
@@ -47,8 +54,17 @@ def _embedding_candidate_scores(description: str, amount: Decimal) -> dict[UUID,
     unusable (endpoint down) AND when it ran successfully but found zero neighbors
     at all -- both cases mean the same thing to the caller: fall back to the
     fuzzy-text check for every payment (WR-21 step 4 is a whole-operation fallback,
-    not a per-payment one)."""
-    vector = embedding_client.compute_embedding(embedding_text.build_embedding_text(description, amount))
+    not a per-payment one).
+
+    WR-36: direction is always passed as "outflow" here, regardless of the querying
+    transaction's own actual direction -- `RecurringPayment` has no direction field
+    of its own (this domain's recurring payments are overwhelmingly outgoing), so
+    every vector in the `recurring_payment_names` collection was itself embedded
+    with "outflow" (embedding/service.py). Passing the transaction's true direction
+    instead would silently defeat matching for the rare inflow transaction (e.g. a
+    refunded subscription) against an otherwise-correct recurring payment, for a
+    reason unrelated to what this feature is actually trying to improve."""
+    vector = embedding_client.compute_embedding(embedding_text.build_embedding_text(description, amount, "outflow"))
     if vector is None:
         return None
     neighbors = vector_store.query_nearest_neighbors(
@@ -184,6 +200,36 @@ def _has_monthly_cadence(cluster: list[Transaction]) -> bool:
     )
 
 
+def _has_annual_cadence(cluster: list[Transaction]) -> bool:
+    """Issue #15: same shape as _has_monthly_cadence, checked against a much wider
+    window (default 350-380 days) so it can never overlap the monthly window's
+    35-day ceiling -- a short-cadence pattern (e.g. a daily meal purchase) can
+    never satisfy either."""
+    dates = sorted(t.transaction_date for t in cluster)
+    if len(dates) < 2:
+        return False
+    gaps = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+    return any(
+        settings.recurring_payment_detection_annual_cadence_min_days
+        <= gap
+        <= settings.recurring_payment_detection_annual_cadence_max_days
+        for gap in gaps
+    )
+
+
+def _detect_cadence(cluster: list[Transaction]) -> RecurringPaymentFrequency | None:
+    """Issue #15: monthly checked first -- the original, far more common case --
+    then annual; a cluster whose gaps satisfy neither window is not a recurring
+    pattern at all (e.g. sporadic or daily purchases, per the explicit
+    requirement that a daily-cadence pattern -- almost certainly routine
+    purchases like meals, not a bill -- must never be suggested)."""
+    if _has_monthly_cadence(cluster):
+        return RecurringPaymentFrequency.MONTHLY
+    if _has_annual_cadence(cluster):
+        return RecurringPaymentFrequency.ANNUAL
+    return None
+
+
 def _consistent_category_id(cluster: list[Transaction]) -> UUID | None:
     category_ids = {t.category_id for t in cluster}
     return category_ids.pop() if len(category_ids) == 1 else None
@@ -213,12 +259,20 @@ def _merge_groups_via_embedding(groups: dict[str, list[Transaction]]) -> dict[st
         return groups
 
     representative: dict[str, Transaction] = {key: max(groups[key], key=lambda t: t.transaction_date) for key in keys}
-    representative_vector: dict[str, list[float] | None] = {
-        key: embedding_client.compute_embedding(
-            embedding_text.build_embedding_text(representative[key].description, _transaction_amount(representative[key]))
+    texts = [
+        embedding_text.build_embedding_text(
+            representative[key].description,
+            _transaction_amount(representative[key]),
+            _transaction_direction(representative[key]),
         )
         for key in keys
-    }  # WR-29: price-bucketed text
+    ]  # WR-29: price-bucketed text; WR-36: direction token
+    # One call per distinct merchant pattern (thousands after a backfill). Concurrent, bounded by embedding_concurrency
+    # like the backlog batch: with a cloud embedding endpoint (~0.5 s a call) one-at-a-time held the whole single-threaded
+    # worker for ~20 minutes every scan. executor.map preserves order, so vectors line up with `keys`.
+    with ThreadPoolExecutor(max_workers=settings.embedding_concurrency) as executor:
+        vectors = list(executor.map(embedding_client.compute_embedding, texts))
+    representative_vector: dict[str, list[float] | None] = dict(zip(keys, vectors, strict=True))
 
     parent = {key: key for key in keys}
 
@@ -266,9 +320,10 @@ def _merge_groups_via_embedding(groups: dict[str, list[Transaction]]) -> dict[st
 
 
 def run_detection_scan(db) -> None:
-    """WR-19: monthly-cadence only (FR-12), records new DetectionSuggestion rows,
-    skips patterns already covered by an existing match or already suggested
-    (BR-22 is the real backstop; this pre-check just avoids a doomed insert)."""
+    """WR-19: monthly- or annual-cadence (issue #15 extended FR-12's original
+    monthly-only scope), records new DetectionSuggestion rows, skips patterns
+    already covered by an existing match or already suggested (BR-22 is the real
+    backstop; this pre-check just avoids a doomed insert)."""
     already_matched_ids = repository.list_matched_transaction_ids(db)
     unmatched = [t for t in repository.list_all_transactions_for_detection(db) if t.id not in already_matched_ids]
 
@@ -284,7 +339,8 @@ def run_detection_scan(db) -> None:
         for cluster in _cluster_by_amount(txns):
             if len(cluster) < settings.recurring_payment_detection_min_occurrences:
                 continue
-            if not _has_monthly_cadence(cluster):
+            detected_frequency = _detect_cadence(cluster)
+            if detected_frequency is None:
                 continue
             if repository.find_suggestion_by_pattern(db, pattern) is not None:
                 continue
@@ -295,7 +351,19 @@ def run_detection_scan(db) -> None:
                 suggested_amount=_transaction_amount(most_recent),
                 suggested_category_id=_consistent_category_id(cluster),
                 occurrence_count=len(cluster),
+                detected_frequency=detected_frequency,
+                # Issue #15: the actual detected occurrence's calendar day, not
+                # "whatever day someone happens to click Add" -- due_month only
+                # for an annual pattern (BR-19: a monthly payment's due_month must
+                # be None).
+                suggested_due_month=most_recent.transaction_date.month
+                if detected_frequency == RecurringPaymentFrequency.ANNUAL
+                else None,
+                suggested_due_day=most_recent.transaction_date.day,
             )
-            logger.info("Detected untracked recurring pattern %r (%d occurrences)", pattern, len(cluster))
+            logger.info(
+                "Detected untracked recurring pattern %r (%d occurrences, %s cadence)",
+                pattern, len(cluster), detected_frequency.value,
+            )
 
     repository.record_detection_scan_run(db)

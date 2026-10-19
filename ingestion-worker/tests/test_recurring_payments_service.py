@@ -198,13 +198,13 @@ class TestMatchNewTransactionEmbeddingFirst:
         txn.llm_suggested_category_id = subscriptions.id
         db_session.flush()
 
-        # Default embedding_similarity_threshold is 0.82; 0.80 alone doesn't clear
-        # it, but 0.80 + the default 0.05 boost = 0.85 does.
+        # Default embedding_similarity_threshold is 0.92; 0.90 alone doesn't clear
+        # it, but 0.90 + the default 0.05 boost = 0.95 does.
         with (
             patch("ingestion_worker.recurring_payments.service.embedding_client.compute_embedding", return_value=[0.1]),
             patch(
                 "ingestion_worker.recurring_payments.service.vector_store.query_nearest_neighbors",
-                return_value=[(str(payment.id), 0.80)],
+                return_value=[(str(payment.id), 0.90)],
             ),
         ):
             service.match_new_transaction(db_session, txn)
@@ -325,6 +325,41 @@ class TestRunDetectionScan:
 
         assert db_session.query(DetectionScanRun).count() == 1
 
+    def test_creates_suggestion_for_a_repeating_annual_pattern(self, db_session):
+        """Issue #15: detection previously could only ever find monthly-cadence
+        patterns (FR-12) -- an annual renewal, paid once a year, was structurally
+        undetectable. suggested_due_month/suggested_due_day should default to the
+        most recent occurrence's actual calendar day, not today's."""
+        category = _make_category(db_session, "Insurance")
+        _make_transaction(db_session, "ANNUAL INSURANCE RENEWAL", "500.00", date(2025, 3, 20), category=category)
+        _make_transaction(db_session, "ANNUAL INSURANCE RENEWAL", "500.00", date(2026, 3, 22), category=category)
+
+        service.run_detection_scan(db_session)
+
+        from transactagent_db.models import DetectionSuggestion
+
+        suggestions = db_session.query(DetectionSuggestion).all()
+        assert len(suggestions) == 1
+        assert suggestions[0].detected_frequency == RecurringPaymentFrequency.ANNUAL
+        assert suggestions[0].suggested_due_month == 3
+        assert suggestions[0].suggested_due_day == 22
+
+    def test_daily_pattern_is_never_suggested_even_with_many_occurrences(self, db_session):
+        """The explicit requirement (issue #15): a daily-cadence pattern is almost
+        certainly routine purchases (e.g. meals), not a bill, and must never be
+        recommended -- exercised through the real scan, not just _detect_cadence
+        directly, so a future change to run_detection_scan's own filtering can't
+        silently reintroduce this."""
+        category = _make_category(db_session, "Dining")
+        for day in range(1, 11):
+            _make_transaction(db_session, "COFFEE SHOP", "5.00", date(2026, 6, day), category=category)
+
+        service.run_detection_scan(db_session)
+
+        from transactagent_db.models import DetectionSuggestion
+
+        assert db_session.query(DetectionSuggestion).count() == 0
+
 
 class TestRunDetectionScanEmbeddingMerge:
     """WR-22 (Epic 9, corrected from the original Application Design addendum --
@@ -375,11 +410,11 @@ class TestRunDetectionScanEmbeddingMerge:
         _make_transaction(db_session, "NETFLIX.COM", "15.00", date(2026, 6, 5), category=category)
         _make_transaction(db_session, "SPOTIFY PREMIUM", "15.00", date(2026, 7, 5), category=category)
 
-        # Keyed by the WR-29 price-bucketed text (both $15.00 -> "$10 to $20"), not
-        # the bare description alone.
+        # Keyed by the WR-29 price-bucketed text (both $15.00 -> "$10 to $20") plus
+        # the WR-36 direction token, not the bare description alone.
         vectors = {
-            "NETFLIX.COM | $10 to $20": [1.0, 0.0],
-            "SPOTIFY PREMIUM | $10 to $20": [0.0, 1.0],
+            "NETFLIX.COM | $10 to $20 | outflow": [1.0, 0.0],
+            "SPOTIFY PREMIUM | $10 to $20 | outflow": [0.0, 1.0],
         }  # orthogonal -> cosine 0.0
 
         with patch(
@@ -391,6 +426,62 @@ class TestRunDetectionScanEmbeddingMerge:
         from transactagent_db.models import DetectionSuggestion
 
         assert db_session.query(DetectionSuggestion).count() == 0  # correctly stayed separate
+
+
+class TestMergePassEmbedsRepresentativesConcurrently:
+    """The detection scan embeds one representative per distinct merchant pattern. With a cloud endpoint (~0.5 s a call) doing
+    that one at a time held the whole single-threaded worker for ~20 minutes a scan, so the calls are concurrent."""
+
+    def _two_similar_groups(self, db_session):
+        category = _make_category(db_session, "Subscriptions")
+        _make_transaction(db_session, "NETFLIX.COM", "15.00", date(2026, 6, 5), category=category)
+        _make_transaction(db_session, "NETFLIX SG PTE", "15.00", date(2026, 7, 5), category=category)
+
+    def test_calls_overlap_in_time(self, db_session):
+        import threading
+
+        self._two_similar_groups(db_session)
+        barrier = threading.Barrier(2, timeout=5)  # both calls must be in flight together, or the barrier breaks
+
+        def compute(_text):
+            barrier.wait()
+            return [1.0, 0.0]
+
+        with patch("ingestion_worker.recurring_payments.service.embedding_client.compute_embedding", side_effect=compute):
+            service.run_detection_scan(db_session)  # a sequential implementation raises BrokenBarrierError here
+
+        from transactagent_db.models import DetectionSuggestion
+
+        assert db_session.query(DetectionSuggestion).count() == 1  # identical vectors merged the two groups
+
+    def test_each_vector_stays_with_its_own_pattern_whatever_order_the_calls_finish_in(self, db_session):
+        import time
+
+        category = _make_category(db_session, "Subscriptions")
+        _make_transaction(db_session, "NETFLIX.COM", "15.00", date(2026, 6, 5), category=category)
+        _make_transaction(db_session, "NETFLIX SG PTE", "15.00", date(2026, 7, 5), category=category)
+        _make_transaction(db_session, "SPOTIFY PREMIUM", "9.90", date(2026, 6, 6), category=category)
+        _make_transaction(db_session, "SPOTIFY AB", "9.90", date(2026, 7, 6), category=category)
+        vectors = {  # the two Netflix texts alike, the two Spotify texts alike, the families orthogonal
+            "NETFLIX.COM | $10 to $20 | outflow": [1.0, 0.0], "NETFLIX SG PTE | $10 to $20 | outflow": [1.0, 0.0],
+            "SPOTIFY PREMIUM | $5 to $10 | outflow": [0.0, 1.0], "SPOTIFY AB | $5 to $10 | outflow": [0.0, 1.0],
+        }
+        delays = {text: 0.15 * (3 - i) for i, text in enumerate(vectors)}  # the first-submitted call finishes LAST
+
+        def compute(text):
+            time.sleep(delays[text])
+            return vectors[text]
+
+        with patch("ingestion_worker.recurring_payments.service.embedding_client.compute_embedding", side_effect=compute):
+            service.run_detection_scan(db_session)
+
+        from transactagent_db.models import DetectionSuggestion
+
+        # Each family merged with ITSELF: two occurrences at one amount each. A vector attached to the wrong pattern would
+        # merge Netflix with Spotify, the 15.00 and 9.90 charges would fall into separate amount clusters of one occurrence, and
+        # no suggestion would be made at all.
+        suggestions = db_session.query(DetectionSuggestion).all()
+        assert sorted((float(x.suggested_amount), x.occurrence_count) for x in suggestions) == [(9.9, 2), (15.0, 2)]
 
 
 class TestNormalizeDescription:
@@ -421,3 +512,52 @@ class TestHasMonthlyCadence:
         txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
 
         assert service._has_monthly_cadence([txn1]) is False
+
+
+class TestHasAnnualCadence:
+    def test_two_occurrences_365_days_apart_is_annual_cadence(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2025, 1, 15))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 1, 15))
+
+        assert service._has_annual_cadence([txn1, txn2]) is True
+
+    def test_thirty_day_gap_is_not_annual_cadence(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 7, 5))
+
+        assert service._has_annual_cadence([txn1, txn2]) is False
+
+
+class TestDetectCadence:
+    """Issue #15: _detect_cadence is the single entry point run_detection_scan
+    actually calls -- these prove monthly/annual are both reachable through it, and
+    that the explicit requirement ("don't recommend daily-cadence payments -- those
+    are probably meal payments") holds regardless of which cadence window a gap is
+    checked against."""
+
+    def test_monthly_gap_resolves_to_monthly(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 7, 5))
+
+        assert service._detect_cadence([txn1, txn2]) == RecurringPaymentFrequency.MONTHLY
+
+    def test_annual_gap_resolves_to_annual(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2025, 1, 15))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 1, 15))
+
+        assert service._detect_cadence([txn1, txn2]) == RecurringPaymentFrequency.ANNUAL
+
+    def test_daily_gap_is_never_a_recurring_pattern(self, db_session):
+        """The explicit requirement: a daily-cadence cluster (almost certainly
+        routine purchases like meals, not a bill) must never be suggested, no
+        matter how many occurrences pile up -- neither the monthly nor the annual
+        window can ever match a ~1-day gap."""
+        txns = [_make_transaction(db_session, "COFFEE SHOP", "5.00", date(2026, 6, day)) for day in range(1, 11)]
+
+        assert service._detect_cadence(txns) is None
+
+    def test_sporadic_gap_matching_neither_window_is_not_a_cadence(self, db_session):
+        txn1 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 5))
+        txn2 = _make_transaction(db_session, "X", "10.00", date(2026, 6, 12))  # 7 days -- below both windows
+
+        assert service._detect_cadence([txn1, txn2]) is None

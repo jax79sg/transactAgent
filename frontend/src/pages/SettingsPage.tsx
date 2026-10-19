@@ -1,13 +1,16 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 import { addCategory, listCategories, removeCategory, renameCategory } from "../api/categories";
 import { ApiError } from "../api/client";
 import { getDriveAuthorizationUrl, getDriveStatus } from "../api/driveConnect";
 import { getRestartGuidance, listSettingHistory, listSettings, updateSetting } from "../api/settings";
 import type { CategoryDTO, RestartTargetDTO, SettingDTO } from "../api/types";
+import { getServerVersion } from "../api/version";
+import { RELEASES_URL, guideUrlFor } from "../lib/guideLinks";
+import { appVersion } from "../version";
 
 function DriveConnectionCard() {
   const [searchParams] = useSearchParams();
@@ -189,8 +192,11 @@ const CATEGORY_ORDER = [
   "Recurring Payments",
   "Backup",
   "Ingestion",
+  "Duplicate Statements",
+  "Balances",
   "API & Access",
   "Ask AI",
+  "Model Costs",
 ];
 
 // Deliberately looser than IngestionPage's 3s active-run poll, but tighter than
@@ -363,12 +369,32 @@ function SettingRow({ setting }: { setting: SettingDTO }) {
             setConfirming(true);
           }}
         >
-          <input
-            className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            value={draftValue}
-            onChange={(e) => setDraftValue(e.target.value)}
-            data-testid={`setting-input-${setting.name}`}
-          />
+          {setting.type === "enum" && setting.allowedValues && setting.allowedValues.length > 0 ? (
+            // An enumerated setting is a fixed choice, so it is a dropdown rather than a text box to type into
+            // (Epic 14 added the first on/off switch, which would otherwise have to be typed as "true"/"false").
+            <select
+              className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              value={draftValue}
+              onChange={(e) => setDraftValue(e.target.value)}
+              data-testid={`setting-input-${setting.name}`}
+            >
+              {(setting.allowedValues.includes(draftValue)
+                ? setting.allowedValues
+                : [draftValue, ...setting.allowedValues]
+              ).map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="rounded border px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              value={draftValue}
+              onChange={(e) => setDraftValue(e.target.value)}
+              data-testid={`setting-input-${setting.name}`}
+            />
+          )}
           <span className="text-xs text-slate-400 dark:text-slate-500">{formatSettingType(setting)}</span>
           <button
             type="submit"
@@ -487,6 +513,64 @@ function ApplicationSettingsSection() {
   );
 }
 
+/** Issue #27: which release this is, whether the interface and the server agree, and where that release's guide is. */
+function AboutCard() {
+  const { hash } = useLocation();
+  const { data, isError } = useQuery({ queryKey: ["version"], queryFn: getServerVersion });
+
+  // The nav bar's version label links here (/settings#about); a single-page app does not scroll to a hash by itself.
+  useEffect(() => {
+    if (hash === "#about") document.getElementById("about")?.scrollIntoView();
+  }, [hash]);
+
+  const serverVersion = data?.version;
+  const drifted = serverVersion !== undefined && serverVersion !== appVersion;
+
+  return (
+    <section id="about" data-testid="about-card" className="rounded border border-slate-200 p-4 dark:border-slate-700">
+      <h2 className="mb-2 font-medium">About this release</h2>
+      <dl className="mb-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dt className="text-slate-500 dark:text-slate-400">Interface</dt>
+        <dd data-testid="about-interface-version">v{appVersion}</dd>
+        <dt className="text-slate-500 dark:text-slate-400">Server</dt>
+        <dd data-testid="about-server-version">
+          {serverVersion !== undefined ? `v${serverVersion}` : isError ? "unavailable" : "checking..."}
+        </dd>
+      </dl>
+      {drifted && (
+        <p
+          data-testid="about-version-mismatch"
+          className="mb-3 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+        >
+          The interface (v{appVersion}) and the server (v{serverVersion}) are on different releases, so parts of the
+          app may not work. Rebuild and restart both so they match.
+        </p>
+      )}
+      <p className="text-sm">
+        <a
+          data-testid="about-guide-link"
+          href={guideUrlFor(appVersion)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          User guide for v{appVersion}
+        </a>
+        {" · "}
+        <a
+          data-testid="about-releases-link"
+          href={RELEASES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          All releases
+        </a>
+      </p>
+    </section>
+  );
+}
+
 export function SettingsPage() {
   return (
     <div className="space-y-6">
@@ -496,6 +580,7 @@ export function SettingsPage() {
       <DriveConnectionCard />
       <CategoryManagement />
       <ApplicationSettingsSection />
+      <AboutCard />
     </div>
   );
 }

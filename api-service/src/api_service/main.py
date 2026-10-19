@@ -7,21 +7,26 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from transactagent_db.migrate import run_migrations_with_lock
 
+from api_service.accounts.router import router as accounts_router
 from api_service.ai_assistant.router import router as ai_assistant_router
 from api_service.app_settings.router import router as app_settings_router
 from api_service.auth.router import router as auth_router
 from api_service.background_activity.router import router as background_activity_router
 from api_service.backup.router import router as backup_router
+from api_service.balances.router import router as balances_router
 from api_service.categories.router import router as categories_router
 from api_service.config import settings
+from api_service.costs.router import router as costs_router
 from api_service.dashboards.router import router as dashboards_router
 from api_service.drive_connect.router import router as drive_connect_router
+from api_service.duplicates.router import router as duplicates_router
 from api_service.errors import register_exception_handlers
 from api_service.health import router as health_router
 from api_service.ingestion.router import router as ingestion_router
 from api_service.recategorization.router import router as recategorization_router
 from api_service.recurring_payments.router import router as recurring_payments_router
 from api_service.transactions.router import router as transactions_router
+from api_service.version import router as version_router
 
 _DATABASE_ALEMBIC_INI = Path(__file__).resolve().parents[3] / "database" / "alembic.ini"
 
@@ -51,16 +56,18 @@ def create_app(run_migrations: bool = True) -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.frontend_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],  # PATCH: Epic 13 renames/retypes an account
         allow_headers=["Authorization", "Content-Type"],
     )
 
     register_exception_handlers(app)
 
     app.include_router(health_router)
+    app.include_router(version_router)
     app.include_router(auth_router)
     app.include_router(transactions_router)
     app.include_router(dashboards_router)
+    app.include_router(costs_router)
     app.include_router(ingestion_router)
     app.include_router(categories_router)
     app.include_router(drive_connect_router)
@@ -70,6 +77,9 @@ def create_app(run_migrations: bool = True) -> FastAPI:
     app.include_router(recurring_payments_router)
     app.include_router(app_settings_router)
     app.include_router(background_activity_router)
+    app.include_router(duplicates_router)
+    app.include_router(accounts_router)
+    app.include_router(balances_router)
 
     return app
 

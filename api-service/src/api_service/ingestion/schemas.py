@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from api_service.duplicates.schemas import StatementLabelDTO
 from api_service.schemas import CamelModel
 
 
@@ -34,6 +35,10 @@ class RunFileDetail(CamelModel):
     failure_reason: str | None
     transactions_extracted_count: int | None
     processed_at: datetime
+    # Epic 14 (AR-47): set only for a file skipped as a probable duplicate -- its stored comparison and
+    # the statement it was judged a duplicate of. The Frontend composes "probable duplicate of <statement>".
+    duplicate_comparison_id: UUID | None = None
+    matched_statement: StatementLabelDTO | None = None
 
 
 class RunLogLine(CamelModel):

@@ -44,6 +44,7 @@ def create_recurring_payment(
     due_month: int | None,
     due_day: int,
     category_id: UUID | None,
+    due_soon_lead_days: int | None = None,
 ) -> RecurringPayment:
     payment = RecurringPayment(
         name=name,
@@ -52,6 +53,7 @@ def create_recurring_payment(
         due_month=due_month,
         due_day=due_day,
         category_id=category_id,
+        due_soon_lead_days=due_soon_lead_days,
     )
     db.add(payment)
     db.flush()

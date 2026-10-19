@@ -55,3 +55,26 @@ docker compose up -d
 ### Build fails with dependency errors
 - **Cause**: Usually a transient package-registry issue (PyPI/npm)
 - **Solution**: Retry `docker compose build`; Docker's layer cache means only the failed step re-downloads
+
+---
+
+## Addendum (2026-10-04) — Account Balance (Epic 13) and Probable Duplicate Statement Detection (Epic 14)
+
+- **Migrations 0019 and 0020** are applied automatically at the start of either backend container (existing advisory-lock mechanism). Both are reversible; 0020's downgrade refuses while any ingestion run file uses the new outcome `skipped_probable_duplicate`. The Backfill Tool's CLI also applies pending migrations at start, so run it only when you intend the database to be migrated.
+- **New settings** `DUPLICATE_DETECTION_ENABLED` (default `false`), `DUPLICATE_MATCH_RATIO` (`0.80`), `DUPLICATE_MIN_TRANSACTIONS` (`3`) are in `.env.example` and passed to both the worker and the API container by `docker-compose.yml`. Detection ships **off**; the switch is changed on the Settings page and takes effect when the worker restarts.
+- **Frontend production build check without touching `dist/`**: `docker run --rm -v "$PWD/frontend":/app -w /app node:20-alpine sh -c "npx tsc --noEmit && npx vite build --outDir /tmp/fe-dist --emptyOutDir"`. Expected: success; main script about 568 kB (a "larger than 500 kB" notice is normal and pre-dates this work).
+- **Rebuild and redeploy** (`docker compose build && docker compose up -d`) was **not** done in this stage; the running containers are the previous version until you do it.
+
+---
+
+## Addendum (2026-10-19) — Account Balance (Epic 13): API Service and Frontend SPA completion
+
+- **Both `api-service` and `frontend` build cleanly** against the working tree with the real `docker compose build api-service frontend` (confirmed 2026-10-19). `api-service`'s image gained `hypothesis` in its editable install's `test` extra only — nothing in the runtime image. `frontend`'s bundle grew from the 598 kB baseline to 642 kB minified (+44 kB for the whole feature); the pre-existing "chunk larger than 500 kB" notice still applies, unchanged in kind.
+- **New settings** `REPORTING_TIME_ZONE` (default `Asia/Singapore`) and `BALANCE_MISMATCH_TOLERANCE` (default `0.00`) are owned by `api-service` alone; add them to `.env.example` and `docker-compose.yml`'s `api-service.environment` block before deployment (not yet done — see the Build and Test summary's "not done" list). Like the other API-owned settings, a change via the Settings page takes effect when `api-service` restarts; they need no entry in `ingestion-worker`'s environment.
+- `main.py`'s CORS `allow_methods` gained `PATCH` (the account rename/retype call) — already in the code, nothing further to configure.
+
+### ⚠️ A hazard found the hard way: never bind-mount a second Postgres onto `./data/postgres`
+
+While verifying this stage, an attempt to bring up an **isolated copy** of the compose stack (different container names and ports, to test the real images together without touching the live deployment) used a **relative** `./data/postgres` path for the isolated `database` service. That path resolves relative to the *current directory*, not the compose project name — so it pointed at the exact same host directory the **live** `transactagent-db` container was already using. The isolated container's Postgres process detected the live process's lock file as invalid (from its own container's view) and forced an immediate shutdown, **which crashed the live database container** (it recovered automatically via `restart: unless-stopped`, about 12 seconds of downtime, no data loss — confirmed by table counts and `pg_is_in_recovery()` immediately after).
+
+**If you ever need an isolated copy of this stack for testing** (not just the per-unit scratch databases the unit and integration tests already use, which are fine — they use `testcontainers` or a `docker run` Postgres on a dedicated, non-shared data directory): give the isolated `database` service its **own** bind mount or named volume, never `./data/postgres`, and double-check the resolved path with `docker compose -f <file> config` before bringing anything up.

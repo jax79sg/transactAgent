@@ -25,6 +25,7 @@ function makePayment(overrides: Partial<RecurringPaymentDTO> = {}): RecurringPay
     isTrusted: false,
     status: "due_soon",
     monthlySetAside: null,
+    dueSoonLeadDays: null,
     ...overrides,
   };
 }
@@ -65,6 +66,9 @@ function makeSuggestion(overrides: Partial<DetectionSuggestionDTO> = {}): Detect
     suggestedCategory: null,
     occurrenceCount: 2,
     status: "new",
+    detectedFrequency: "monthly",
+    suggestedDueMonth: null,
+    suggestedDueDay: 15,
     ...overrides,
   };
 }
@@ -112,6 +116,38 @@ describe("DashboardPage Recurring Payments tab", () => {
     });
     expect(screen.getByTestId("pending-matches-empty-state")).toBeInTheDocument();
     expect(screen.getByTestId("suggestions-empty-state")).toBeInTheDocument();
+  });
+
+  it("sorts the recurring payments table by name (issue #10)", async () => {
+    vi.spyOn(recurringPaymentsApi, "listRecurringPayments").mockResolvedValue([
+      makePayment({ id: "payment-z", name: "Zebra Gym", dueDay: 1 }),
+      makePayment({ id: "payment-a", name: "Aardvark Insurance", dueDay: 2 }),
+    ]);
+    vi.spyOn(recurringPaymentsApi, "listPendingMatches").mockResolvedValue([]);
+    vi.spyOn(recurringPaymentsApi, "listDetectionSuggestions").mockResolvedValue([]);
+    const user = userEvent.setup();
+    renderDashboard();
+
+    await openRecurringPaymentsTab(user);
+    await waitFor(() => expect(screen.getByTestId("recurring-payment-row-payment-z")).toBeInTheDocument());
+
+    // Default sort is by due day, so the order is z (day 1) then a (day 2) --
+    // sorting by name should flip that to alphabetical.
+    const rowsBeforeSort = screen.getAllByTestId(/^recurring-payment-row-/);
+    expect(rowsBeforeSort.map((r) => r.getAttribute("data-testid"))).toEqual([
+      "recurring-payment-row-payment-z",
+      "recurring-payment-row-payment-a",
+    ]);
+
+    await user.click(screen.getByTestId("sort-name"));
+
+    await waitFor(() => {
+      const rowsAfterSort = screen.getAllByTestId(/^recurring-payment-row-/);
+      expect(rowsAfterSort.map((r) => r.getAttribute("data-testid"))).toEqual([
+        "recurring-payment-row-payment-a",
+        "recurring-payment-row-payment-z",
+      ]);
+    });
   });
 
   it("renders a payment row with its status badge", async () => {

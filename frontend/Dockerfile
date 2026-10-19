@@ -4,6 +4,8 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# The release number is baked into the interface at build time (vite.config.ts reads it) -- issue #27.
+COPY VERSION ./VERSION
 RUN npm run build
 
 # Serve stage

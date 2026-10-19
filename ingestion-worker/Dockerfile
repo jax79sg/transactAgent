@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
 
 WORKDIR /app
 
+COPY VERSION /app/VERSION
 COPY database /app/database
 COPY ingestion-worker/pyproject.toml /app/ingestion-worker/pyproject.toml
 COPY ingestion-worker/src /app/ingestion-worker/src

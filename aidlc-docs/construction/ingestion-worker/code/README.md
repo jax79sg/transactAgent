@@ -43,4 +43,11 @@ ingestion-worker/src/ingestion_worker/
   currency/                      # Currency Conversion component
   duplicate_detection/            # hash-based dedup
   orchestrator/                    # Ingestion Orchestrator (pipeline.py) + run/job repository
+  accounts/                         # Account Resolver (Epic 13): pure normalization + resolve_sections
+  backfill/                          # Backfill Tool (Epic 13, extended by Epic 14): python -m ingestion_worker.backfill {check-extraction,check-duplicates,run,finish,restore}
+  duplicates/                         # Probable Duplicate Detector + Statement Removal Handler (Epic 14): matching.py (pure), repository.py, service.py, removal.py, cascade.py
 ```
+
+The Epic 13 account/section model, the Backfill Tool, and its operator runbook are described in [account-balance-summary.md](account-balance-summary.md).
+
+Epic 14 (Probable Duplicate Statement Detection) is described in [probable-duplicate-summary.md](probable-duplicate-summary.md).

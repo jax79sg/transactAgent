@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { appVersion } from "../version";
 
 export function LoginPage() {
   const { isAuthenticated, login } = useAuth();
@@ -82,6 +83,9 @@ export function LoginPage() {
         >
           {submitting ? "Signing in..." : "Sign in"}
         </button>
+        <p data-testid="login-version" className="text-center text-xs text-slate-400 dark:text-slate-500">
+          Version {appVersion}
+        </p>
       </form>
     </div>
   );

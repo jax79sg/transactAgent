@@ -59,3 +59,63 @@ If a test fails after you've modified code:
 1. Re-run the single failing test file for a focused view (e.g., `pytest tests/test_categorization_service.py -v`)
 2. Check whether the failure is in application code or a test fixture (several bugs found during original development were test-helper bugs, not app bugs — e.g. a hardcoded hash colliding across multiple rows in one test)
 3. Fix and re-run the full suite for that unit before moving on
+
+---
+
+## Addendum (2026-10-04) — Account Balance (Epic 13) and Probable Duplicate Statement Detection (Epic 14)
+
+**Expected results now**: Database **188**, Ingestion Worker **664**, API Service **354**, Frontend **215**, all passing; `ruff check src tests` clean in the three Python units; `tsc --noEmit` clean; `eslint` 0 errors and the same 5 existing warnings.
+
+Python suites need Docker running (each starts a throwaway PostgreSQL 16 through testcontainers) and run in parallel safely:
+
+```bash
+(cd database       && .venv/bin/python -m pytest -q)
+(cd ingestion-worker && .venv/bin/python -m pytest -q)
+(cd api-service    && .venv/bin/python -m pytest -q)
+```
+
+**Environment caveat seen on 2026-10-04**: `database/.venv` and `api-service/.venv` were broken (their interpreter no longer exists). Recreate them (`python3.12 -m venv .venv && .venv/bin/pip install -e ../database -e ".[test]"`; for the Database unit `-e ".[test]"` alone) or use any working environment with the three packages installed.
+
+The frontend has no Node on the host in this setup; run it in a container with the folder mounted (the existing `node_modules` holds Linux ARM binaries):
+
+```bash
+cd frontend
+docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "npx vitest run; npx tsc --noEmit; npx eslint ."
+```
+
+Mutation checks (one deliberate defect at a time in a scratch copy, each must fail a test) were run at each unit's Code Generation and are described in that unit's `probable-duplicate-summary.md`.
+
+---
+
+## Addendum (2026-10-19) — Account Balance (Epic 13): API Service and Frontend SPA completion
+
+Epic 13's Database and Ingestion Worker units were built 2026-10-02/03; the API Service and Frontend SPA units (the account-management and balance screens) were built 2026-10-18/19, completing the epic across all four units. Database and Ingestion Worker were not touched by this stage; re-run to confirm.
+
+**Expected results now**: Database **262**, Ingestion Worker **734**, API Service **725**, Frontend **651** — **2,372 tests passing in total**. `ruff check src tests` clean in the three Python units; `tsc -b`, `eslint .` (0 errors, the same 5 pre-existing warnings) and `vite build` clean in the Frontend.
+
+```bash
+(cd database         && <env>/bin/python -m pytest -q)
+(cd ingestion-worker  && .venv/bin/python -m pytest -q)
+(cd api-service       && CI=1 <env>/bin/python -m pytest -q)   # CI=1 selects the derandomized Hypothesis profile
+```
+
+API Service additionally needs `hypothesis` (added to its `test` extra at Epic 13 Code Generation); run with both the `dev` and `ci` Hypothesis profiles before relying on a green run (`CI=1 pytest` for `ci`, plain `pytest` for `dev`).
+
+**The Frontend needs a dependency the host's `node_modules` was missing** (`vitest`'s own CLI, an `eslint` transitive dependency) — build a throwaway image rather than running `npm ci`/`npm install` directly against the bind-mounted `node_modules` (that can wedge the Docker VM on this kind of setup):
+
+```bash
+cd frontend
+cat > /tmp/Dockerfile.test <<'DOCKERFILE'
+FROM node:20-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+DOCKERFILE
+docker build -f /tmp/Dockerfile.test -t ta-frontend-test .
+docker run --rm ta-frontend-test sh -c "npx vitest run && npx tsc -b && npx eslint . && npx vite build"
+```
+
+**Replaying a failing fast-check property test**: it prints the failing input and, on request, a `seed`/`path`; re-run with `fc.assert(property, { seed, path })` to reproduce exactly.
+
+**Mutation checks**: 45 of 45 on the API Service (20 pure-module, 25 services/repositories/routers/CORS), 25 of 25 on the Frontend (one deliberate defect at a time, reverted before the next; two early picks were found to be poorly chosen — one unreachable, one invisible to the test tool's batching — and were honestly replaced rather than counted as false catches). Both described in full in `construction/api-service/code/account-balance-summary.md` and `construction/frontend/code/account-balance-summary.md`.

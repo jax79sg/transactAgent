@@ -66,8 +66,8 @@ class TestProcessNextEmbeddingBatch:
         db_session.refresh(txn)
         assert txn.embedding_status == EmbeddingStatus.COMPLETED
         mock_upsert.assert_called_once_with(collection="transactions", entity_id=str(txn.id), vector=[0.1, 0.2])
-        # WR-29: price-bucketed text, not the raw description alone.
-        mock_compute.assert_called_once_with("NTUC FAIRPRICE | $5 to $10")
+        # WR-29: price-bucketed text, not the raw description alone. WR-36: direction token.
+        mock_compute.assert_called_once_with("NTUC FAIRPRICE | $5 to $10 | outflow")
 
     def test_processes_pending_recurring_payment_and_marks_completed(self, db_session):
         payment = _make_recurring_payment(db_session)
@@ -84,7 +84,8 @@ class TestProcessNextEmbeddingBatch:
         mock_upsert.assert_called_once_with(
             collection="recurring_payment_names", entity_id=str(payment.id), vector=[0.3, 0.4]
         )
-        mock_compute.assert_called_once_with("Gym Membership | $50 to $100")
+        # WR-36: RecurringPayment has no direction field of its own -- always "outflow".
+        mock_compute.assert_called_once_with("Gym Membership | $50 to $100 | outflow")
 
     def test_processes_both_entity_types_in_one_call(self, db_session):
         txn = _make_transaction(db_session)
@@ -101,6 +102,36 @@ class TestProcessNextEmbeddingBatch:
         db_session.refresh(payment)
         assert txn.embedding_status == EmbeddingStatus.COMPLETED
         assert payment.embedding_status == EmbeddingStatus.COMPLETED
+
+    def test_concurrent_batch_maps_each_vector_to_the_correct_row(self, db_session):
+        """WR-40: embeddings are computed concurrently (ThreadPoolExecutor), but
+        each row must still end up with ITS OWN vector, not another row's --
+        keyed by description text here to catch any mix-up regardless of
+        completion order."""
+        txn_a = _make_transaction(db_session, description="NTUC FAIRPRICE")
+        txn_b = _make_transaction(db_session, description="COLD STORAGE")
+        txn_c = _make_transaction(db_session, description="SHENG SIONG")
+
+        vectors_by_text = {
+            "NTUC FAIRPRICE | $5 to $10 | outflow": [1.0, 0.0, 0.0],
+            "COLD STORAGE | $5 to $10 | outflow": [0.0, 1.0, 0.0],
+            "SHENG SIONG | $5 to $10 | outflow": [0.0, 0.0, 1.0],
+        }
+
+        with (
+            patch(
+                "ingestion_worker.embedding.service.client.compute_embedding",
+                side_effect=lambda text: vectors_by_text[text],
+            ),
+            patch("ingestion_worker.embedding.service.vector_store.upsert_embedding", return_value=True) as mock_upsert,
+        ):
+            processed = service.process_next_embedding_batch(db_session)
+
+        assert processed == 3
+        upserted_vectors = {call.kwargs["entity_id"]: call.kwargs["vector"] for call in mock_upsert.call_args_list}
+        assert upserted_vectors[str(txn_a.id)] == [1.0, 0.0, 0.0]
+        assert upserted_vectors[str(txn_b.id)] == [0.0, 1.0, 0.0]
+        assert upserted_vectors[str(txn_c.id)] == [0.0, 0.0, 1.0]
 
     def test_stops_early_when_embedding_endpoint_unavailable(self):
         """WR-25/26: no exception, no partial writes attempted -- returns

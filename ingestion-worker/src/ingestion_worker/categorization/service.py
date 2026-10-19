@@ -17,7 +17,6 @@ from transactagent_db.models import (
 
 from ingestion_worker.categorization import llm_classifier, repository
 from ingestion_worker.categorization.similarity import (
-    SimilarityCandidate,
     SimilarityMatch,
     amounts_in_range,
     find_best_match,
@@ -27,7 +26,6 @@ from ingestion_worker.config import settings
 from ingestion_worker.embedding import client as embedding_client
 from ingestion_worker.embedding import text as embedding_text
 from ingestion_worker.embedding import vector_store
-from ingestion_worker.embedding.similarity import cosine_similarity
 
 UNSURE_NAME = "UNSURE"
 
@@ -110,7 +108,7 @@ def _boosted_score(raw_score: float, candidate_category_name: str, llm_category:
 
 
 def find_similar_transaction_via_embedding(
-    db: Session, description: str, amount: Decimal, llm_category: str | None = None
+    db: Session, description: str, amount: Decimal, direction: str, llm_category: str | None = None
 ) -> SimilarityMatch | None:
     """WR-21/22/23 (Epic 9): tried before the fuzzy-text fallback, both by
     `categorize()` below and, via a separate pairwise variant inlined in
@@ -137,7 +135,7 @@ def find_similar_transaction_via_embedding(
     always-on LLM classification `categorize()` below already computed for this same
     transaction, passed through rather than recomputed.
     """
-    vector = embedding_client.compute_embedding(embedding_text.build_embedding_text(description, amount))
+    vector = embedding_client.compute_embedding(embedding_text.build_embedding_text(description, amount, direction))
     if vector is None:
         return None
     neighbors = vector_store.query_nearest_neighbors(
@@ -191,7 +189,12 @@ def _transaction_amount(txn) -> Decimal:
     return txn.out_flow if txn.out_flow is not None else txn.in_flow
 
 
-def categorize(db: Session, description: str, amount: Decimal, llm_category: str) -> CategorizationResult:
+def _transaction_direction(txn) -> str:
+    """WR-36: "outflow"/"inflow" mirroring _transaction_amount's out_flow/in_flow check."""
+    return "outflow" if txn.out_flow is not None else "inflow"
+
+
+def categorize(db: Session, description: str, amount: Decimal, direction: str, llm_category: str) -> CategorizationResult:
     """FR-5.2 fallback chain, refined by WR-27/28 (Matching Precision Refinement):
     `llm_category` is the always-on LLM classification, already computed upfront for
     the whole file by `classify_batch` -- no longer computed here as a last resort.
@@ -201,7 +204,7 @@ def categorize(db: Session, description: str, amount: Decimal, llm_category: str
     disagreement; both confident and differing -> genuine disagreement, neither
     auto-assigned, recorded via `disagreement` for the caller to persist.
     """
-    match = find_similar_transaction_via_embedding(db, description, amount, llm_category)
+    match = find_similar_transaction_via_embedding(db, description, amount, direction, llm_category)
     if match is None:
         candidates = repository.list_similarity_candidates(db)
         match = find_best_match(
@@ -248,10 +251,16 @@ def categorize(db: Session, description: str, amount: Decimal, llm_category: str
 
 
 def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transaction_id: UUID) -> list[UUID]:
-    """FR-5.4 / WR-5: similarity-only re-scan (no LLM call) of UNSURE transactions
-    against the newly-corrected transaction (WR-9 revised 2026-08-19, Recategorization
-    Scope Narrowing -- the already-categorized bucket WR-9 originally added back in
-    Epic 6 has been removed entirely; see business-rules.md's revision note).
+    """FR-5.4 / WR-5: similarity-only re-scan (no LLM call) of UNSURE transactions,
+    triggered by a manual correction (WR-9 revised 2026-08-19, Recategorization Scope
+    Narrowing -- the already-categorized bucket WR-9 originally added back in Epic 6
+    has been removed entirely; see business-rules.md's revision note).
+
+    WR-35 (Recategorization Algorithm Rework): each UNSURE candidate is checked
+    against the fuller pool of precedent transactions already in the corrected
+    category -- not only the single just-corrected transaction (source_transaction
+    still identifies *which* category is being proposed, but is no longer itself
+    the sole comparison point). See _find_match below.
 
     A match at/above `recategorization_auto_apply_threshold` is applied directly
     (category_source='similarity', not 'manual' -- see business-logic-model.md note,
@@ -269,16 +278,6 @@ def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transac
         # if called for anything else (shouldn't happen given AR-10 in Unit 2).
         return []
 
-    # This is a targeted re-scan against the one specific corrected transaction, not
-    # the whole precedent pool (list_similarity_candidates is used elsewhere in this
-    # module for the general fallback chain, not here).
-    source_candidate = SimilarityCandidate(
-        transaction_id=str(source_transaction.id),
-        description=source_transaction.description,
-        category_name=source_transaction.category.name,
-        category_source="manual",
-        amount=_transaction_amount(source_transaction),
-    )
     proposed_category = repository.find_category_by_name(db, source_transaction.category.name)
     if proposed_category is None:
         return []
@@ -287,45 +286,72 @@ def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transac
     amount_absolute_floor = Decimal(str(settings.similarity_amount_absolute_floor))
     auto_applied_ids: list[UUID] = []
 
-    # WR-21 (Epic 9): computed once, reused for every candidate this job considers
-    # -- source_transaction never changes within one re-scan. A direct pairwise
-    # comparison, not a vector-store search: this re-scan only ever has ONE
-    # candidate to check each transaction against (source_transaction itself), so
-    # there's no "nearest neighbors among many" to search for.
-    # WR-29 (Matching Precision Refinement): price-bucketed text, not raw description.
-    source_vector = embedding_client.compute_embedding(
-        embedding_text.build_embedding_text(source_transaction.description, _transaction_amount(source_transaction))
-    )
+    # WR-35: fuzzy-text fallback candidate pool is every precedent already in the
+    # proposed category -- computed once, reused for every UNSURE candidate this
+    # job considers (mirrors categorize()'s general-fallback candidate pool, just
+    # pre-filtered to the one category this re-scan cares about).
+    fuzzy_candidates = [
+        c for c in repository.list_similarity_candidates(db) if c.category_name == proposed_category.name
+    ]
 
     def _find_match(candidate_txn) -> SimilarityMatch | None:
-        if source_vector is not None:
-            candidate_vector = embedding_client.compute_embedding(
-                embedding_text.build_embedding_text(candidate_txn.description, _transaction_amount(candidate_txn))
+        candidate_amount = _transaction_amount(candidate_txn)
+        candidate_direction = _transaction_direction(candidate_txn)
+        # WR-30: boost when the CANDIDATE's own persisted LLM classification (set
+        # back when it was originally ingested, WR-28) agrees with the category
+        # being PROPOSED -- the candidate's independent LLM opinion, read back
+        # later, either corroborates or doesn't corroborate this re-categorization.
+        # Applies uniformly across whichever neighbor ends up compared below, since
+        # it depends only on candidate_txn's own prior LLM classification.
+        candidate_llm_category = (
+            candidate_txn.llm_suggested_category.name if candidate_txn.llm_suggested_category_id else None
+        )
+        candidate_vector = embedding_client.compute_embedding(
+            embedding_text.build_embedding_text(candidate_txn.description, candidate_amount, candidate_direction)
+        )
+        if candidate_vector is not None:
+            # WR-35: broadened from a single pairwise comparison to a real
+            # nearest-neighbor search across the whole `transactions` collection
+            # (same call findSimilarPastTransaction/categorize() already uses),
+            # then filtered to neighbors already in the proposed category -- the
+            # best-matching *real example* of that category anywhere in history,
+            # not just resemblance to the one transaction that happened to get
+            # corrected. A neighbor whose true nearest match is some other
+            # category is correctly not matched by this re-scan (WR-35's business
+            # rule; that transaction may separately deserve its own re-scan later).
+            neighbors = vector_store.query_nearest_neighbors(
+                candidate_vector,
+                collection=vector_store.TRANSACTIONS_COLLECTION,
+                top_k=settings.embedding_top_k,
+                exclude_entity_id=str(candidate_txn.id),
             )
-            if candidate_vector is not None:
-                cosine_score = cosine_similarity(source_vector, candidate_vector)
-                # WR-30: boost when the CANDIDATE's own persisted LLM classification
-                # (set back when it was originally ingested, WR-28) agrees with the
-                # category being PROPOSED (source_transaction's corrected category) --
-                # the candidate's independent LLM opinion, read back later, either
-                # corroborates or doesn't corroborate this re-categorization.
-                candidate_llm_category = (
-                    candidate_txn.llm_suggested_category.name if candidate_txn.llm_suggested_category_id else None
+            if neighbors:
+                candidates_by_id = repository.get_similarity_candidates_by_ids(
+                    db, [entity_id for entity_id, _ in neighbors]
                 )
-                cosine_score = _boosted_score(cosine_score, source_transaction.category.name, candidate_llm_category)
-                if cosine_score >= settings.embedding_similarity_threshold and amounts_in_range(
-                    _transaction_amount(candidate_txn),
-                    _transaction_amount(source_transaction),
-                    ratio_tolerance=amount_ratio_tolerance,
-                    absolute_floor=amount_absolute_floor,
-                ):
-                    # Rescaled to the 0-100 scale, same reasoning as
-                    # find_similar_transaction_via_embedding above.
-                    return SimilarityMatch(candidate=source_candidate, score=round(cosine_score * 100, 2))
+                scored = []
+                for entity_id, raw_score in neighbors:
+                    neighbor = candidates_by_id.get(entity_id)
+                    if neighbor is None or neighbor.category_name != proposed_category.name:
+                        continue  # WR-35: only precedents of the corrected category are eligible
+                    boosted_score = _boosted_score(raw_score, proposed_category.name, candidate_llm_category)
+                    if boosted_score < settings.embedding_similarity_threshold:
+                        continue
+                    if not amounts_in_range(
+                        candidate_amount,
+                        neighbor.amount,
+                        ratio_tolerance=amount_ratio_tolerance,
+                        absolute_floor=amount_absolute_floor,
+                    ):
+                        continue
+                    scored.append(SimilarityMatch(candidate=neighbor, score=round(boosted_score * 100, 2)))
+                best = select_best_match(scored)
+                if best is not None:
+                    return best
         return find_best_match(
             candidate_txn.description,
-            _transaction_amount(candidate_txn),
-            [source_candidate],
+            candidate_amount,
+            fuzzy_candidates,
             threshold=settings.similarity_threshold,
             amount_ratio_tolerance=amount_ratio_tolerance,
             amount_absolute_floor=amount_absolute_floor,
@@ -356,6 +382,94 @@ def recategorize_unsure_from_precedent(db: Session, job_id: UUID, source_transac
                 proposed_category_id=proposed_category.id,
                 match_score=match.score,
                 source_bucket=RecategorizationProposalSourceBucket.UNSURE,
+                status=RecategorizationProposalStatus.PENDING,
+            )
+
+    # WR-43 (Recategorization Algorithm Rework): reintroduces WR-9's original
+    # "already-categorized" bucket (removed 2026-08-19, Recategorization Scope
+    # Narrowing) -- confidently-categorized transactions highly similar to the
+    # one just corrected, but currently sitting under a DIFFERENT category, are
+    # flagged for review. Two differences from the removed bucket address exactly
+    # why it was removed: (1) much-improved matching since then (WR-35's broadened
+    # pool, WR-37/40/41's noise stripping, WR-42's recalibrated threshold), and
+    # (2) an absolute, unconditional never-auto-apply rule (WR-10's original
+    # safety rule, still enforced) -- this bucket ONLY EVER creates PENDING
+    # proposals, regardless of score, since silently overwriting an
+    # already-confidently-categorized transaction is a materially worse failure
+    # mode than a wrong UNSURE suggestion.
+    #
+    # Source-centric, not candidate-centric (unlike the UNSURE loop above): one
+    # embedding search for source_transaction itself finds every qualifying
+    # cross-category candidate at once, rather than checking each of potentially
+    # thousands of already-categorized transactions individually.
+    source_direction = _transaction_direction(source_transaction)
+    source_amount = _transaction_amount(source_transaction)
+    source_vector = embedding_client.compute_embedding(
+        embedding_text.build_embedding_text(source_transaction.description, source_amount, source_direction)
+    )
+    already_pending_ids = repository.list_pending_proposal_candidate_ids(db)  # Issue #12 dedup, same as the UNSURE bucket
+    flagged_candidate_ids: set[UUID] = set()
+    if source_vector is not None:
+        neighbors = vector_store.query_nearest_neighbors(
+            source_vector,
+            collection=vector_store.TRANSACTIONS_COLLECTION,
+            top_k=settings.embedding_top_k,
+            exclude_entity_id=str(source_transaction.id),
+        )
+        if neighbors:
+            candidates_by_id = repository.get_similarity_candidates_by_ids(db, [entity_id for entity_id, _ in neighbors])
+            for entity_id, raw_score in neighbors:
+                neighbor = candidates_by_id.get(entity_id)
+                if (
+                    neighbor is None
+                    or neighbor.category_source == "unsure"  # already covered by the UNSURE bucket above
+                    or neighbor.category_name == proposed_category.name  # not a cross-category flag
+                    or UUID(entity_id) in already_pending_ids
+                ):
+                    continue
+                if raw_score < settings.embedding_similarity_threshold:
+                    continue
+                if not amounts_in_range(
+                    source_amount, neighbor.amount, ratio_tolerance=amount_ratio_tolerance, absolute_floor=amount_absolute_floor
+                ):
+                    continue
+                candidate_id = UUID(entity_id)
+                repository.record_proposal(
+                    db,
+                    job_id=job_id,
+                    candidate_transaction_id=candidate_id,
+                    proposed_category_id=proposed_category.id,
+                    match_score=round(raw_score * 100, 2),
+                    source_bucket=RecategorizationProposalSourceBucket.CATEGORIZED,
+                    status=RecategorizationProposalStatus.PENDING,
+                )
+                flagged_candidate_ids.add(candidate_id)
+
+    if not flagged_candidate_ids:
+        # WR-21 step 4 whole-operation fallback: embedding unavailable or found
+        # nothing usable -- single best fuzzy-text match among every
+        # confidently-categorized, different-category candidate.
+        cross_category_candidates = [
+            c
+            for c in repository.list_similarity_candidates(db)
+            if c.category_name != proposed_category.name and UUID(c.transaction_id) not in already_pending_ids
+        ]
+        match = find_best_match(
+            source_transaction.description,
+            source_amount,
+            cross_category_candidates,
+            threshold=settings.similarity_threshold,
+            amount_ratio_tolerance=amount_ratio_tolerance,
+            amount_absolute_floor=amount_absolute_floor,
+        )
+        if match is not None:
+            repository.record_proposal(
+                db,
+                job_id=job_id,
+                candidate_transaction_id=UUID(match.candidate.transaction_id),
+                proposed_category_id=proposed_category.id,
+                match_score=match.score,
+                source_bucket=RecategorizationProposalSourceBucket.CATEGORIZED,
                 status=RecategorizationProposalStatus.PENDING,
             )
 

@@ -55,3 +55,43 @@ No new persisted entities — this unit reads/writes Unit 1's schema. These are 
 - Sentinel return value from `Embedding Manager.computeEmbedding()` (not an exception — WR-25 requires this path to never raise) signaling the oMLX endpoint was unreachable or errored for this call. Every caller (WR-21's four call sites, and `processNextEmbeddingBatch`) treats this identically: fall through to the fuzzy-text path, or leave the row `pending` for the batch job.
 
 No new DTO is introduced for `queryNearestNeighbors`'s return shape (`{entityId, similarityScore}[]`) — it's simple enough, and scoped enough to the one method, that naming it separately would add a layer without adding clarity, matching this module's existing convention (e.g. `ConversionResult`'s sibling shapes above were named only when reused; `RunProgressUpdate` was explicitly called out as *not* a new entity for the same reason).
+
+**Addendum (2026-10-03, Account Balance at a Point in Time — Epic 13, including the several-accounts-per-PDF Scope Change)**: `RawExtractedStatement` (above) is **revised**, and these transient shapes are added. No new persisted entity in this unit; `Account`, `AccountKey`, `BalanceAnchor`, and `StatementAccount` are Unit 1's.
+
+## `RawExtractedStatement` (revised)
+- `bank_name: str | None`
+- `currency: str | None` — the statement's primary currency, used as the default for a section that has none
+- `statement_date: date | None`
+- `confidence: "high" | "medium" | "low"`
+- `sections: list[RawAccountSection]` — a flat reply with no sections is wrapped as one section before anything else sees it (WR-44)
+
+## `RawAccountSection`
+- `account_identifier: str | None` — as printed (WR-48 normalizes spacing and hyphens only)
+- `account_type: "deposit" | "credit_card" | "unknown"` — default `unknown`
+- `currency: str | None` — resolved to the statement's primary currency if absent; neither means the WR-2 failure
+- `closing_balance: Decimal | None`, `closing_balance_date: date | None` — both or neither after WR-47
+- `transactions: list[RawExtractedTransaction]`
+
+## `ResolvedSection`
+- `section: RawAccountSection`, `account_id: UUID`, `was_created: bool` — one per section after the Account Resolver (WR-49), with same-account sections already collapsed into one.
+
+## Backfill shapes (internal to the Backfill Tool, never persisted in the database)
+- **`BackupManifest`**: `{created_at, tables: {table_name: {row_count, sha256, file_name}}, wipe_set_statement_ids}` — written next to the exported files and verified before any wipe and before any `finish` or `restore` (WR-54).
+- **`CapturedCorrection`**: `{statement_content_hash, transaction_date, amount, direction, description, category_id}` — one per manual correction, read from the backup's files by `finish` (WR-55).
+- **`DryRunReport`** and **`CompletionReport`**: the figures and lists named in WR-53 and WR-56; the completion report is also saved as text and JSON beside the backup.
+
+## Probable-duplicate shapes (added 2026-10-04 — Probable Duplicate Statement Detection, Epic 14; internal to the worker, never persisted beyond the Database unit's entities)
+
+- **`TxnKey`**: `{date, amount, direction: "out" | "in", currency, description}` — one transaction as the matcher sees it. `amount` is the positive flow, exact decimal.
+- **`AccountFact`**: `{identifier, currency, closing_balance?, closing_balance_date?}` — what one side knows about one of its accounts. A held statement's facts come from its sections' accounts (only keys at the same bank key, with an identifier); an incoming file's come straight from its extracted sections.
+- **`StatementSide`**: `{content_hash, bank_key, bank_name, file_name?, period: {start, end}, transactions: TxnKey[], accounts: AccountFact[], ingested_at?}` — a held statement, or an extracted file about to be judged. The period is the earliest to the latest transaction date, inclusive (WR-58).
+- **`DetectionSettings`**: `{enabled: bool, match_ratio: Decimal, min_transactions: int}` — read at startup (WR-57).
+- **`Verdict`**: `{is_duplicate, matched_count, count_a, count_b, ratio, sizes_comparable, small_gate_applied, account_rule: "not_applicable" | "shared" | "conflict", reason}` — the result of the pure rule. `sizes_comparable` is the Question 1 = C relation (WR-58).
+- **`DuplicateMatch`**: `{held_statement_hash, held_label, verdict, comparison_draft}` — what judging an incoming file returns when it finds a probable duplicate.
+- **`ComparisonDraft`**: the values for a `DuplicateComparison` and its rows before they are written: both sides' labels, periods and counts, up to 10 marked rows per side, `matched_count`, `match_ratio`, and `reason` (WR-60).
+- **`PairFinding`**: `{hash_a, hash_b, verdict, comparison_draft, keep_hash, removal_allowed, corrections_on_a, corrections_on_b}` — one pair among held statements (WR-63, WR-64). `removal_allowed` is `verdict.sizes_comparable`.
+- **`NearMiss`**: `{hash_a, hash_b, why_not_flagged}` — a pair with the same bank, an overlapping period and at least one shared transaction that was *not* flagged; printed by `check-duplicates` (WR-69).
+- **`RemovalResult`**: `{status: "completed" | "failed" | "embeddings_failed", deleted_counts, reason?}` (WR-66, WR-67).
+- **`DeleteResult`**: `{transaction_ids, counts_by_table, run_files_detached}` — what the shared delete helper returns (WR-68).
+- **`SkippedDuplicateRecord`** (Backfill Tool, in the backup manifest): `{skipped_hash, kept_hash, comparison_id, pre_registered: bool}` — one per copy the backfill skipped as a probable duplicate (WR-69).
+

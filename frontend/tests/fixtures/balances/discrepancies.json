@@ -1,0 +1,33 @@
+{
+  "accountsChecked": 1,
+  "items": [
+    {
+      "accountId": "00000000-0000-0000-0000-000000000001",
+      "currency": "SGD",
+      "name": "Main",
+      "periodGaps": [
+        {
+          "fromDate": "2026-06-30",
+          "fromStatementId": "00000000-0000-0000-0000-000000000065",
+          "gap": "70.00",
+          "printedChange": "100.00",
+          "toDate": "2026-07-31",
+          "toStatementId": "00000000-0000-0000-0000-000000000066",
+          "transactionNet": "30.00"
+        }
+      ],
+      "periodsChecked": 1,
+      "statementDifferences": [
+        {
+          "closingDate": "2026-07-31",
+          "computedBalance": "1030.00",
+          "difference": "70.00",
+          "printedBalance": "1100.00",
+          "statementId": "00000000-0000-0000-0000-000000000066"
+        }
+      ],
+      "statementsChecked": 2
+    }
+  ],
+  "tolerance": "0.00"
+}

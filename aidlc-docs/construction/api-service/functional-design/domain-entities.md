@@ -82,6 +82,74 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `CurrentActivityDTO`: `{ jobType: 'ingestion_run'|'recategorization_job', startedAt: datetime }` — present only while a job is `running` (AR-35); `null` `current` in the parent means idle (FR-BPV-4)
 - `RecentActivityEntryDTO`: `{ jobType: 'ingestion_run'|'recategorization_job', completedAt: datetime }` — up to 10 entries, most recent first (AR-36); an empty array means no recent activity, not an error
 
+## Duplicate Review (added 2026-10-04 — Probable Duplicate Statement Detection, Epic 14)
+
+*Field names are camelCase like every DTO here; enumerated values are the stored (or, for the comparison's `state`, the derived) snake_case strings, as the existing routers return an enum's `.value`.*
+
+- `StatementLabelDTO`: `{ contentHash, fileName: string | null, bankName: string | null, periodStart: date, periodEnd: date, transactionCount: int }` — read from the stored comparison (AR-41). `fileName` is null when the file name could not be resolved at detection time; the Frontend then falls back to bank and period.
+- `RemovalPreviewDTO`: `{ transactions, statementSections, recategorizationJobs, recategorizationProposals, categorizationDisagreements, recurringPaymentMatches, correctionsLost, onlyOnRemovedCopy }` — all integers (AR-41). Present only for a pending pair where removal is offered.
+- `RemovalStatusDTO`: `{ jobId, status: 'queued'|'running'|'embeddings_pending'|'embeddings_failed'|'completed'|'failed', failureReason: string | null, requestedAt, finishedAt: datetime | null, deletedCounts: object | null }` — the pair's latest removal job; null when none has been requested.
+- `PairDTO`: `{ id, comparisonId, status: 'pending'|'removed', removalOffered: bool, stale: bool, keep: StatementLabelDTO, remove: StatementLabelDTO, correctionsOnKept: int | null, correctionsOnRemoved: int | null, preview: RemovalPreviewDTO | null, removal: RemovalStatusDTO | null, foundAt }` — `removalOffered = false` means information only: dismiss, no remove (Question 1 = C). `stale` means a statement of the pair no longer exists; the counts are then null and removal is not offered (AR-41). `keep`/`remove` are the worker's stored proposal, never recomputed (AR-41).
+- `PairPage`: `{ items: PairDTO[], page, pageSize, totalCount }`
+- `PendingPairCountResponse`: `{ pendingCount: int }` — same shape as `PendingCountResponse` (AR-40).
+- `RemovalRequest`: `{ removeStatementHash: string, acknowledgedCorrectionsLost: int }` — what the user saw and confirmed (AR-42).
+- `ComparisonRowDTO`: `{ rank: int, transactionDate: date, description: string, outFlow: decimal | null, inFlow: decimal | null, currency: string, marker: 'also_on_other'|'only_on_this_one' }`
+- `ComparisonSideDTO`: `{ label: StatementLabelDTO, rows: ComparisonRowDTO[] }` — up to 10 rows, ranked largest first.
+- `ComparisonDTO`: `{ id, state: 'skipped'|'ingest_at_next_run'|'ingested_at_your_request'|'removed'|'pair_pending'|'pair_dismissed'|'pair_superseded', reason: string, matchedCount: int, matchRatio: decimal, earlier: ComparisonSideDTO, later: ComparisonSideDTO, thisFileSide: 'earlier'|'later'|null, canOverride: bool, pairId: uuid | null, removalOffered: bool | null, createdAt }` — `thisFileSide` is set only when the comparison belongs to a remembered file (AR-45); `pairId` and `removalOffered` only when it belongs to a held pair.
+- `OverrideResponse`: `{ comparisonId, state: 'ingest_at_next_run'|'ingested_at_your_request', note: string | null }` — `note` says that corrections lost with a removed copy are not restored (AR-44).
+- `ScanStatusDTO`: `{ lastCompletedAt: datetime | null, pairsFound: int | null, recheckRequested: bool, detectionEnabled: bool }` (AR-46).
+- **Endpoint paths (fixed at Frontend Functional Design, 2026-10-04, so the two units agree)**: `GET /duplicates/pairs` (query `page`, `page_size`), `GET /duplicates/pairs/pending-count`, `GET /duplicates/comparisons/{comparisonId}`, `POST /duplicates/pairs/{pairId}/remove` (body `RemovalRequest`), `POST /duplicates/pairs/{pairId}/dismiss`, `POST /duplicates/comparisons/{comparisonId}/override`, `GET /duplicates/scan-status`, `POST /duplicates/recheck`. Remove, dismiss, and re-check return the updated pair or the scan status so the Frontend can refresh without a second call.
+- **Run-file detail (addendum to `RunFileDetail`, Ingestion Trigger & Status)**: gains `duplicateComparisonId: uuid | null` and `matchedStatement: StatementLabelDTO | null`; `outcome` may now be `skipped_probable_duplicate` (the stored value, as for the other outcomes) (AR-47).
+- **Settings (addendum to Configurable Application Settings)**: the catalog gains `duplicate_detection_enabled` (enumerated `false`/`true`), `duplicate_match_ratio` (decimal), `duplicate_min_transactions` (whole number), category "Duplicate Statements" (AR-48).
+
 ## Error Shape (all endpoints)
 
 - `ErrorResponse`: `{ error: string, message: string, details?: object }` — consistent shape across all `400`/`401`/`404`/`409` responses so the Frontend has one error-handling code path.
+
+
+---
+
+# Epic 13 — Account Management and Balance (added 2026-10-18)
+
+*Field names are camelCase like every DTO here; money and balances are decimals carried as strings with two decimal places (exact, NFR-AB-1); dates are `YYYY-MM-DD`; enumerated values are the stored snake_case strings.*
+
+## Account Management
+
+- `AnchorDTO`: `{ balance: decimal, asOfDate: date, updatedAt: datetime }`.
+- `AccountDTO`: `{ id, name, bankName, accountIdentifier: string | null, type: 'deposit'|'credit_card'|'unknown', typeSetByUser: bool, currency, anchor: AnchorDTO | null, canHaveAnchor: bool, statementCount: int, transactionCount: int, closingBalanceCount: int, latestTransactionDate: date | null }` (AR-51). `canHaveAnchor` is true only for a deposit account.
+- `AccountListResponse`: `{ items: AccountDTO[] }` (small and unpaged: tens of accounts).
+- `AccountUpdateRequest`: `{ name?: string, type?: 'deposit'|'credit_card'|'unknown' }` — at least one (AR-52).
+- `AnchorRequest`: `{ balance: decimal (string), asOfDate: date }` (AR-53).
+- `AnchorResponse`: `{ anchor: AnchorDTO, previous: AnchorDTO | null }`.
+- `MergeRequest`: `{ absorbedAccountId: uuid, keepAnchorFrom?: uuid }` — the surviving account is the one in the path (AR-54).
+
+## Balances
+
+- `BasisDTO`: `{ source: 'anchor'|'statement_closing', date: date, statementId: uuid | null }` — what the figure was worked from (AR-55).
+- `AccountBalanceDTO`: `{ accountId, name, bankName, currency, status: 'ok'|'anchor_required'|'fx_unavailable', balanceNative: decimal | null, balanceSgd: decimal | null, isApproximate: bool, fxRateDate: date | null, basis: BasisDTO | null, latestTransactionDate: date | null }` (AR-58). `balanceSgd` is null unless the status is `ok` (a balance is never guessed). `balanceNative` is present whenever the account has a balance (status `ok` **or** `fx_unavailable`: the account's own-currency figure is known, only its conversion is missing) and null only for `anchor_required` *(corrected 2026-10-18: this first said both were null unless `ok`; the built service and its test return the native figure for `fx_unavailable`)*.
+- `ExcludedAccountDTO`: `{ accountId, name, reason: 'anchor_required'|'fx_unavailable' }`.
+- `UnlinkedNoticeDTO`: `{ count: int, bankNames: string[], earliestDate: date, latestDate: date, netByCurrency: { currency: string, net: decimal }[] }` (AR-60).
+- `BalancesResponse`: `{ resolvedDate: date, today: date, requestedMonth: string | null, ingestedThroughDate: date | null, accounts: AccountBalanceDTO[], combinedTotalSgd: decimal | null, combinedIncludesCount: int, excluded: ExcludedAccountDTO[], hasApproximate: bool, unlinkedTransactions: UnlinkedNoticeDTO | null }` (AR-58).
+- `SeriesAccountDTO`: `{ accountId, name, currency }` — the accounts plotted.
+- `SeriesPointDTO`: `{ date: date, combinedSgd: decimal | null, perAccount: { [accountId]: decimal | null }, approximateAccountIds: uuid[] }` — a null per-account value is a gap (AR-61).
+- `SeriesResponse`: `{ start: date, end: date, granularity: 'day'|'month', accounts: SeriesAccountDTO[], missingAccounts: ExcludedAccountDTO[], points: SeriesPointDTO[] }` — *(corrected 2026-10-18: the range is `start` and `end`, as built and tested; this document first said `from` and `to`, which is still the name of the two query parameters)*. `granularity` is the resolved one, never `auto`.
+- `StatementDifferenceDTO`: `{ statementId: uuid | null, closingDate: date, printedBalance: decimal, computedBalance: decimal, difference: decimal }` — `difference` is printed minus computed from the anchor (AR-62).
+- `PeriodGapDTO`: `{ fromStatementId: uuid | null, toStatementId: uuid | null, fromDate: date, toDate: date, printedChange: decimal, transactionNet: decimal, gap: decimal }`.
+- *(Corrected 2026-10-18: the three statement ids above are nullable as built.)*
+- `AccountDiscrepancyDTO`: `{ accountId, name, currency, statementsChecked: int, periodsChecked: int, statementDifferences: StatementDifferenceDTO[], periodGaps: PeriodGapDTO[] }` — only accounts with at least one finding.
+- `DiscrepanciesResponse`: `{ tolerance: decimal, accountsChecked: int, items: AccountDiscrepancyDTO[] }`.
+
+## Endpoint paths (fixed here so the Frontend unit agrees; all require login)
+
+| Method and path | Purpose | Request | Success | Errors (AR-64) |
+|---|---|---|---|---|
+| `GET /accounts` | list accounts | — | `AccountListResponse` | — |
+| `PATCH /accounts/{accountId}` | rename and/or retype | `AccountUpdateRequest` | `AccountDTO` | 404, 400 |
+| `PUT /accounts/{accountId}/anchor` | set or replace the anchor | `AnchorRequest` | `AnchorResponse` | 404, 409 `not_a_deposit_account`, 400 |
+| `POST /accounts/{accountId}/merge` | merge `absorbedAccountId` into this account | `MergeRequest` | `AccountDTO` (the survivor) | 404, 400, 409 |
+| `GET /balances?date=YYYY-MM-DD` or `?month=YYYY-MM` | balances on a date or month | — | `BalancesResponse` | 400 |
+| `GET /balances/series?from=&to=&granularity=auto\|day\|month` | balance over time | — | `SeriesResponse` | 400 |
+| `GET /balances/discrepancies` | statement differences and period gaps | — | `DiscrepanciesResponse` | — |
+
+- **Settings (addendum to Configurable Application Settings)**: the catalog gains `reporting_time_zone` (string, default `Asia/Singapore`) and `balance_mismatch_tolerance` (decimal 0.00 to 1000.00, default `0.00`), category "Balances", owned by the API Service (AR-63).
+- **Existing entities touched, none changed in shape**: `accounts`, `account_keys`, `balance_anchors`, `statement_accounts` (merge re-points rows; anchors are upserted), read-only use of `transactions`, `bank_statements`, `fx_rate_cache`. No new table, column or migration.

@@ -9,10 +9,15 @@ import {
   bulkRejectProposals,
   listPendingDisagreements,
   listPendingProposals,
+  type ProposalSortByOption,
   rejectDisagreement,
   rejectProposal,
   resolveDisagreement,
 } from "../api/recategorization";
+import type { DisagreementDTO } from "../api/types";
+import { DuplicateStatementsPanel } from "../components/DuplicateStatementsPanel";
+import { FlowAmount } from "../components/FlowAmount";
+import { SortableTh } from "../components/SortableTh";
 
 const PAGE_SIZE = 20;
 
@@ -71,16 +76,47 @@ function BackupStatusPanel() {
 // different row shape (two candidate categories, no bulk actions, Application
 // Design Decision 2) from ProposalTable above, same "visually separate section"
 // convention BackupStatusPanel established.
+type DisagreementSortKey = "date" | "description" | "amount" | "similarityScore";
+
+function sortDisagreements(
+  items: DisagreementDTO[],
+  sortKey: DisagreementSortKey,
+  sortDir: "asc" | "desc",
+): DisagreementDTO[] {
+  const sorted = [...items].sort((a, b) => {
+    switch (sortKey) {
+      case "date":
+        return a.candidateTransaction.transactionDate.localeCompare(b.candidateTransaction.transactionDate);
+      case "description":
+        return a.candidateTransaction.description.localeCompare(b.candidateTransaction.description);
+      case "amount": {
+        const amountA = Number(a.candidateTransaction.outFlow ?? a.candidateTransaction.inFlow ?? 0);
+        const amountB = Number(b.candidateTransaction.outFlow ?? b.candidateTransaction.inFlow ?? 0);
+        return amountA - amountB;
+      }
+      case "similarityScore":
+        return Number(a.similarityScore) - Number(b.similarityScore);
+    }
+  });
+  return sortDir === "asc" ? sorted : sorted.reverse();
+}
+
 function DisagreementTable() {
   const queryClient = useQueryClient();
   const [singleActionError, setSingleActionError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<DisagreementSortKey>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const handleSort = (key: DisagreementSortKey, dir: "asc" | "desc") => {
+    setSortKey(key);
+    setSortDir(dir);
+  };
 
   const { data, isPending } = useQuery({
     queryKey: ["recategorization", "disagreements"],
     queryFn: () => listPendingDisagreements(1, PAGE_SIZE),
   });
 
-  const items = data?.items ?? [];
+  const items = sortDisagreements(data?.items ?? [], sortKey, sortDir);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["recategorization", "disagreements"] });
@@ -128,10 +164,22 @@ function DisagreementTable() {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-slate-500 dark:text-slate-400">
-            <th>Date</th>
-            <th>Description</th>
-            <th>Amount</th>
-            <th>Similarity score</th>
+            <SortableTh label="Date" sortKey="date" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortableTh
+              label="Description"
+              sortKey="description"
+              activeSortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+            <SortableTh label="Amount" sortKey="amount" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortableTh
+              label="Similarity score"
+              sortKey="similarityScore"
+              activeSortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
             <th></th>
           </tr>
         </thead>
@@ -146,7 +194,12 @@ function DisagreementTable() {
             >
               <td>{disagreement.candidateTransaction.transactionDate}</td>
               <td>{disagreement.candidateTransaction.description}</td>
-              <td>{disagreement.candidateTransaction.outFlow ?? disagreement.candidateTransaction.inFlow ?? ""}</td>
+              <td>
+                <FlowAmount
+                  outFlow={disagreement.candidateTransaction.outFlow}
+                  inFlow={disagreement.candidateTransaction.inFlow}
+                />
+              </td>
               <td>{disagreement.similarityScore}</td>
               <td>
                 <button
@@ -192,13 +245,21 @@ function DisagreementTable() {
 export function ReviewPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<ProposalSortByOption>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [singleActionError, setSingleActionError] = useState<string | null>(null);
 
+  const handleSort = (key: ProposalSortByOption, dir: "asc" | "desc") => {
+    setSortBy(key);
+    setSortDir(dir);
+    setPage(1); // a new sort order invalidates whatever page you were on
+  };
+
   const { data, isPending } = useQuery({
-    queryKey: ["recategorization", "proposals", page],
-    queryFn: () => listPendingProposals(page, PAGE_SIZE),
+    queryKey: ["recategorization", "proposals", page, sortBy, sortDir],
+    queryFn: () => listPendingProposals(page, PAGE_SIZE, sortBy, sortDir),
   });
 
   const items = data?.items ?? [];
@@ -287,6 +348,8 @@ export function ReviewPage() {
 
       <DisagreementTable />
 
+      <DuplicateStatementsPanel />
+
       {singleActionError && (
         <p data-testid="review-single-action-error" className="mb-3 text-sm text-amber-600 dark:text-amber-400">
           {singleActionError}
@@ -331,13 +394,31 @@ export function ReviewPage() {
             <thead>
               <tr className="text-left text-slate-500 dark:text-slate-400">
                 <th></th>
-                <th>Date</th>
-                <th>Description</th>
-                <th>Amount</th>
-                <th>Current category</th>
-                <th>Proposed category</th>
-                <th>Score</th>
-                <th>Source</th>
+                <SortableTh label="Date" sortKey="date" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortableTh
+                  label="Description"
+                  sortKey="description"
+                  activeSortKey={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh label="Amount" sortKey="amount" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortableTh
+                  label="Current category"
+                  sortKey="currentCategory"
+                  activeSortKey={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh
+                  label="Proposed category"
+                  sortKey="proposedCategory"
+                  activeSortKey={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTh label="Score" sortKey="score" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
+                <SortableTh label="Source" sortKey="source" activeSortKey={sortBy} sortDir={sortDir} onSort={handleSort} />
                 <th></th>
               </tr>
             </thead>
@@ -360,7 +441,12 @@ export function ReviewPage() {
                   </td>
                   <td>{proposal.candidateTransaction.transactionDate}</td>
                   <td>{proposal.candidateTransaction.description}</td>
-                  <td>{proposal.candidateTransaction.outFlow ?? proposal.candidateTransaction.inFlow ?? ""}</td>
+                  <td>
+                    <FlowAmount
+                      outFlow={proposal.candidateTransaction.outFlow}
+                      inFlow={proposal.candidateTransaction.inFlow}
+                    />
+                  </td>
                   <td>{proposal.candidateTransaction.category.name}</td>
                   <td>{proposal.proposedCategory.name}</td>
                   <td>{proposal.matchScore}</td>

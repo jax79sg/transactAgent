@@ -1,5 +1,10 @@
 # Bank Transaction Insights
 
+> [!NOTE]
+> **About this project.** This is **jax79sg**'s means of learning and understanding the challenges of building software with a coding agent. **Much of this entire repository — the code, the tests and the documentation — was made with [Claude Code](https://claude.com/claude-code), using Anthropic's Claude Opus and Sonnet models.** The [`aidlc-docs/`](aidlc-docs/) folder keeps the trail: what was asked, what was decided and what was built, change by change.
+>
+> **How it was checked.** Every change is built behind automated tests and security scans, and the findings are tracked: since the first push (3 Aug 2026), **90 vulnerabilities and code-scanning findings have been fixed** and **none are open on GitHub** (figures as of 11 Oct 2026; that is not a claim that it is secure: one high-severity advisory, in a development-only build tool, has no patch released and GitHub auto-dismissed it; the breakdown, and what this is *not*, is in [How this was reviewed and hardened](#how-this-was-reviewed-and-hardened)).
+
 [![Database](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-database.yml)
 [![API Service](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-api-service.yml)
 [![Ingestion Worker](https://github.com/jax79sg/transactAgent/actions/workflows/test-ingestion-worker.yml/badge.svg)](https://github.com/jax79sg/transactAgent/actions/workflows/test-ingestion-worker.yml)
@@ -11,7 +16,49 @@
 
 A self-hosted, single-user web app that pulls your bank statement PDFs from a private Google Drive folder, extracts transactions with an LLM, auto-categorizes them (learning from your corrections over time), and gives you a filterable transaction table plus financial dashboards. Fully containerized — one `docker-compose up` runs the whole thing on your own machine.
 
-📘 **[User Guide](https://jax79sg.github.io/transactAgent/)** — a screenshot walkthrough of every page (login, dashboard, transactions, Ask AI, ingestion, review, settings). Screenshots use AI-generated sample data, not real transactions.
+📘 **[User Guide](https://jax79sg.github.io/transactAgent/)** — a screenshot walkthrough of every page (login, top bar, dashboard, transactions, Ask AI, ingestion, review, settings). Every release keeps its own copy of the guide — see the [list of releases](https://jax79sg.github.io/transactAgent/releases.html); the version you are running is shown in the app's top bar and under Settings. Screenshots use AI-generated sample data, not real transactions. To cut a release, see [RELEASING.md](RELEASING.md).
+
+## How this was reviewed and hardened
+
+Written down so a reader can judge it, including the parts that are not flattering. Figures are a snapshot from GitHub's own security records and the repository on **11 October 2026**; the live numbers are on the repository's [Security tab](https://github.com/jax79sg/transactAgent/security).
+
+**Reviewed**
+
+- **Approval gates, on the record.** The project follows a written workflow (AI-DLC): requirements, designs and code-generation plans are written first and approved by jax79sg before code is generated. Every request, answer and approval is logged verbatim in [`aidlc-docs/audit.md`](aidlc-docs/audit.md) (460 logged inputs). Some approvals were a standing instruction to carry on, and the log shows which.
+- **Pull requests with automated checks.** From 21 Aug 2026 every change has been merged through a pull request (28 merged so far; none committed straight to `main` since, the last two direct commits having been made that morning, before the first pull request was opened). Each runs about 15 checks: lint and type checks, the test suites below, Docker builds, CodeQL, gitleaks, GitGuardian, and dependency scans. Automated checks and scanning were only switched on on 17 Aug, two weeks after the first push, so the first two weeks had none.
+- **Tests: about 1,800** (1,823: 257 database, 734 ingestion worker, 467 API, 327 frontend, 38 release tooling), run against a real PostgreSQL, with property-based tests on pure logic and four browser end-to-end specs run nightly.
+- **The tests were tested.** For recent features, code was deliberately broken in a scratch copy to confirm a test notices (for example 72 such checks on the Costs page and 42 on release numbering); each time one went unnoticed, a test was added. The results are in `aidlc-docs/`.
+
+**Hardened (in the app)**
+
+- **57 of the API's 61 operations need a login.** The four that don't are the health check, the release number, sign-in, and the address Google redirects back to during Drive connect (the API's own documentation pages are public too). Passwords are stored as bcrypt hashes and sessions expire.
+- The API accepts browser requests only from the addresses listed in `FRONTEND_ORIGIN`.
+- The Settings page can change only an allow-list of values, and never shows secrets.
+- Destructive steps are guarded: removing a duplicate statement lists exactly what will be deleted and asks first; the one-time re-ingestion needs a typed confirmation and a backup; the newest database migrations refuse to downgrade over data they would destroy.
+- Secrets live in a git-ignored `.env`; GitHub secret scanning and push protection are on, and CI runs gitleaks with a custom rule for password hashes.
+
+**What it took** (Claude Code usage, as of 10 Oct 2026)
+
+Building this with Claude Code from 15 Aug to 10 Oct 2026 used about **$760 at Anthropic's API list prices**: about 6,000 requests in 11 sessions; 71% of the cost is Claude re-reading the conversation so far from cache on every turn. Treat it as an estimate and a floor, not a bill: it cannot see calls Claude Code makes that are not in its transcripts (on the one session that could be checked, Claude Code's own figure was 2.5% to 9.0% higher), the advisor model's tokens, or anything before 15 Aug, twelve days after the first commit. The ledger, the method and every caveat are in [`aidlc-docs/claude-usage/`](aidlc-docs/claude-usage/SUMMARY.md); `python scripts/claude_usage.py update` refreshes them.
+
+**Vulnerabilities since the first push** (dependency and code scanning began on 17 Aug 2026, so nothing before that was scanned)
+
+| Source | Raised | **Fixed** | Still open |
+|---|---|---|---|
+| Dependabot (known-vulnerable dependencies) | 80 | **79** (5 critical, 26 high, 47 medium, 1 low) | **0**; 1 more, a high in a development-only build tool (`braces`) with no patch released, was auto-dismissed by GitHub |
+| CodeQL (code scanning) | 11 | **11** (2 in commits before merge: a CI-only fixture password echoed in a script's output, and a missing workflow permissions block; 9 on 11 Oct: the same missing block in nine more workflows) | **0** |
+| GitHub secret scanning | 0 | | 0 |
+
+**90 fixed, none open, one unpatched.** Fourteen of the dependency fixes landed between 17 Aug and 2 Oct (thirteen of them within six days of the first alerts: the vitest and vite CVEs, the PyJWT and clearml set, nanoid). The other **49, including 4 critical and 22 high, were fixed on 9 Oct** through four pull requests ([#37](https://github.com/jax79sg/transactAgent/pull/37), [#38](https://github.com/jax79sg/transactAgent/pull/38), [#39](https://github.com/jax79sg/transactAgent/pull/39), [#40](https://github.com/jax79sg/transactAgent/pull/40)): PyJWT and urllib3 in the Python lock files, fsspec in model training, and vitest 4 for the frontend. The last **16 dependency alerts and the 9 CodeQL warnings were fixed on 11 Oct** through four more ([#42](https://github.com/jax79sg/transactAgent/pull/42), [#43](https://github.com/jax79sg/transactAgent/pull/43), [#44](https://github.com/jax79sg/transactAgent/pull/44), [#45](https://github.com/jax79sg/transactAgent/pull/45)); GitHub closed them within minutes of the merges. Dependabot's automatic security updates are off and the dependency scan in CI is report-only, so all of these were fixed by hand, after most of those alerts had been open for two to seven days.
+
+Two things worth knowing about those fixes. The container images install their packages when they are built, and the running API and worker containers were already on the patched PyJWT and urllib3, so nothing had to be redeployed; the lock files decide what CI and a developer's machine use. And some fixes are compromises or large jumps. Model training now overrides two limits its own tooling declares: `fsspec` is newer than `datasets` 3 allowed, and `datasets` is 5.1 where `mlx-tune`, which pulls it in, declares `<4` (no `mlx-tune` release allows a newer one). The unit tests and a smoke test pass, but a real fine-tuning run was **not** tried against them. The frontend moved to React Router 7, the API's lock to oauthlib 4 and the test tools to pytest 9; the test suites pass and the built frontend was loaded in a browser, but the nightly browser tests were not run.
+
+**What this is not**
+
+- **Nothing open is not the same as secure.** GitHub lists no open alerts, but that is only what its scanners know, and new advisories keep arriving. A high-severity advisory in `braces`, which the frontend's Tailwind 3 build tooling pulls in, has no patched release; GitHub auto-dismissed it, it is build tooling that does not ship in the app, and the real fix would be moving to Tailwind 4, which has not been done.
+- It has had **no independent security review or penetration test**, and the workflow's security-baseline rules were **not enabled**: the hardening above comes from the scanners, the tests and jax79sg's approvals, not from a formal security design review.
+- "Fixed" means GitHub's records or the commits say so. These figures are a snapshot of one day.
+- It is a single-user app designed to run on your own machine or network. Treat it as a learning project.
 
 ## What it does
 
@@ -22,6 +69,7 @@ A self-hosted, single-user web app that pulls your bank statement PDFs from a pr
 - **Multi-currency**: converts everything to SGD for dashboards, using the statement's own printed conversion when available, a public FX-rate API otherwise — original amounts always retained
 - **Dashboards**: category spending trends, income vs. expenses, per-bank breakdowns
 - **Ask AI**: ask a plain-language question about your own transaction history (e.g. "is this $33,000 outflow likely a transfer to my credit account?") and get an answer grounded in your real transaction data — scoped to a date range you pick, or your whole history. Each transaction also has a one-click "Ask AI" shortcut with a suggested question pre-filled.
+- **Costs**: what the app has spent on Google's Gemini models (statement extraction, categorization, embeddings, Ask AI), in US dollars, by day, week or month, optionally grouped by purpose or model — priced from each call's token count and the prices in Settings
 
 ## Architecture
 

@@ -38,5 +38,15 @@ api-service/src/api_service/
   dashboards/            # category trends, cash flow, bank breakdown
   ingestion/              # trigger/status/history
   categories/             # whitelist CRUD
+  accounts/               # Epic 13: list, rename/retype, anchor, merge
+  balances/               # Epic 13: balance on a date, balance over time, discrepancies (calculation.py is pure)
   health.py               # /health
 ```
+
+Epic 14 (Probable Duplicate Statement Detection) is described in [probable-duplicate-summary.md](probable-duplicate-summary.md).
+
+Epic 13 (Account Balance at a Point in Time, the API side) is described in [account-balance-summary.md](account-balance-summary.md).
+
+### Property-based tests
+
+The balance arithmetic has property-based tests (Hypothesis). `tests/conftest.py` registers two profiles: `dev` (random examples; a failure prints the blob that replays it exactly) and `ci` (derandomized, so every CI run is identical; chosen automatically when the `CI` environment variable is set, as GitHub Actions does). To replay a failing property: run the same test with `CI=1` to get the same examples, or paste the printed `@reproduce_failure(...)` line above the test; shrinking is never disabled, so the failure shown is already the smallest found.

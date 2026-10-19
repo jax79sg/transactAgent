@@ -151,3 +151,164 @@ App
 - **Empty recent list**: shows a brief "No recent activity" message rather than an empty-looking blank area, per US-11.3's edge case.
 - **Visible on every page** (US-11.1) — lives in `NavBar.tsx` itself, not per-page, same placement precedent as the two existing badges.
 - **API**: `GET /background-activity/summary`
+
+## Shared: Types, API Module, and Formatting Helpers (Addendum 2026-10-04 — Probable Duplicate Statement Detection, Epic 14)
+
+- **Types** (mirroring the API design's DTOs; field names camelCase, enumerated values the API's snake_case strings): `StatementLabel`, `RemovalPreview`, `RemovalStatus`, `DuplicatePair`, `DuplicatePairPage`, `PendingPairCountResponse`, `RemovalRequest`, `ComparisonRow`, `ComparisonSide`, `DuplicateComparison`, `OverrideResponse`, `ScanStatus`. `RunFileOutcome` gains `"skipped_probable_duplicate"` (it is a closed union and would otherwise reject the new value); `RunFileDetail` gains `duplicateComparisonId: string | null` and `matchedStatement: StatementLabel | null`.
+- **API module `api/duplicates.ts`** (one function per endpoint; paths fixed here so both units agree):
+  - `GET /duplicates/pairs` (query `page`, `page_size`) -> `DuplicatePairPage`
+  - `GET /duplicates/pairs/pending-count` -> `PendingPairCountResponse`
+  - `GET /duplicates/comparisons/{comparisonId}` -> `DuplicateComparison`
+  - `POST /duplicates/pairs/{pairId}/remove` (body `RemovalRequest`) -> `DuplicatePair`
+  - `POST /duplicates/pairs/{pairId}/dismiss` -> `DuplicatePair`
+  - `POST /duplicates/comparisons/{comparisonId}/override` -> `OverrideResponse`
+  - `GET /duplicates/scan-status` -> `ScanStatus`
+  - `POST /duplicates/recheck` -> `ScanStatus`
+- **`formatStatementLabel(label)`**: "<file name> (<bank>, <period>)"; with no file name, "<bank> (<period>)"; with neither, "a statement (<period>)". **`formatPeriod(start, end)`**: "2 Jun to 30 Jun 2026" when both dates are in one year, "28 Dec 2025 to 3 Jan 2026" otherwise; month names are written out in the helper, not taken from the browser's locale, so the text is identical everywhere and in tests. Used by the Ingestion results, the panel, and the comparison page (A-PD-3).
+- **`duplicateErrorMessage(error)`**: maps the API's stable error codes (`pair_not_pending`, `removal_not_offered`, `removal_already_requested`, `statement_missing`, `confirmation_out_of_date`, `not_a_skipped_file`) to plain sentences; any other error shows the server's message.
+
+## NavBar / PendingDuplicatesBadge (Addendum 2026-10-04 — Epic 14)
+
+- **PendingDuplicatesBadge**: a second count badge next to the "Review" link, beside the existing `PendingReviewBadge`, in a different colour (violet, with a dark-mode variant) so the two are told apart without reading; hidden when the count is 0 (US-14.5 "no badge when empty"); `aria-label` "N duplicate statements awaiting review"; `data-testid="pending-duplicates-badge"`. Polls `GET /duplicates/pairs/pending-count` every 30 seconds, mounted once at `NavBar`. Its count follows AR-40 (pending pairs with no removal in flight, information-only pairs included until dismissed).
+- It does **not** change `PendingReviewBadge` or what its number means (NFR-PD-6).
+- **API**: `GET /duplicates/pairs/pending-count`
+
+## ReviewPage / DuplicateStatementsPanel / DuplicatePairRow / RemovalConfirmDialog (Addendum 2026-10-04 — Epic 14)
+
+- **DuplicateStatementsPanel**: a bordered section (the backup panel's convention) on the Review page **below `DisagreementTable` and above the proposals table**, titled "Probable duplicate statements". Always rendered; its height depends on its state:
+  - *Header line* (always): "Last checked <time>; <n> found" with a **Check again** button (`POST /duplicates/recheck`; afterwards "Re-check requested; the worker will look shortly").
+  - *Detection off* (`scanStatus.detectionEnabled` false, nothing listed): "Duplicate detection is switched off." with a link to Settings.
+  - *Nothing found* (detection on, nothing listed): "No probable duplicate statements."
+  - *Groups*, each with its own heading and shown only when non-empty, from `GET /duplicates/pairs`: **Awaiting your decision** (pending pairs, information-only ones included), **Being removed** (removal queued, running, or cleaning up embeddings), **Removed in the last 24 hours** (done, or "removed; cleaning up search data failed, harmless").
+  - Paginated (20 per page, Previous/Next) like the other review lists.
+- **DuplicatePairRow**: shows the copy to **keep** and the copy proposed for **removal** (each: file name, bank, period, transaction count) and the manual corrections on each; a "View comparison" link to `/duplicates/<comparisonId>`; and:
+  - *Removal offered*: **Remove duplicate…** (opens `RemovalConfirmDialog`) and **Not a duplicate — dismiss**.
+  - *Information only* (`removalOffered` false): the note "These statements differ in size, so this is listed for information only." with **View comparison** and **Not a duplicate — dismiss** only; **no remove action** (Question 1 = C).
+  - *Stale* (`stale` true): "One of these statements no longer exists." with dismiss only.
+  - *Removal status* (when `removal` is present): queued, "Removing…", "Cleaning up…", "Removed" with the counts deleted, "Removed; cleaning up search data failed (harmless)", or "Removal failed: <reason>" with the actions available again so it can be retried.
+  - A failed action shows its message inline on the row (`duplicateErrorMessage`).
+- **RemovalConfirmDialog**: the app's existing dialog component (as the Settings page's confirmations), opened from a row. It states, from `pair.preview`: the transactions, statement sections, recategorization jobs and proposals, categorization disagreements and recurring-payment matches that will be **permanently deleted**; that the removed transactions' **embeddings are removed too**; how many transactions exist **only on this copy** and will be lost (`onlyOnRemovedCopy`); how many **manual corrections** on it will be lost (`correctionsLost`); and that the Drive file is left alone. Buttons **Cancel** and **Delete permanently** (disabled while the request is in flight). On confirm it sends `{removeStatementHash, acknowledgedCorrectionsLost}` from what the dialog showed. On an `confirmation_out_of_date`, `pair_not_pending`, `removal_not_offered`, or `statement_missing` answer the dialog closes, the list refreshes, and a message explains; nothing was deleted.
+- After remove, dismiss, or "Check again": the pair list, the pending count (badge), and the scan status are refreshed together.
+- **API**: `GET /duplicates/pairs`, `POST /duplicates/pairs/{id}/remove`, `POST /duplicates/pairs/{id}/dismiss`, `GET /duplicates/scan-status`, `POST /duplicates/recheck`
+
+## ComparisonPage / ComparisonSidePanel / OverrideAction (Addendum 2026-10-04 — Epic 14)
+
+- **ComparisonPage**: a route, `/duplicates/:comparisonId`, inside the same protected layout as every page, loading `GET /duplicates/comparisons/{id}`. A "Back" link returns to where the user came from (the Ingestion run results or the Review panel). It shows: a heading; a **state banner** (`skipped`: "Skipped as a probable duplicate"; `removed`: "Removed at your confirmation; the file is still in Google Drive"; `ingest_at_next_run`: "Will be ingested on the next ingestion run" with a link to the Ingestion page; `ingested_at_your_request`: "Ingested at your request"; `pair_pending`, `pair_dismissed`, `pair_superseded`: the pair's state in words); the stored **reason** (which already states a size difference prominently); the **headline figures** (both transaction counts, both periods, how many matched).
+- **ComparisonSidePanel** (two of them): titled by role. For a skipped or removed file, `thisFileSide` makes the titles "This file" and "The statement it matches"; for a held pair, "Earlier ingested" and "Later ingested". Shows the statement label and a table of up to 10 rows (date, description, amount, currency), largest first (US-14.2). Each row carries a **text marker**, "Also on the other statement" or "Only on this one", plus a subtle tint, so meaning never depends on colour alone. A statement with 10 or fewer transactions shows all of them. Wide screens place the two panels side by side; narrow screens stack them; each table scrolls horizontally if needed.
+- **OverrideAction**: shown only when `canOverride`. Button **Not a duplicate — ingest it** (`POST /duplicates/comparisons/{id}/override`). For `skipped` it is **one click**. For `removed` it first shows an inline warning ("This file will be ingested on the next run. The manual corrections that sat on this copy are not restored.") and needs a second click. On success the page re-reads the comparison, so the banner changes to "Will be ingested on the next ingestion run". A failure shows `duplicateErrorMessage`.
+- For a held pair, the page also shows whether removal is offered and a link back to the Review panel; it offers no remove action itself (removal is confirmed only from the panel, where the preview is).
+- **API**: `GET /duplicates/comparisons/{id}`, `POST /duplicates/comparisons/{id}/override`
+
+## IngestionPage: RunFiles Outcome Cell (Addendum 2026-10-04 — Epic 14)
+
+- In the per-file table of a run, a file whose outcome is `skipped_probable_duplicate` shows "Probable duplicate of <`formatStatementLabel(matchedStatement)`>" as a **link to `/duplicates/<duplicateComparisonId>`** (US-14.1/14.2). A file remembered from an earlier run appears the same way in a later run (US-14.4). Every other outcome renders as before; sorting by outcome still sorts on the stored value. Nothing else on the page changes.
+
+## SettingsPage: Enumerated Settings as a Dropdown, and the New Category (Addendum 2026-10-04 — Epic 14)
+
+- **Enumerated settings** (`type === "enum"` with `allowedValues`) are edited with a **dropdown** of those values instead of a free-text box, keeping the existing `data-testid` (`setting-input-<name>`); every other type keeps its text box. This corrects an earlier statement that a dropdown already existed. It also benefits the one existing enumerated setting (`low`, `medium`, `high`).
+- **CATEGORY_ORDER** gains "Duplicate Statements", after "Ingestion". The three new settings (`duplicate_detection_enabled`, `duplicate_match_ratio`, `duplicate_min_transactions`) otherwise appear through the existing catalog-driven rendering, with the existing save confirmation and restart guidance (owning service: the Ingestion Worker). The switch's own description (from the API) says to enable it only after the accuracy check and that it takes effect when the worker restarts.
+
+
+
+---
+
+# Epic 13 — Account Balance at a Point in Time (Addendum 2026-10-18)
+
+*Functional Design for the Frontend SPA unit of Epic 13, answering the five questions in `construction/plans/frontend-account-balance-functional-design-plan.md` (Q1 = A, Q2 = A, Q3 = A, Q4 = A, Q5 = A). Stories US-13.2 to US-13.6. The API contract is `construction/api-service/functional-design/domain-entities.md` (Epic 13 section) **as corrected on 2026-10-18**: the series response names its range `start` and `end`, and the statement ids in the discrepancy DTOs may be null. Technology-agnostic where it can be; component names and `data-testid` values are fixed here so tests and Playwright agree.*
+
+## Shared: Types, API Modules, and Helpers (Epic 13)
+
+- **Types** in `api/types.ts`, mirroring the API's DTOs (camelCase fields; enumerated values the API's snake_case strings; money and balances are two-place **strings**, never numbers): `AccountType` (`"deposit" | "credit_card" | "unknown"`), `AnchorDTO`, `AccountDTO`, `AccountListResponse`, `AccountUpdateRequest`, `AnchorRequest`, `AnchorResponse`, `MergeRequest`; `AccountBalanceStatus` (`"ok" | "anchor_required" | "fx_unavailable"`), `BasisDTO`, `AccountBalanceDTO`, `ExcludedAccountDTO`, `UnlinkedNoticeDTO`, `BalancesResponse`; `BalanceGranularity` (`"auto" | "day" | "month"`), `SeriesAccountDTO`, `SeriesPointDTO`, `SeriesResponse` (with `start` and `end`), `StatementDifferenceDTO`, `PeriodGapDTO`, `AccountDiscrepancyDTO`, `DiscrepanciesResponse`. Statement ids are typed `string | null` where the API allows it.
+- **`api/client.ts`**: the request-method type gains `"PATCH"` (the rename/retype call). Nothing else in the client changes; query keys are still camelCase and become snake_case on the wire, which leaves `date`, `month`, `from`, `to`, `granularity` unchanged.
+- **`api/accounts.ts`** (one function per endpoint): `listAccounts()` -> `GET /accounts`; `updateAccount(id, {name?, type?})` -> `PATCH /accounts/{id}`; `setAnchor(id, {balance, asOfDate})` -> `PUT /accounts/{id}/anchor` (`AnchorResponse`); `mergeAccounts(survivorId, {absorbedAccountId, keepAnchorFrom?})` -> `POST /accounts/{id}/merge` (the survivor's `AccountDTO`).
+- **`api/balances.ts`**: `getBalances({date} | {month})` -> `GET /balances`; `getBalanceSeries({from?, to?, granularity?})` -> `GET /balances/series` (with no `from`/`to` the API supplies the last 12 months ending today); `getDiscrepancies()` -> `GET /balances/discrepancies`.
+- **`lib/money.ts`** (pure, no `Number`, no locale; the property-test targets): `formatAmount(text)` groups thousands in a decimal string ("12345.67" -> "12,345.67", "-1234.5" -> "-1,234.50"; a missing value is "—"); `formatMoney(text, currency)` -> "SGD 12,345.67"; `parseAmountInput(text)` accepts what a person types ("1234.5", "1,234.50", "-12.3", surrounding spaces; no currency symbol, no exponent) and returns the canonical two-place string or a reason ("not a number", "more than two decimal places"); `toCents(text)` / `fromCents(bigint)` and `addAmounts` / `subtractAmounts` for exact sums (BigInt cents). The Frontend never adds two amounts as floating-point numbers; `Number(...)` happens only at the chart boundary.
+- **`lib/balances.ts`** (pure): `describeBasis(basis)` ("your entered balance of 5 Oct 2026" / "the statement closing balance of 31 Aug 2026"); `describeMonthLookup(response)`; `localToday()` (the browser's local calendar date, built from local year/month/day, **not** `toISOString()`); `dayBefore(iso)`; `mergeTypeOutcome(absorbed, survivor)` (mirrors the API's AR-54 type rule so the merge preview can state it); `nextAccountNeedingBalance(accounts, afterId)`; `balanceErrorMessage(error)` (below). Date text reuses the Epic 14 month-name table (`formatDay` is exported from `lib/duplicates.ts` for this and stays in one place).
+- **`lib/balanceChart.ts`** (pure): `rankSeriesAccounts`, `buildBalanceLines`, `summarizeSeries`, `labelForPoint` (below).
+
+## DashboardPage: Tabs, Date Filter, and the Balances Tab (Epic 13)
+
+- The tab list gains a **fifth tab, "Balances"** (`data-testid="dashboard-tab-balances"`), after Recurring Payments. The Dashboard **still opens on Category Trends** (Q1 = A). The tab list scrolls sideways on a narrow screen and its triggers do not wrap, so five tabs fit a phone.
+- `Tabs.Root` becomes **controlled** so the page knows the active tab. The page-level **From/To box is hidden while Balances is active** and shown again for the other four tabs, which are otherwise unchanged. (It filters the three older charts; the Balances tab has its own range.)
+- **BalancesTab** (`data-testid="balances-tab"`) composes, top to bottom: `DiscrepancySummary`, `BalanceLookup` with its result (`IngestedThrough`, `UnlinkedNotice`, `BalancesTable`), `BalanceChart`, `AccountsSection`. It owns the lookup state; each part owns its own query.
+- State that lives in `BalancesTab`: `lookup` (`{mode: "date", date}` or `{mode: "month", month}`), `autoLookup` (true until the user changes the lookup), and `serverToday` (the API's `today`, learned from the first successful lookup). Chart range and granularity live in `BalanceChart`. Leaving the tab discards them (the queries stay cached, so coming back is instant); no URL state.
+- **API**: `GET /balances`, `GET /balances/series`, `GET /balances/discrepancies`, `GET /accounts` (reads); the writes are in the dialogs below.
+
+## BalanceLookup (Epic 13, US-13.4)
+
+- A two-way switch **Date | Month** (`lookup-mode-date`, `lookup-mode-month`). **Date**: a date input (`lookup-date-input`) with `min` 2000-01-01 and `max` the API's `today` (the browser's date until the first answer). **Month**: a month select and a year select (`lookup-month-select`, `lookup-year-select`), two plain selects because the browser's own month input does not exist in every browser; months after the current one are disabled. A **Today** button (`lookup-today-button`) sets the date to the API's `today`.
+- Changing either control runs a new lookup; the previous result stays on screen, dimmed (`aria-busy`), until the new one arrives, so the screen does not flash empty.
+- **Heading** (`lookup-heading`, from the response, never from the browser): date mode "Balances at the end of 18 Oct 2026"; month mode for a past month "Balances at the end of September 2026 (30 Sep 2026)"; the current month "Balances for October 2026 so far (to 18 Oct 2026, today)". A note under it: "Each figure is the balance at the end of that day, after that day's transactions."
+- **Errors**: a 4xx answer shows its plain sentence (`balanceErrorMessage`) in `balances-error` with the controls still usable; a failure to load shows "Couldn't load balances" with a **Try again** button (`balances-retry`). The first lookup's special case is in the business logic model.
+
+## IngestedThrough and UnlinkedNotice (Epic 13, FR-AB-14, Question 6 = A)
+
+- **IngestedThrough** (`ingested-through`), shown on **every** result: "Transactions are ingested through 30 Sep 2026." When the looked-up date is after that date the line turns amber and adds "This date is later, so the figures don't include any activity after it." with a button **Show 30 Sep 2026** (`ingested-through-jump`) that moves the lookup to that date. With no transactions at all: "No transactions have been ingested yet."
+- **UnlinkedNotice** (`unlinked-notice`), shown only when the response carries one: "99 transactions from GXS Bank, dated 1 Jul 2026 to 31 Jul 2026 (net SGD 18.65), belong to no account, so they are left out of every balance." Several banks are listed with commas; several currencies as "net SGD 18.65 and USD -2.00" (currencies are never added together). Information only: no button.
+
+## BalancesTable (Epic 13, US-13.4)
+
+- A real table (numbers align), scrolling horizontally inside its container on a narrow screen, with a visually hidden caption. Columns: **Account** (name; bank and identifier beneath), **Balance** (the account's own currency, shown only for a non-SGD account, as "1,234.56 USD"), **SGD**, **Worked from** (`describeBasis`), **Last transaction** (the account's own latest date, so a stale account stands out). One row per `AccountBalanceDTO` (`balance-row-<accountId>`), in the API's order.
+- **Row states, always in words as well as colour**: `ok` shows the figures (`balance-native-<id>`, `balance-sgd-<id>`, `balance-basis-<id>`); an approximate SGD figure is prefixed "≈" and the row says "approximate: exchange rate of 14 Oct 2026" (`fxRateDate`); `anchor_required` shows **Anchor required** (`balance-status-<id>`) and a **Set balance** button (`set-balance-<id>`) that opens the BalanceDialog for that account; `fx_unavailable` shows the account's own-currency figure (the API still reports it) and **Unavailable: no exchange rate** in place of the SGD figure. A negative balance shows a minus sign and a red tone, never colour alone.
+- **Footer** (`combined-total`): "Combined total (N accounts): SGD 12,345.67", the sum as the API computed it. Beneath it **`combined-exclusions`** states every excluded account and why ("Not included: GXS Bank cket (anchor required), Trust Bank (no exchange rate)"); when the total is null: "No account has a balance yet. Enter one for each account to see a total." When `hasApproximate`, a line explains "≈ marks a figure converted at the nearest earlier exchange rate we have."
+- A short explainer sits above the table until at least one balance exists: "An anchor is a balance you know to be real on a date, such as one from your banking app. The app works out every other date from it."
+- **Empty state** (`balances-empty-state`): no deposit accounts: "No savings or current accounts yet. They appear here once statements have been ingested. Credit cards are never part of balances."
+
+## BalanceChart (Epic 13, US-13.5)
+
+- **Controls**: **From** and **To** date inputs (`series-from`, `series-to`; prefilled from the response's `start` and `end`, `max` the API's `today`), a three-way **Points** choice **Automatic | Daily | Month-end** (`series-granularity-auto`, `-day`, `-month`; Automatic by default), and **Last 12 months** (`series-reset`) which clears the dates so the API's default applies. The chart opens on the last 12 months (Q2 = A of the API unit).
+- **What is drawn (Q2 = A)**: the **combined total** as a thick line in the theme's ink colour (not a palette colour), plus the **7 accounts with the largest balance** each in its own palette colour, plus, when there are more than 7 accounts, one grey **"Other accounts (N)"** line summing the rest. Clicking a name in the legend hides or shows that line (Chart.js's built-in behaviour). Values are plotted from the API's strings; a `null` is a **gap** (`spanGaps` off), never a zero and never joined across. Markers show only when a line has 40 or fewer points; all show on hover. Axis labels and tooltips are formatted by `formatAmount`/`formatMoney`; the tooltip lists every visible line at that date.
+- **Beneath the chart**: the resolved points ("Showing every day" / "Showing month-end points", from the response's `granularity`); `series-summary` ("Combined balance went from SGD 10,000.00 on 18 Oct 2025 to SGD 12,345.67 on 18 Oct 2026 (+SGD 2,345.67).", the exact figures the chart can only show on hover); `series-not-plotted` ("Not plotted: GXS Bank cket (anchor required)", from `missingAccounts`); and, when any gap exists, "A break in a line means no exchange rate was available for that date."
+- The chart container has `role="img"` and an `aria-label` that repeats the summary. Chart colours and chrome come from `getChartTheme(theme)`, so dark mode follows the existing shared theming; the ink colour has a light and a dark value.
+- **Empty states**: no account has an anchor: "Enter a balance for at least one account to see the chart." (the not-plotted line still names them); a range with no points is prevented by the API's rules and is shown as the API's sentence if it is refused.
+- **API**: `GET /balances/series`.
+
+## DiscrepancyPanel (Epic 13, US-13.6, Question 3 = A)
+
+- **DiscrepancySummary** (`discrepancy-summary`), at the very top of the Balances tab and **nowhere else**: with findings, "N accounts have differences with their statements." and a **Show details** / **Hide details** button (`discrepancy-toggle`, `aria-expanded`); with accounts checked and no findings, a quiet "Your statements agree with your balances (N accounts checked)."; with nothing checked (no anchor yet) it renders nothing. If its own query fails it shows "Couldn't check statement differences" with a retry link and the rest of the tab is unaffected. It never blocks or changes a figure.
+- **DiscrepancyDetails** (`discrepancy-details`), opened by the button: one block per account (`discrepancy-account-<accountId>`, "<name> (<currency>): <statementsChecked> statements and <periodsChecked> statement-to-statement intervals checked") with two tables, each scrolling horizontally on a narrow screen:
+  - **Statements that differ from your entered balance** (`statement-difference-row-<statementId or date>`): statement closing date, the balance the statement prints, the balance the app works out from your entered balance, and the difference (printed minus computed, signed, with the words "statement shows more" / "statement shows less" so the sign needs no decoding). Explanation: "A wrong entered balance or missing transactions before this date. Correct your entered balance and these disappear."
+  - **Intervals where transactions don't explain the change** (`period-gap-row-<fromId or date>-<toId or date>`): from date, to date, the change the statements print, the net of the transactions between, and the gap. Explanation: "Transactions are probably missing or dated wrongly in this interval. This does not depend on your entered balance and stays until the transactions are fixed."
+  - The statement is named by its closing date (the API returns no file name), e.g. "statement closing 30 Sep 2026".
+- A footer states the tolerance ("Differences larger than 0.00 are listed; change this in Settings under Balances", with a link) and that only accounts with an entered balance are checked.
+- **API**: `GET /balances/discrepancies`.
+
+## AccountsSection (Epic 13, US-13.2 and US-13.3, Question 4 = A)
+
+- `accounts-section` at the bottom of the Balances tab, titled "Accounts". A **list**, not a table, so it needs no second layout on a phone: one item per account (`account-row-<id>`) with a name line (name, and the identifier as printed), a detail line (bank; type in words, with "(set by you)" when `typeSetByUser`; currency), a figures line (the entered balance and its date, or "No balance entered", or "Not in balances" for a non-deposit account; statements, transactions, printed closing balances, latest transaction), and an actions line that wraps. Same-named accounts are told apart by identifier and the counts. Grouped under "Savings and current accounts", "Credit cards", "Other (type unknown)", in the API's order.
+- **Actions** on every row: **Rename** (`account-rename-<id>`), **Change type** (`account-change-type-<id>`), **Merge into…** (`account-merge-<id>`, "this account is absorbed into the one you pick"); on a row with `canHaveAnchor`: **Set balance** or **Replace balance** (`account-set-balance-<id>`). A non-deposit account is offered no balance action. All disabled while a write is in flight.
+- **Status line** (`account-status-message`, `role="status"`, polite): the outcome of the last action, until the next one ("Saved SGD 1,500.00 for 18 Oct 2026." / "Replaced SGD 1,234.00 (5 Oct 2026) with SGD 1,500.00 (18 Oct 2026)." / "Renamed to …" / "“A” is now a credit card and no longer in balances." / "Merged “A” into “B”.").
+- Every write ends by refreshing **everything** that can show an account (`["accounts"]` and `["balances"]`), so a rename or a new balance appears in the lookup, the chart and the warnings at once.
+- Loading and error states follow the page's own ("Loading accounts…", "Couldn't load accounts" with Try again). No accounts at all: "No accounts yet. They are created when statements are ingested."
+- **API**: `GET /accounts`.
+
+## BalanceDialog (Epic 13, US-13.3)
+
+- The app's existing modal dialog (`Dialog` from Radix, as `RemovalConfirmDialog`), opened from a "Set balance" prompt or an account row, for one deposit account (`balance-dialog`). Title "Set the balance of <name>" / "Replace the balance of <name>".
+- **Fields**: **Balance** (`balance-input`, a text field with decimal keyboard on a phone) and **Balance on** (`balance-date-input`, a date input, `max` the API's `today`). Beside them, in words: "In <currency>. Enter the balance at the **end of that day**, after that day's transactions." and "Use a figure from your banking app or a statement." The date starts at the date of the last balance entered in this visit (so a run of accounts for one day needs no retyping), else the API's `today`, else the browser's date.
+- **Replacing**: above the fields, `balance-previous` shows the current entry ("Currently SGD 1,234.00 on 5 Oct 2026, entered 7 Oct 2026") and the button reads **Replace balance**; for a new entry **Save balance**. Both send the same request.
+- **Validation before sending** (`parseAmountInput`, a date present and not after the API's `today`): a message beside the field (`balance-error`) and nothing is sent. The API remains the authority; its refusals show in the same place as plain sentences.
+- **Save and next account** (`balance-save-next`), offered when another deposit account still has no balance: saves, then opens the dialog for the next one with the date carried over and the balance empty. **Cancel** closes without saving. On success the dialog closes (or moves on) and the status line is set.
+- **API**: `PUT /accounts/{id}/anchor`.
+
+## RenameDialog and ChangeTypeDialog (Epic 13, US-13.2)
+
+- **RenameDialog** (`rename-dialog`): one text field (`rename-input`) prefilled with the name, a count "n/255"; **Save** (`rename-save`) is disabled while the trimmed name is empty, unchanged, or over 255. Names need not be unique; the dialog says nothing about uniqueness. **API**: `PATCH /accounts/{id}` with `{name}`.
+- **ChangeTypeDialog** (`type-dialog`): three radio options with their consequences in words (`type-option-deposit`, `type-option-credit_card`, `type-option-unknown`): "Savings or current account: included in balances"; "Credit card: never part of balances"; "Other / not sure: left out of balances until you decide". The current type is preselected; **Save** (`type-save`) is disabled while unchanged. Extra text: leaving *deposit* — "It leaves balances, totals and charts straight away. A balance you entered is kept in case you change it back."; becoming *deposit* — "It will show Anchor required until you enter a balance" (or, with a kept entry, "Your entered balance of … applies again"); and always "Changing the type marks it as your choice, so later statements won't overwrite it." **API**: `PATCH /accounts/{id}` with `{type}`.
+
+## MergeDialog (Epic 13, US-13.2)
+
+- Opened by **Merge into…** on the account that will be absorbed (`merge-dialog`). Title "Merge “<A>” into another account".
+- **Choose the account to keep** (`merge-target-select`): the other accounts **with the same currency**, each labelled with name, bank, identifier, type and statement count so same-named accounts can be told apart. With none: "There is no other <currency> account to merge into." Merging a deposit account into a credit card, or the reverse, is allowed (the API reconciles the type) and the preview says what happens.
+- **Preview** (`merge-preview`), as soon as a target is chosen, in words and built from the two list entries: "All <n> statements and <m> transactions of “A” will count under “B”."; "“A” disappears from the list; “B” keeps its name."; "Later statements that match “A” will be filed under “B”."; the type outcome from `mergeTypeOutcome` only when the type changes ("“B” becomes a credit card because you set that type on “A”."); and "This can't be undone."
+- **Balances**: if **both** have an entered balance, a required choice of two radios (`merge-keep-<accountId>`) showing each balance and date — no default, so neither is dropped silently; if only one has, "The balance entered for “X” (…) will be kept."; if neither, nothing. **Merge** (`merge-confirm`) stays disabled until a target is chosen and, where required, a balance kept; **Cancel** closes. It sends `{absorbedAccountId, keepAnchorFrom?}` to the **target's** path.
+- **Refusals stay in the dialog** (`merge-error`) as plain sentences, nothing having changed: different currencies; "these two are listed together on one statement, so they are different accounts; if they look alike, rename them"; a balance choice missing or invalid; an account gone (the dialog closes and the list refreshes).
+- **API**: `POST /accounts/{id}/merge`.
+
+## SettingsPage: the Balances Category (Epic 13)
+
+- `CATEGORY_ORDER` gains **"Balances"**, after "Duplicate Statements" and before "API & Access". `reporting_time_zone` and `balance_mismatch_tolerance` otherwise appear through the existing catalog-driven rendering, with the existing save confirmation and the API-restart guidance (owning service: the API Service). No new screen, no new component.
+
+## NavBar (Epic 13)
+
+- **Unchanged** (Question 5 = A): no badge for balances. The "anchor required" prompts in the Balances tab are the reminder.

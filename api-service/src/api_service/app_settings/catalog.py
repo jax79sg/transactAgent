@@ -1,4 +1,4 @@
-"""The settings allow-list (AR-28) -- the sole source of truth for which of the 40
+"""The settings allow-list (AR-28) -- the sole source of truth for which of the 53
 in-scope settings exist and what a valid value looks like. A name not in this dict
 has no code path to a value, secret or otherwise (NFR-CAS-2).
 
@@ -60,7 +60,7 @@ class SettingSpec:
     max: float | None = None
     min_exclusive: bool = False
     allowed_values: tuple[str, ...] | None = None
-    format: str | None = None  # "currency_code" | "url" | "url_or_empty" | "url_list" | "ascending_number_list" | "non_empty"
+    format: str | None = None  # "currency_code" | "url" | "url_or_empty" | "url_list" | "ascending_number_list" | "non_empty" | "time_zone"
     cross_field: str | None = None  # "less_than" | "greater_than" | "less_or_equal" | "greater_or_equal"
     cross_field_partner: str | None = None
 
@@ -70,8 +70,11 @@ _EMBEDDING = "Embedding & Semantic Matching"
 _RECURRING = "Recurring Payments"
 _BACKUP = "Backup"
 _INGESTION = "Ingestion"
+_DUPLICATES = "Duplicate Statements"
 _API_ACCESS = "API & Access"
 _ASK_AI = "Ask AI"
+_MODEL_COSTS = "Model Costs"
+_BALANCES = "Balances"
 
 _SPECS: tuple[SettingSpec, ...] = (
     # --- Matching & Categorization ---
@@ -111,13 +114,22 @@ _SPECS: tuple[SettingSpec, ...] = (
         "int", 5, min=1,
     ),
     SettingSpec(
+        "categorization_provider", (_WORKER,), "standard", _MATCHING,
+        "Where transactions are categorized. `local` uses the endpoint and model below (openrouter_base_url and "
+        "openrouter_model: OpenRouter or your own local model server). `gemini` uses Google's Gemini API with the same "
+        "key and model as statement extraction (gemini_model), at a small per-use cost; each transaction's description "
+        "and SGD amount is then sent to Google (statement PDFs already are, for extraction). A call that fails after "
+        "retries leaves the transaction UNSURE under either. Takes effect when the ingestion-worker restarts.",
+        "enum", "local", allowed_values=("local", "gemini"),
+    ),
+    SettingSpec(
         "openrouter_base_url", (_WORKER,), "advanced", _MATCHING,
-        "OpenAI-compatible endpoint used for transaction categorization -- OpenRouter's hosted API by default, or your own local model server (e.g. via host.docker.internal).",
+        "Used when categorization_provider is `local`: the OpenAI-compatible endpoint used for transaction categorization -- OpenRouter's hosted API by default, or your own local model server (e.g. via host.docker.internal).",
         "string", "https://openrouter.ai/api/v1", format="url",
     ),
     SettingSpec(
         "openrouter_model", (_WORKER,), "advanced", _MATCHING,
-        "The model your categorization endpoint actually serves -- e.g. a specific local model name when openrouter_base_url points at your own server.",
+        "Used when categorization_provider is `local`: the model your categorization endpoint actually serves -- e.g. a specific local model name when openrouter_base_url points at your own server.",
         "string", "openrouter/free", format="non_empty",
     ),
     SettingSpec(
@@ -152,18 +164,37 @@ _SPECS: tuple[SettingSpec, ...] = (
         "float", 0.05, min=0.0,
     ),
     SettingSpec(
+        "embedding_provider", (_WORKER,), "standard", _EMBEDDING,
+        "Where embeddings are computed. `local` uses the endpoint and model below (embedding_base_url and "
+        "embedding_model: your own embedding server; leave the endpoint empty to turn embeddings off). `gemini` uses "
+        "Google's Gemini API with the same key as statement extraction and the model in gemini_embedding_model, at a "
+        "very small per-use cost (a full set of your transactions is a few cents); each transaction's description, "
+        "direction and price range is then sent to Google. Embeddings from different models cannot be compared: after "
+        "switching, existing transactions are re-embedded in the background, and the two thresholds "
+        "(embedding_similarity_threshold and recategorization_auto_apply_threshold) should be set for the new model "
+        "(calibrated values: local 0.92 / 97, gemini 0.94 / 99). Takes effect when the ingestion-worker restarts.",
+        "enum", "local", allowed_values=("local", "gemini"),
+    ),
+    SettingSpec(
+        "gemini_embedding_model", (_WORKER,), "advanced", _EMBEDDING,
+        "Used when embedding_provider is `gemini`: the Gemini embedding model. gemini-embedding-2 returns normalised "
+        "vectors at the size set in embedding_dimensions (768 recommended); the older gemini-embedding-001 does not "
+        "normalise reduced sizes. A model's vectors are not comparable with another's, so changing this re-embeds everything.",
+        "string", "gemini-embedding-2", format="non_empty",
+    ),
+    SettingSpec(
         "embedding_base_url", (_WORKER,), "advanced", _EMBEDDING,
-        "Your local embedding model server's endpoint. Leave empty to disable embedding-based matching entirely -- falls back to fuzzy-text matching only, with no error.",
+        "Used when embedding_provider is `local`: your local embedding model server's endpoint. Leave empty to disable embedding-based matching entirely -- falls back to fuzzy-text matching only, with no error.",
         "string", "", format="url_or_empty",
     ),
     SettingSpec(
         "embedding_model", (_WORKER,), "advanced", _EMBEDDING,
-        "Model name your embedding server is actually running -- must match embedding_dimensions below.",
+        "Used when embedding_provider is `local`: the model name your embedding server is actually running -- must match embedding_dimensions below.",
         "string", "embeddinggemma-300m", format="non_empty",
     ),
     SettingSpec(
         "embedding_dimensions", (_WORKER,), "advanced", _EMBEDDING,
-        "Output vector size of your embedding model -- must match it exactly; used when creating the Qdrant collections.",
+        "Output vector size of your embedding model -- must match it exactly; used when creating the Qdrant collections. With `gemini` it is also the size requested from the model (768 recommended).",
         "int", 768, min=1,
     ),
     SettingSpec(
@@ -215,9 +246,26 @@ _SPECS: tuple[SettingSpec, ...] = (
         cross_field="greater_than", cross_field_partner="recurring_payment_detection_cadence_min_days",
     ),
     SettingSpec(
+        "recurring_payment_detection_annual_cadence_min_days", (_WORKER,), "standard", _RECURRING,
+        "Lower bound (days between occurrences) for a pattern to be considered annual-cadence recurring -- must stay below the max below.",
+        "int", 350, min=0, min_exclusive=True,
+        cross_field="less_than", cross_field_partner="recurring_payment_detection_annual_cadence_max_days",
+    ),
+    SettingSpec(
+        "recurring_payment_detection_annual_cadence_max_days", (_WORKER,), "standard", _RECURRING,
+        "Upper bound (days between occurrences) for a pattern to be considered annual-cadence recurring -- must stay above the min above.",
+        "int", 380, min=0, min_exclusive=True,
+        cross_field="greater_than", cross_field_partner="recurring_payment_detection_annual_cadence_min_days",
+    ),
+    SettingSpec(
         "recurring_payment_due_soon_lead_days", (_API,), "standard", _RECURRING,
-        "How many days before an upcoming due date (or before the next cycle, once the current one is paid) a recurring payment's status flips to \"due soon\".",
+        "How many days before an upcoming due date (or before the next cycle, once the current one is paid) a MONTHLY recurring payment's status flips to \"due soon\". A payment's own custom lead time (if set) overrides this.",
         "int", 5, min=0,
+    ),
+    SettingSpec(
+        "recurring_payment_due_soon_lead_days_annual", (_API,), "standard", _RECURRING,
+        "Same as recurring_payment_due_soon_lead_days, but for ANNUAL recurring payments -- defaults longer, since a yearly bill needs more advance notice to prepare for than a monthly one. A payment's own custom lead time (if set) overrides this.",
+        "int", 30, min=0,
     ),
     # --- Backup ---
     SettingSpec(
@@ -250,6 +298,27 @@ _SPECS: tuple[SettingSpec, ...] = (
         "reporting_currency", (_WORKER,), "standard", _INGESTION,
         "The currency every transaction's converted amount is reported in across dashboards and exports.",
         "string", "SGD", format="currency_code",
+    ),
+    # --- Duplicate Statements (Epic 14) ---
+    SettingSpec(
+        "duplicate_detection_enabled", (_WORKER,), "standard", _DUPLICATES,
+        "Whether the same statement saved as a different file is detected and skipped, and stored statements are "
+        "scanned for existing duplicates. Ships off: switch it on only after running the `check-duplicates` accuracy "
+        "check on your real statements. Decisions you have already made (a removed copy, an override) are honoured "
+        "either way. Takes effect when the ingestion-worker restarts.",
+        "enum", "false", allowed_values=("false", "true"),
+    ),
+    SettingSpec(
+        "duplicate_match_ratio", (_WORKER,), "standard", _DUPLICATES,
+        "A pair is a probable duplicate when at least this fraction of the SMALLER statement's transactions match "
+        "(0.50-1.00). Also decides whether two statements are the same size: removal is offered only for those.",
+        "float", 0.80, min=0.50, max=1.00,
+    ),
+    SettingSpec(
+        "duplicate_min_transactions", (_WORKER,), "advanced", _DUPLICATES,
+        "A statement with fewer transactions than this is never flagged on its transactions alone: its account "
+        "identifier and closing balance must match too.",
+        "int", 3, min=1, max=50,
     ),
     # --- API & Access ---
     SettingSpec(
@@ -290,6 +359,44 @@ _SPECS: tuple[SettingSpec, ...] = (
         "Caps how many transactions are sent as context per Ask AI question, most recent first -- keeps a very large or \"all transactions\" question from producing an unbounded prompt as your data grows.",
         "int", 3000, min=1,
     ),
+    # --- Model Costs (issue #28) ---
+    SettingSpec(
+        "gemini_input_price_per_million_usd", (_WORKER, _API), "advanced", _MODEL_COSTS,
+        "What Google charges per million INPUT tokens of the Gemini model in gemini_model (text and page images cost the "
+        "same), in US dollars. Used to price each call on the Costs page as it is made; past calls keep the price they were "
+        "made at. Default is Google's price for gemini-3.5-flash-lite as checked 2026-10-07 -- change it whenever you change "
+        "gemini_model (see https://ai.google.dev/gemini-api/docs/pricing).",
+        "float", 0.30, min=0.0,
+    ),
+    SettingSpec(
+        "gemini_output_price_per_million_usd", (_WORKER, _API), "advanced", _MODEL_COSTS,
+        "What Google charges per million OUTPUT tokens of the model in gemini_model, in US dollars; the model's thinking "
+        "tokens are billed as output and counted that way. Same rules as the input price above.",
+        "float", 2.50, min=0.0,
+    ),
+    SettingSpec(
+        "gemini_embedding_price_per_million_usd", (_WORKER,), "advanced", _MODEL_COSTS,
+        "What Google charges per million input tokens of the embedding model in gemini_embedding_model, in US dollars. "
+        "Google's embedding endpoint reports no token counts, so embedding costs are estimated from the text length "
+        "(about four characters per token) and marked as estimates on the Costs page. Default is Google's price for "
+        "gemini-embedding-2 as checked 2026-10-07.",
+        "float", 0.20, min=0.0,
+    ),
+    # --- Balances (Epic 13, AR-63) ---
+    SettingSpec(
+        "reporting_time_zone", (_API,), "standard", _BALANCES,
+        "The time zone that decides what \"today\" is for account balances: the current-month shortcut, and whether a balance "
+        "or an anchor date is in the future. A name from the standard time-zone list, e.g. Asia/Singapore. Takes effect "
+        "when the API is restarted.",
+        "string", "Asia/Singapore", format="time_zone",
+    ),
+    SettingSpec(
+        "balance_mismatch_tolerance", (_API,), "standard", _BALANCES,
+        "How far a statement's printed closing balance may differ from the computed balance, in the account's own currency, "
+        "before it is reported as a discrepancy. 0 means any difference of one cent or more. Takes effect when the API is "
+        "restarted.",
+        "float", 0.0, min=0.0, max=1000.0,
+    ),
 )
 
 SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
@@ -300,4 +407,5 @@ SETTINGS_BY_NAME: dict[str, SettingSpec] = {spec.name: spec for spec in _SPECS}
 # catalog and AR-28's table -- a real omission from the original 40-setting count,
 # not a duplicate of the earlier 35->40 correction. True count is 41. See
 # `configurable-app-settings-requirements.md`'s second Post-Approval Change section.
-assert len(SETTINGS_BY_NAME) == 41, f"expected 41 settings, got {len(SETTINGS_BY_NAME)}"
+# 55 since Epic 13 (2026-10-18): reporting_time_zone and balance_mismatch_tolerance (AR-63).
+assert len(SETTINGS_BY_NAME) == 55, f"expected 55 settings, got {len(SETTINGS_BY_NAME)}"

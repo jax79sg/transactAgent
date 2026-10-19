@@ -14,7 +14,7 @@ startup must not block the worker's unrelated responsibilities.
 import logging
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, PointIdsList, PointStruct, VectorParams
 
 from ingestion_worker.config import settings
 
@@ -54,6 +54,28 @@ def ensure_collections() -> None:
         )
 
 
+def recreate_transactions_collection() -> bool:
+    """Epic 13 (WR-52): drop and recreate the `transactions` collection EMPTY, with the same
+    configuration ensure_collections() uses. Used only by the Backfill Tool, after the
+    database wipe has committed -- the wipe removes every in-scope transaction, so every
+    point in this collection is orphaned. The `recurring_payment_names` collection is never
+    touched. Returns False (never raises) on any failure, like every function here; the
+    caller retries and refuses to start the reingest until it succeeds."""
+    try:
+        client = _client()
+        existing = {c.name for c in client.get_collections().collections}
+        if TRANSACTIONS_COLLECTION in existing:
+            client.delete_collection(collection_name=TRANSACTIONS_COLLECTION)
+        client.create_collection(
+            collection_name=TRANSACTIONS_COLLECTION,
+            vectors_config=VectorParams(size=settings.embedding_dimensions, distance=Distance.COSINE),
+        )
+        return True
+    except Exception:
+        logger.warning("Could not recreate the %r vector collection", TRANSACTIONS_COLLECTION, exc_info=True)
+        return False
+
+
 def upsert_embedding(collection: str, entity_id: str, vector: list[float]) -> bool:
     """WR-26: idempotent -- the same entity_id always overwrites its own prior
     vector, so a crash-and-retry never duplicates or corrupts state. Returns False
@@ -63,6 +85,21 @@ def upsert_embedding(collection: str, entity_id: str, vector: list[float]) -> bo
         return True
     except Exception:
         logger.info("Vector store upsert unavailable (collection=%r)", collection, exc_info=True)
+        return False
+
+
+def delete_embeddings(collection: str, entity_ids: list[str]) -> bool:
+    """Epic 14 (WR-68): remove the points whose ids are these entity ids (a removed statement's
+    transactions). Returns True on success and False (never raises) on any failure, like every
+    function in this client. Deleting an id that is not present is not an error, so a retried
+    removal is safe; an empty list is a no-op that succeeds."""
+    if not entity_ids:
+        return True
+    try:
+        _client().delete(collection_name=collection, points_selector=PointIdsList(points=list(entity_ids)))
+        return True
+    except Exception:
+        logger.info("Vector store delete unavailable (collection=%r)", collection, exc_info=True)
         return False
 
 

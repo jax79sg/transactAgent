@@ -19,7 +19,10 @@ const STRING_KEYS = ["dateFrom", "dateTo", "bank", "category", "currency", "text
 const FLOW_DIRECTIONS: FlowDirection[] = ["in", "out"];
 const CATEGORY_SOURCES: CategorySourceValue[] = ["similarity", "llm", "manual", "unsure"];
 const GROUP_BY_OPTIONS: GroupByOption[] = ["category", "bank", "month", "categorySource"];
-const SORT_BY_OPTIONS: SortByOption[] = ["date", "amount", "category", "bank"];
+// A Record, not a list: adding a value to SortByOption without adding it here is a compile error. A plain list let
+// "description" be added to the type and silently dropped from every URL (issue #23), so the sort never took effect.
+const SORT_BY: Record<SortByOption, true> = { date: true, amount: true, category: true, bank: true, description: true, converted: true };
+const SORT_BY_OPTIONS = Object.keys(SORT_BY) as SortByOption[];
 const SORT_DIRS: SortDir[] = ["asc", "desc"];
 
 export function filterStateToSearchParams(state: TransactionFilterState): URLSearchParams {

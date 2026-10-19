@@ -1,5 +1,7 @@
 """Environment-sourced configuration (NFR-4.1 — no secrets hardcoded)."""
 
+from decimal import Decimal
+
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -46,6 +48,12 @@ class Settings(BaseSettings):
     max_page_size: int = 200
     csv_export_max_rows: int = 50_000
 
+    # Epic 13 (AR-63): what "today" is for balances (the current-month shortcut, and whether an anchor date is in the
+    # future), and how far a printed closing balance may differ from the computed one before it counts as a mismatch,
+    # in the account's own currency. Both are read when the API starts, like the other API-owned settings.
+    reporting_time_zone: str = "Asia/Singapore"
+    balance_mismatch_tolerance: Decimal = Decimal("0.00")
+
     # Ask AI (US-6.1): synchronous Gemini text call from api-service itself, not
     # routed through ingestion-worker's job queue -- that queue processes one
     # ingestion run or recategorization job at a time (WR-8), so a queued "question"
@@ -54,11 +62,21 @@ class Settings(BaseSettings):
     gemini_api_key: str
     gemini_model: str = "gemini-3.5-flash-lite"
     ai_assistant_max_transactions: int = 3000
+    # Issue #28 (Model Cost Page): USD per million tokens, used to price each Ask AI call as it is recorded, and read
+    # by the worker too (same names, same override file) for its own calls -- see the worker's config.py.
+    gemini_input_price_per_million_usd: float = 0.30
+    gemini_output_price_per_million_usd: float = 2.50
+    gemini_embedding_price_per_million_usd: float = 0.20
 
     # Epic 8 (Recurring Payments): AR-15's due-soon lead window -- how many days
     # before an upcoming due date (or before the next cycle, once the current one
-    # is already paid) status flips from "paid"/nothing to "due_soon".
+    # is already paid) status flips from "paid"/nothing to "due_soon". This is the
+    # MONTHLY default; a per-payment RecurringPayment.due_soon_lead_days override
+    # takes priority over either default (see recurring_payments/service.py's
+    # _resolve_lead_days) -- issue #15: a single lead time couldn't give an annual
+    # bill meaningfully more advance notice than a monthly one.
     recurring_payment_due_soon_lead_days: int = 5
+    recurring_payment_due_soon_lead_days_annual: int = 30
 
     # --- Display-only mirror of Ingestion Worker's own settings (added 2026-08-16,
     # Configurable Application Settings, found after live verification showed the
@@ -93,6 +111,15 @@ class Settings(BaseSettings):
     recurring_payment_detection_min_occurrences: int = 2
     recurring_payment_detection_cadence_min_days: int = 25
     recurring_payment_detection_cadence_max_days: int = 35
+    # Issue #15: a second, much wider cadence window so the detection scan can also
+    # recognize a genuinely annual pattern (e.g. a once-a-year renewal), alongside
+    # (not instead of) the monthly window above -- see ingestion_worker/
+    # recurring_payments/service.py's _has_annual_cadence. 350-380 gives real
+    # calendar slack (leap years, a bill landing on a slightly different weekday)
+    # without coming anywhere near the monthly window's 35-day ceiling, so a
+    # short-cadence pattern (e.g. a daily meal purchase) can never satisfy either.
+    recurring_payment_detection_annual_cadence_min_days: int = 350
+    recurring_payment_detection_annual_cadence_max_days: int = 380
     qdrant_host: str = "vector-db"
     qdrant_port: int = 6333
     embedding_base_url: str = ""
@@ -105,6 +132,14 @@ class Settings(BaseSettings):
     llm_classification_batch_size: int = 10
     embedding_price_bucket_boundaries: str = "1,5,10,20,50,100,200,500,1000,2000,5000"
     embedding_llm_agreement_boost: float = 0.05
+    # Epic 14 (probable duplicate detection) -- display-only mirrors of the worker's three settings.
+    duplicate_detection_enabled: bool = False
+    duplicate_match_ratio: float = 0.80
+    duplicate_min_transactions: int = 3
+    categorization_provider: str = "local"  # display-only mirror of the worker's (2026-10-05)
+    embedding_provider: str = "local"  # display-only mirror of the worker's (2026-10-05)
+    gemini_embedding_model: str = "gemini-embedding-2"
+    gemini_embedding_price_per_million_usd: float = 0.20  # display-only mirror of the worker's (issue #28)
     openrouter_model: str = "openrouter/free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     backup_schedule_hour: int = 2

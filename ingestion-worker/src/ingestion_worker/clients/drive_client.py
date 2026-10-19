@@ -147,6 +147,39 @@ def ensure_backup_folder_exists(db: Session, parent_folder_id: str) -> str:
 
 
 @retry_with_backoff()
+def ensure_subfolder(db: Session, parent_folder_id: str, name: str) -> str:
+    """Epic 13 (WR-54): idempotent -- returns the ID of the subfolder called `name` under
+    `parent_folder_id`, creating it if it does not exist. Same shape and retry behavior as
+    ensure_backup_folder_exists above (left untouched), for the backfill's timestamped
+    backup subfolder."""
+    credentials = _load_credentials(db)
+    escaped = name.replace("\\", "\\\\").replace("'", "\\'")
+    try:
+        service = build("drive", "v3", credentials=credentials)
+        query = (
+            f"'{parent_folder_id}' in parents and name = '{escaped}' "
+            f"and mimeType = '{_BACKUP_FOLDER_MIME_TYPE}' and trashed=false"
+        )
+        results = service.files().list(q=query, fields="files(id, name)", pageSize=1).execute()
+        existing = results.get("files", [])
+        if existing:
+            return existing[0]["id"]
+        created = (
+            service.files()
+            .create(
+                body={"name": name, "mimeType": _BACKUP_FOLDER_MIME_TYPE, "parents": [parent_folder_id]},
+                fields="id",
+            )
+            .execute()
+        )
+        return created["id"]
+    except HttpError as exc:
+        if exc.resp.status in _TRANSIENT_HTTP_STATUS:
+            raise TransientError(f"Drive ensure-subfolder transient error: {exc}") from exc
+        raise
+
+
+@retry_with_backoff()
 def upload_file(db: Session, folder_id: str, filename: str, content: bytes, mime_type: str) -> DriveFileRef:
     credentials = _load_credentials(db)
     try:

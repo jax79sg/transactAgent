@@ -1,0 +1,5 @@
+{
+  "details": {},
+  "error": "merge_appear_together",
+  "message": "A statement lists both accounts, which shows they are different accounts"
+}

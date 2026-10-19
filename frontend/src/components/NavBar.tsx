@@ -1,13 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 import { getActivitySummary } from "../api/backgroundActivity";
+import { getPendingPairCount } from "../api/duplicates";
 import { getPendingCount } from "../api/recategorization";
 import { getRecurringPaymentsStatus } from "../api/recurringPayments";
 import type { BackgroundJobType } from "../api/types";
 import { useAuth } from "../context/AuthContext";
 import { useTheme, type Theme } from "../context/ThemeContext";
+import { appVersion } from "../version";
 
 const LINKS = [
   { to: "/", label: "Dashboard" },
@@ -15,6 +17,7 @@ const LINKS = [
   { to: "/ask-ai", label: "Ask AI" },
   { to: "/ingestion", label: "Ingestion" },
   { to: "/review", label: "Review" },
+  { to: "/costs", label: "Costs" },
   { to: "/settings", label: "Settings" },
 ];
 
@@ -42,6 +45,30 @@ function PendingReviewBadge() {
   );
 }
 
+// Epic 14 (Probable Duplicate Statement Detection): a SECOND badge beside the existing one, in a different colour
+// so the two are told apart without reading. The existing badge's number keeps meaning recategorization items
+// (NFR-PD-6); this counts probable-duplicate pairs awaiting a decision (information-only pairs included until
+// dismissed). Same 30s ambient poll; any action in the Review panel refreshes it immediately.
+function PendingDuplicatesBadge() {
+  const { data } = useQuery({
+    queryKey: ["duplicates", "pendingCount"],
+    queryFn: getPendingPairCount,
+    refetchInterval: PENDING_COUNT_POLL_INTERVAL_MS,
+  });
+
+  if (!data || data.pendingCount === 0) return null;
+
+  return (
+    <span
+      data-testid="pending-duplicates-badge"
+      aria-label={`${data.pendingCount} duplicate statement${data.pendingCount === 1 ? "" : "s"} awaiting review`}
+      className="ml-1 rounded-full bg-violet-500 px-1.5 py-0.5 text-xs font-semibold text-white dark:bg-violet-600"
+    >
+      {data.pendingCount}
+    </span>
+  );
+}
+
 // 5min, matching BackupStatusPanel's cadence (business-logic-model.md) -- a
 // recurring-payment status changes at most daily, so this is even less
 // time-sensitive than the 30s pending-review badge.
@@ -55,9 +82,12 @@ function RecurringPaymentsBadge() {
   });
 
   if (!data) return null;
-  // dueSoonCount deliberately excluded -- nothing has gone wrong yet for a
-  // due-soon item (business-logic-model.md).
-  const attentionCount = data.overdueCount + data.pendingMatchCount + data.newSuggestionCount;
+  // Issue #15: dueSoonCount now included -- the previous exclusion ("nothing's
+  // gone wrong yet") meant a due-soon payment was invisible anywhere outside the
+  // Dashboard tab, so a user had no way to notice an upcoming payment without
+  // remembering to go check manually. Being due soon isn't a problem, but it's
+  // exactly the thing this badge exists to surface ahead of time.
+  const attentionCount = data.dueSoonCount + data.overdueCount + data.pendingMatchCount + data.newSuggestionCount;
   if (attentionCount === 0) return null;
 
   return (
@@ -164,8 +194,8 @@ export function NavBar() {
   const { logout } = useAuth();
 
   return (
-    <nav className="flex items-center justify-between border-b border-slate-200 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex gap-6">
+    <nav className="flex items-center justify-between gap-4 overflow-x-auto border-b border-slate-200 px-6 py-3 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex shrink-0 gap-6">
         {LINKS.map((link) => (
           <NavLink
             key={link.to}
@@ -178,12 +208,26 @@ export function NavBar() {
             }
           >
             {link.label}
-            {link.to === "/review" && <PendingReviewBadge />}
+            {link.to === "/review" && (
+              <>
+                <PendingReviewBadge />
+                <PendingDuplicatesBadge />
+              </>
+            )}
             {link.to === "/" && <RecurringPaymentsBadge />}
           </NavLink>
         ))}
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
+        {/* Issue #27: the release is always visible; it links to the About card on Settings. */}
+        <Link
+          to="/settings#about"
+          data-testid="app-version"
+          title="About this release"
+          className="text-xs text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300"
+        >
+          v{appVersion}
+        </Link>
         <ActivityIndicator />
         <ThemeToggle />
         <button

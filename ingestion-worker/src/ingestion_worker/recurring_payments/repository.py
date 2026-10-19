@@ -8,6 +8,7 @@ from transactagent_db.models import (
     DetectionScanRun,
     DetectionSuggestion,
     RecurringPayment,
+    RecurringPaymentFrequency,
     RecurringPaymentMatch,
     RecurringPaymentMatchStatus,
     Transaction,
@@ -97,12 +98,18 @@ def record_detection_suggestion(
     suggested_amount: Decimal,
     suggested_category_id: UUID | None,
     occurrence_count: int,
+    detected_frequency: RecurringPaymentFrequency | None = None,
+    suggested_due_month: int | None = None,
+    suggested_due_day: int | None = None,
 ) -> DetectionSuggestion:
     suggestion = DetectionSuggestion(
         description_pattern=description_pattern,
         suggested_amount=suggested_amount,
         suggested_category_id=suggested_category_id,
         occurrence_count=occurrence_count,
+        detected_frequency=detected_frequency,
+        suggested_due_month=suggested_due_month,
+        suggested_due_day=suggested_due_day,
     )
     db.add(suggestion)
     db.flush()

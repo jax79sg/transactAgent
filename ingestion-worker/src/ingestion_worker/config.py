@@ -1,5 +1,8 @@
 """Environment-sourced configuration (NFR-4.1)."""
 
+from typing import Literal
+
+from pydantic import Field
 from pydantic_settings import (
     BaseSettings,
     DotEnvSettingsSource,
@@ -34,6 +37,12 @@ class Settings(BaseSettings):
     # verified against the real failing statement (3/3 clean runs, 0 invalid dates) to
     # not exhibit this -- see aidlc-docs/audit.md.
     gemini_model: str = "gemini-3.5-flash-lite"
+    # Issue #28 (Model Cost Page): what a Gemini call costs, in USD per million tokens, used to price each call as it
+    # is recorded (transactagent_db.model_usage). Google's price list for gemini-3.5-flash-lite and gemini-embedding-2
+    # as checked 2026-10-07; change them together with gemini_model / gemini_embedding_model.
+    gemini_input_price_per_million_usd: float = 0.30
+    gemini_output_price_per_million_usd: float = 2.50
+    gemini_embedding_price_per_million_usd: float = 0.20
     openrouter_model: str = "openrouter/free"
     # The categorization LLM client (openrouter_client.py) uses the `openai` SDK
     # pointed at this base_url, so it works against any OpenAI-compatible chat
@@ -42,6 +51,10 @@ class Settings(BaseSettings):
     # after hitting OpenRouter's free-tier rate limits). Override alongside
     # openrouter_api_key/openrouter_model when pointing elsewhere.
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Which provider categorizes transactions (openrouter_client.py). `local` is the OpenAI-compatible endpoint above
+    # (OpenRouter or your own model server); `gemini` is Google's Gemini API through its OpenAI-compatible endpoint,
+    # reusing gemini_api_key and gemini_model (the statement-extraction ones) -- no second key to manage (2026-10-05).
+    categorization_provider: Literal["local", "gemini"] = "local"
 
     # Needed to refresh the Drive access token via the refresh token Unit 2 obtained
     # (Google's token-refresh request requires client_id + client_secret, not just the
@@ -87,6 +100,9 @@ class Settings(BaseSettings):
     # similarity_threshold and this value, which becomes a reviewable proposal
     # instead). Tuned during Code Generation/testing, same as similarity_threshold
     # itself (WR-3) -- not an exact science, just a defensible starting point.
+    # Re-confirmed by WR-42's live precision evaluation: 100% same-category
+    # precision at/above 97 (n=6) with a real cliff just below (96 -> 0/2) --
+    # left unchanged.
     recategorization_auto_apply_threshold: float = 97.0
     extraction_confidence_threshold: str = "medium"  # "low" | "medium" | "high"
 
@@ -111,6 +127,15 @@ class Settings(BaseSettings):
     recurring_payment_detection_min_occurrences: int = 2
     recurring_payment_detection_cadence_min_days: int = 25
     recurring_payment_detection_cadence_max_days: int = 35
+    # Issue #15: a second, much wider cadence window so the detection scan can also
+    # recognize a genuinely annual pattern, alongside (not instead of) the monthly
+    # window above -- see recurring_payments/service.py's _has_annual_cadence.
+    # 350-380 gives real calendar slack (leap years, a bill landing on a slightly
+    # different weekday) without coming anywhere near the monthly window's 35-day
+    # ceiling, so a short-cadence pattern (e.g. a daily meal purchase) can never
+    # satisfy either.
+    recurring_payment_detection_annual_cadence_min_days: int = 350
+    recurring_payment_detection_annual_cadence_max_days: int = 380
 
     # Epic 9 (Local Embedding-Based Semantic Similarity): the vector DB is this
     # project's own docker-compose service (NFR Requirements) -- host/port have real
@@ -127,15 +152,32 @@ class Settings(BaseSettings):
     # local server would otherwise have to duplicate the same key under two names.
     embedding_api_key: str = ""
     embedding_model: str = "embeddinggemma-300m"
+    # Which provider computes embeddings (embedding/client.py). `local` is the OpenAI-compatible server above;
+    # `gemini` is Google's Gemini API through its OpenAI-compatible endpoint, reusing gemini_api_key. Gemini
+    # Embedding 2 is asked for embedding_dimensions-sized, already-normalised vectors, so it fits the existing
+    # collection; its scores sit on a different scale from embeddinggemma's, so the two thresholds below were
+    # re-calibrated for it on the user's own labelled transactions (2026-10-05).
+    embedding_provider: Literal["local", "gemini"] = "local"
+    gemini_embedding_model: str = "gemini-embedding-2"
     # Cosine similarity, 0.0-1.0 scale -- NOT the same scale as similarity_threshold
     # (0-100, fuzzy-text only). WR-23.
     # Matching Precision Refinement (WR-31): raised from the original Epic 9 default
     # of 0.75 -- a moderate +0.07 increase, one of three coordinated tightening
     # changes alongside the price-bucket text (below) and the LLM-agreement boost,
     # not expected to fully address over-eager matching on its own.
-    embedding_similarity_threshold: float = 0.82
+    # WR-42 (Recategorization Algorithm Rework, threshold-evaluation trial): raised
+    # again, 0.82 -> 0.92, based on a live precision evaluation against 160 real
+    # nearest-neighbor pairs -- 0.82 only achieved ~62% same-category precision,
+    # 0.92 achieves ~67% on a comparable sample size (n=86). recategorization_auto_apply_threshold
+    # (below) was NOT changed -- the same evaluation found it already well-calibrated
+    # (100% precision at/above 97, a real cliff just below it).
+    embedding_similarity_threshold: float = 0.92
     embedding_top_k: int = 5
     embedding_batch_size: int = 50
+    # WR-40 (Recategorization Algorithm Rework, backfill speed-up): processNextEmbeddingBatch
+    # computes embeddings concurrently, bounded the same way llm_classification_concurrency
+    # already bounds classify_batch -- same local model server, same overload concern.
+    embedding_concurrency: int = 5
     # Must match the embedding model's actual output dimensionality (used only when
     # creating the Qdrant collections, WR-26/NFR Requirements).
     embedding_dimensions: int = 768
@@ -162,6 +204,21 @@ class Settings(BaseSettings):
     # LLM-classification agreement signal is present, before the threshold check
     # above -- never a penalty on disagreement, only a boost withheld.
     embedding_llm_agreement_boost: float = 0.05
+
+    # Epic 14 (Probable Duplicate Statement Detection, WR-57). The switch gates only NEW
+    # judgments -- the check after extraction and the pair scan. The remembered-file
+    # lookup, removal jobs and the Review panel keep working when it is off, because they
+    # honour decisions the user already made. Ships OFF: it is switched on only after the
+    # accuracy evaluation (`check-duplicates`) has been run on the real statements.
+    duplicate_detection_enabled: bool = False
+    # A pair is a probable duplicate when at least this fraction of the SMALLER statement's
+    # transactions match. Below 0.50 the rule would start flagging statements that are
+    # plainly different, so the range is bounded and a bad value stops the worker starting.
+    # Also the size relation for "removal offered" (Question 1 = C, WR-64).
+    duplicate_match_ratio: float = Field(default=0.80, ge=0.50, le=1.00)
+    # Statements with fewer transactions than this are never flagged on transactions alone
+    # (FR-PD-4): their account identifier and closing balance must match too.
+    duplicate_min_transactions: int = Field(default=3, ge=1, le=50)
 
     @property
     def database_url(self) -> str:

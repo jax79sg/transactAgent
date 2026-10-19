@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Matches ProtectedLayout/LoginPage's bg-slate-50/dark:bg-slate-950 so the
+     html/body background agrees with the app theme -- otherwise mobile browsers
+     (e.g. Android Chrome) show a white flash in the overscroll/rubber-band area
+     since that area paints the html/body background, not any inner wrapper's. */
+  html,
+  body {
+    @apply bg-slate-50 dark:bg-slate-950;
+  }
+}
