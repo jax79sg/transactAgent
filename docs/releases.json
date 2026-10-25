@@ -1,5 +1,10 @@
 [
   {
+    "version": "1.2.1",
+    "date": "2026-10-25",
+    "summary": "Reloading a page no longer signs you out"
+  },
+  {
     "version": "1.2.0",
     "date": "2026-10-19",
     "summary": "Account balance: a Balances tab on the Dashboard, worked from one anchor balance per account"

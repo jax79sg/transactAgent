@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<meta name="guide-version" content="1.2.0">
+<meta name="guide-version" content="1.2.1">
 <title>Bank Transaction Insights — User Guide</title>
 <style>
   :root {
@@ -392,7 +392,7 @@
 <div class="page">
   <div class="cover">
     <p class="eyebrow">User Guide</p>
-    <!--version-banner--><p class="version-banner">Guide for <strong>version 1.2.0</strong>, the latest release. <a href="releases.html">All versions</a></p><!--/version-banner-->
+    <!--version-banner--><p class="version-banner">Guide for <strong>version 1.2.1</strong>, the latest release. <a href="releases.html">All versions</a></p><!--/version-banner-->
     <h1>Bank Transaction Insights</h1>
     <p class="lede">Turn a folder of bank statement PDFs into categorized transactions, spending charts, and plain-English answers about your own money — with a nightly backup running quietly in the background.</p>
     <div class="project-note">
@@ -469,7 +469,7 @@
           <li><strong>Dashboard</strong> — an amber number counts recurring payments that need attention: due soon, overdue, a charge waiting for your approval, or newly detected ones.</li>
           <li><strong>Review</strong> — an amber number counts category decisions waiting for you (suggested corrections and disagreements); a violet number counts probable duplicate statements waiting for your decision.</li>
           <li>The <strong>dot</strong> beside the theme button pulses green, with "Ingestion run in progress", while a run or a re-categorization is working. Click it to see the most recent finished jobs.</li>
-          <li><strong>v1.2.0</strong> is the release you are running — click it to open the About card in Settings. <a href="#releases">More on releases</a>.</li>
+          <li><strong>v1.2.1</strong> is the release you are running — click it to open the About card in Settings. <a href="#releases">More on releases</a>.</li>
           <li><strong>Light / Dark</strong> switches the colours. The first time, it follows your device's setting; after that, your choice is remembered in this browser.</li>
         </ul>
 
@@ -780,7 +780,7 @@
       <section class="feature" id="releases">
         <p class="kicker">11 · Which version?</p>
         <h2>Releases</h2>
-        <p class="dek">The app has a release number, written MAJOR.MINOR.PATCH. This guide is for version <strong>1.2.0</strong>, and every release keeps its own copy of the guide.</p>
+        <p class="dek">The app has a release number, written MAJOR.MINOR.PATCH. This guide is for version <strong>1.2.1</strong>, and every release keeps its own copy of the guide.</p>
 
         <ul class="feature-list">
           <li>The number is shown on the sign-in screen, in the top bar of every page and in <strong>Settings → About this release</strong>, which also links to the guide for exactly that version.</li>
@@ -788,17 +788,17 @@
           <li>If the interface and the server report different releases, Settings says so — rebuild and restart both so they match.</li>
         </ul>
 
-        <h3>What's new in 1.2.0</h3>
+        <h3>What's new in 1.2.1</h3>
         <ul class="feature-list">
-          <li>The Dashboard gains a new <a href="#overview"><strong>Balances</strong></a> tab: tell the app one balance you know is real for each savings or current account, and it works out your balance on any date, a chart of it over time, and a warning if a statement's printed balance ever disagrees. Credit cards are never included. See the Dashboard section above for the full picture.</li>
+          <li><strong>Reloading a page no longer signs you out.</strong> Until now, refreshing the browser (or opening a link to a page in a tab where you were already signed in) sent you back to the sign-in screen, because the page's first requests went out before the app had handed over your login. Your session now survives a reload; signing out, or closing the tab, still ends it.</li>
         </ul>
 
         <h3>Earlier releases</h3>
-        <p class="dek"><strong>1.1.1</strong> made the Review page's suggested corrections sortable by Description, Current category and Proposed category. <strong>1.1.0</strong> added the <a href="#costs">Costs</a> page and the Model Costs prices in Settings, and made Transactions sortable by Description and by Converted (SGD). <strong>1.0.0</strong>, the first numbered release, added probable duplicate statements, the reworked recurring payments, sorting, dark mode, the activity indicator, Gemini as an option for categorization and embeddings, and release numbers with a guide for every release. Their guides are kept as they were: see the <a href="https://jax79sg.github.io/transactAgent/releases.html">list of all releases</a>.</p>
+        <p class="dek"><strong>1.2.0</strong> added the <a href="#overview">Balances</a> tab to the Dashboard: your balance in each savings or current account on any date, worked out from one balance you tell the app. <strong>1.1.1</strong> made the Review page's suggested corrections sortable by Description, Current category and Proposed category. <strong>1.1.0</strong> added the <a href="#costs">Costs</a> page and the Model Costs prices in Settings, and made Transactions sortable by Description and by Converted (SGD). <strong>1.0.0</strong>, the first numbered release, added probable duplicate statements, the reworked recurring payments, sorting, dark mode, the activity indicator, Gemini as an option for categorization and embeddings, and release numbers with a guide for every release. Their guides are kept as they were: see the <a href="https://jax79sg.github.io/transactAgent/releases.html">list of all releases</a>.</p>
       </section>
 
       <footer class="manual-footer">
-        Bank Transaction Insights — User Guide, version 1.2.0. Screenshots use sample data for illustration. A learning project by jax79sg, made largely with Claude Code (Claude Opus and Sonnet).
+        Bank Transaction Insights — User Guide, version 1.2.1. Screenshots use sample data for illustration. A learning project by jax79sg, made largely with Claude Code (Claude Opus and Sonnet).
       </footer>
     </div>
   </div>
