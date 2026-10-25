@@ -112,7 +112,7 @@ describe("AccountsSection: the actions", () => {
     listAccounts().mockResolvedValue(accountsListFixture());
     setup();
     await screen.findByTestId(`account-row-${main}`);
-    expect(screen.getByTestId(`account-set-balance-${main}`)).toHaveTextContent("Replace balance");
+    expect(screen.getByTestId(`account-set-balance-${main}`)).toHaveTextContent("Change balance");
     expect(screen.getByTestId(`account-set-balance-${fresh}`)).toHaveTextContent("Set balance");
     expect(screen.queryByTestId(`account-set-balance-${card}`)).not.toBeInTheDocument();
     for (const id of [main, fresh, card]) {

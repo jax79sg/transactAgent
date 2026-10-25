@@ -34,10 +34,12 @@ function problemWith(balanceText: string, dateText: string, maxDate: string): st
   return null;
 }
 
-// Epic 13 (US-13.3): enter or replace an account's single known balance. The balance is in the account's own currency
+// Epic 13 (US-13.3): enter or change an account's single known balance. The balance is in the account's own currency
 // and is the END-OF-DAY balance of the date, which the dialog says; when one exists its value is shown so the owner
-// sees what is being replaced. A run of accounts is quick: "Save and next account" (offered while another deposit
-// account still needs a balance) saves, and the parent opens the next one with the date carried over.
+// sees what is being replaced, and (issue #57) the fields start with that amount and its date, so correcting a mistyped
+// figure is editing it and the balance does not slip to another date unless the owner moves it. A run of accounts is
+// quick: "Save and next account" (offered while another deposit account still needs a balance) saves, and the parent
+// opens the next one with the date carried over (that carried date is for a first balance only).
 export function BalanceDialog({
   account,
   defaultDate,
@@ -57,8 +59,8 @@ export function BalanceDialog({
   /** The account no longer exists: the list was refreshed and the sentence is for the status line. */
   onGone: (message: string) => void;
 }) {
-  const [balanceText, setBalanceText] = useState("");
-  const [dateText, setDateText] = useState(defaultDate);
+  const [balanceText, setBalanceText] = useState(account.anchor?.balance ?? "");
+  const [dateText, setDateText] = useState(account.anchor?.asOfDate ?? defaultDate);
   const [validation, setValidation] = useState<string | null>(null);
   const refresh = useRefreshBalanceData();
 
@@ -94,7 +96,7 @@ export function BalanceDialog({
   return (
     <DialogFrame
       testId="balance-dialog"
-      title={`${replacing ? "Replace" : "Set"} the balance of “${account.name}”`}
+      title={`${replacing ? "Change" : "Set"} the balance of “${account.name}”`}
       description={`In ${account.currency}. Enter the balance at the end of that day, after that day's transactions. Use a figure from your banking app or a statement.`}
       onClose={onClose}
       footer={
@@ -114,7 +116,7 @@ export function BalanceDialog({
             </button>
           )}
           <button type="submit" form="balance-form" data-testid="balance-save" disabled={mutation.isPending} className={PRIMARY_CLASS}>
-            {replacing ? "Replace balance" : "Save balance"}
+            {replacing ? "Save change" : "Save balance"}
           </button>
         </>
       }
@@ -147,6 +149,7 @@ export function BalanceDialog({
               setValidation(null);
             }}
             autoFocus
+            onFocus={(event) => event.target.select()}
             className={`mt-1 ${FIELD_CLASS}`}
           />
         </label>

@@ -121,7 +121,7 @@ export function AccountsSection({
                         onClick={() => onSetBalance(account.id)}
                         className={ACTION}
                       >
-                        {account.anchor ? "Replace balance" : "Set balance"}
+                        {account.anchor ? "Change balance" : "Set balance"}
                       </button>
                     )}
                     <button
