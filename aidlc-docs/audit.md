@@ -4264,3 +4264,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Bug fix outside any epic; no functional design stage needed (no new behaviour, no design decision). Code Generation applied directly to a single-file fix with a test written first.
 
 ---
+
+## Merge PRs #58 and #59, Cut Release 1.2.1, Rebuild the Frontend
+**Timestamp**: 2026-10-25T13:09:41Z
+**User Input**: "Ok go ahead"
+**AI Response**: "Read as approval of the three things proposed in the previous message: merge both PRs, cut a patch release for the sign-out fix, and rebuild the live frontend. Both PRs had all 16 checks passing and were mergeable; merged #58 (the sign-out fix, merge commit 56a7e24) and #59 (the usage ledger refresh, 9f15dd0) with merge commits; local main fast-forwarded to 9f15dd0, zero open PRs. Release 1.2.1 prepared on branch `release/1.2.1` per RELEASING.md: PATCH bump because it is a fix (VERSION 1.2.1); docs/index.html updated (guide-version stamp, version banner, the 'v1.2.1 is the release you are running' line, the intro and the footer, a new 'What's new in 1.2.1' entry saying a reload no longer signs you out, and 1.2.0 folded into 'Earlier releases'); `python scripts/guide.py snapshot` wrote docs/v1.2.1/index.html, docs/releases.json and docs/releases.html; `python scripts/guide.py check` ok; the guide script's own tests 54 pass (run in a throwaway venv, since the earlier scratch environment no longer exists). The Balances bullet still says 'new in 1.2.0', which is still true. Still to do after this PR merges, in order: tag the merge commit v1.2.1, rebuild the live frontend image only (docker compose build frontend; docker compose up -d --no-deps frontend, so the database and the other services are not recreated), and verify GET /version and the served frontend."
+**Context**: Release 1.2.1 (fix: reloading a page no longer signs you out). Branch `release/1.2.1`. Deployment and the tag are recorded in a follow-up entry once done.
+
+---
