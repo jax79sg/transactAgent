@@ -4248,3 +4248,19 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: All open PRs (#3, and earlier #50-#55 for Epic 13 and its release) are now merged. Zero open PRs.
 
 ---
+
+## Project Status Request
+**Timestamp**: 2026-10-24 (exact time not recorded)
+**User Input**: "status of the project?"
+**AI Response**: "Reported from a fresh check of the repository and the live stack, not from memory. Epic 13 (Account Balance at a Point in Time) complete across all four units, merged, deployed and released as v1.2.0; main clean at fce2a44; zero open PRs or issues; all five live containers healthy for 27 hours; GET /version reports 1.2.0; live data intact (7,230 transactions, 188 statements, 20 accounts); 0 balance anchors entered yet. Needs attention: the nightly e2e had failed every night (zero passes since the job was added on 2026-08-28), with four Settings and Transactions cases failing; and the claude-usage ledger files were modified but uncommitted."
+**Context**: Status report only; no files changed.
+
+---
+
+## Fix the Nightly E2E Failures: Root Cause Is a Sign-Out Bug on Every Full Page Load
+**Timestamp**: 2026-10-25T09:13:24Z
+**User Input**: "fix the issues."
+**AI Response**: "Worked on branch `fix/e2e-settings-transactions-drift`. Diagnosis (read from the failed run's own logs, no artifact download): the four failing cases are the only ones that load their page with `page.goto` after signing in, and the API log shows every request on those loads returning 401 (GET /settings, /drive/status, /transactions, /transactions/banks, /categories and the layout polls), while the cases that never reload (Dashboard, Balances) got 200s. So this was not spec drift: it is a product bug present since the initial commit. `AuthProvider` restored the saved token into React state at once but handed it to the API client only in a `useEffect`; React runs a child's effects before its parent's, so the first requests of any freshly loaded page carried no Authorization header, got 401, and the 401 handler signed the user out. In the live app that means a reload (F5), or a link opened in a signed-in tab, sent the user back to the login page. Fix (frontend/src/context/AuthContext.tsx): the client is given the token in the same step that reads it from sessionStorage (idempotent, so safe under StrictMode). Test first: frontend/tests/AuthContext.test.tsx, three cases that load the client and AuthProvider modules afresh per case (the client keeps its token at module level); the two real cases fail without the fix (no header; the saved session wiped) and pass with it, the third (nobody signed in sends no header) passes both ways. An earlier version of that test shared module state between cases and failed spuriously on the control case; fixed by `vi.resetModules()`, a test mistake, not a product problem. Frontend suite 654 pass (651 + 3), tsc clean, eslint 0 errors (the 5 baseline warnings, untouched). No spec files were changed: the specs were right. Verified with the real thing: the nightly e2e workflow dispatched on the branch (run 40179712258) passed all 16 cases, including the four Settings and Transactions cases that had failed every night; it is the first green run since the job was added on 2026-08-28. The second item in the status report, the two claude-usage ledger files left modified and uncommitted by the SessionEnd hook, went through its own branch and PR #59 (`scripts/claude_usage.py update`, ledger and summary only); it is recorded here rather than in a second audit entry so that only one open PR edits this file."
+**Context**: Bug fix outside any epic; no functional design stage needed (no new behaviour, no design decision). Code Generation applied directly to a single-file fix with a test written first.
+
+---

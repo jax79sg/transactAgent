@@ -15,7 +15,14 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setTokenState] = useState<string | null>(() => sessionStorage.getItem(SESSION_STORAGE_KEY));
+  const [token, setTokenState] = useState<string | null>(() => {
+    const saved = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    // The API client needs the token before this component's effects run: React runs a child's effects first, so a
+    // page's first requests would otherwise go out without it, get a 401, and the 401 handler would sign the user
+    // out on every full page load (reload, or opening a link in a signed-in tab). Setting it is idempotent.
+    setToken(saved);
+    return saved;
+  });
 
   const logout = useCallback(() => {
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
