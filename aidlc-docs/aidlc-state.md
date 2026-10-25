@@ -794,3 +794,5 @@ Resumes the approved build order for the two units never built. Read with the co
 
 - [x] (2026-10-25, user: "Ok go ahead") **PRs #58 and #59 merged** (56a7e24, 9f15dd0). The sign-out-on-reload fix and the usage ledger refresh are on main.
 - [ ] (2026-10-25) **Release 1.2.1 prepared** on branch `release/1.2.1` (VERSION, guide, `docs/v1.2.1/`, releases index; guide check ok, 54 script tests pass). Awaiting its PR merge, then: tag v1.2.1, rebuild the live frontend only, verify. Not yet deployed: the live frontend still has the sign-out-on-reload bug.
+
+- [x] (2026-10-25, user: "Ok go ahead") **Release 1.2.1 complete**: PRs #58, #59, #60 merged; tag `v1.2.1` on 20e8a33; live frontend and API rebuilt and recreated (both report 1.2.1; the worker was left running on its old image, it only logs the version); data intact. The sign-out-on-reload bug is fixed in the running app. The nightly e2e should go green tonight; check the 2026-10-25 18:00 UTC run.
