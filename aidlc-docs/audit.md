@@ -4272,3 +4272,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Release 1.2.1 (fix: reloading a page no longer signs you out). Branch `release/1.2.1`. Deployment and the tag are recorded in a follow-up entry once done.
 
 ---
+
+## Release 1.2.1: Merged, Tagged and Deployed
+**Timestamp**: 2026-10-25T13:20:00Z
+**User Input**: "Ok go ahead" (the approval recorded in the previous entry; no new user input)
+**AI Response**: "PR #60 (release 1.2.1) had all 16 checks passing and was merged (merge commit 20e8a33). Tagged that commit v1.2.1 (annotated) and pushed the tag. Deployed: rebuilt the frontend image and recreated only the frontend container (docker compose up -d --no-deps frontend); the served bundle contains 1.2.1. GET /version on the API still reported 1.2.0, and RELEASING.md step 5 asks for every service to be restarted so the interface and server agree (Settings warns when they differ), so I also rebuilt and recreated the api-service container (--no-deps). That API restart went one step past the literal 'rebuild the frontend' that was proposed; it is the documented release step and a few seconds' blip, and it is disclosed here. The ingestion worker was not restarted (it only logs the version, and a restart mid-job is not worth risking); the database and vector database were not touched. Verified: GET /version = 1.2.1, GET /health ok, GET /accounts without a token = 401, no errors in the API log, all five containers healthy, data intact (7,230 transactions, 188 statements, 20 accounts). The other three containers show 'up 6 hours' because the Mac itself rebooted at about 15:34 local time today (uptime 5:41), not because of any command in this session. Not verified in a browser: the sign-out fix itself on the live stack, which would need a login; it was verified by the real nightly e2e on the branch before merging (16 of 16)."
+**Context**: Release 1.2.1 complete: fix merged (#58), usage ledger merged (#59), release merged (#60), v1.2.1 tagged, frontend and API deployed. Zero open PRs once this record merges.
+
+---
