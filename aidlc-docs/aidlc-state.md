@@ -801,3 +801,5 @@ Resumes the approved build order for the two units never built. Read with the co
 
 - [x] (2026-10-26, user: "merge") **PR #62 merged** (faa6237); issue #57 closed. No open PRs or issues.
 - [ ] (2026-10-26, user: "Ok go ahead.") **Release 1.2.2 prepared** on branch `release/1.2.2` (VERSION, guide, `docs/v1.2.2/`, releases index; guide check ok, 54 script tests pass). Awaiting its PR merge, then: tag v1.2.2, rebuild the live frontend and API, verify. Not yet deployed: the live app still lacks the Change balance button.
+
+- [x] (2026-10-26, user: "Ok go ahead.") **Release 1.2.2 complete**: PRs #62 and #63 merged; tag `v1.2.2` on 38355a3; live frontend and API rebuilt and recreated (both report 1.2.2); worker, database and vector database untouched; data intact. Issue #57 is fixed and closed in the running app (Change balance on the Balances table). The guide's Balances screenshot is still the 1.2.0 one and does not show the new button.
