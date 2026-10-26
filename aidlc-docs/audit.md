@@ -4296,3 +4296,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Release 1.2.2 (feature: Change balance). Branch `release/1.2.2`. Merge, tag and deployment are recorded in a follow-up entry once done.
 
 ---
+
+## Release 1.2.2: Merged, Tagged and Deployed
+**Timestamp**: 2026-10-26T04:05:46Z
+**User Input**: "Ok go ahead." (the approval recorded in the previous entry; no new user input)
+**AI Response**: "PR #63 (release 1.2.2) had all 16 checks passing and was merged (merge commit 38355a3). Tagged that commit v1.2.2 (annotated) and pushed the tag. Deployed: rebuilt the frontend and api-service images and recreated only those two containers (docker compose up -d --no-deps frontend api-service). The API was recreated as well as the frontend because RELEASING.md step 5 asks for every service to be restarted so the interface and the server report the same release (Settings warns when they differ); the proposal had said 'rebuild the live frontend', so this went one step past the literal wording, as it did for 1.2.1; it is a few seconds' blip and it is disclosed here. The ingestion worker, database and vector database were not touched. Verified: GET /version = 1.2.2, GET /health ok, GET /accounts without a token = 401, both recreated containers healthy, no errors in the API log, data intact (7,230 transactions, 188 statements, 20 accounts, 9 balances). The served frontend bundle contains 1.2.2, 'Change balance' (the table button and the Accounts-list button), 'Save change', and no 'Replace balance'. A first check of the bundle failed on a shell character-handling problem and was redone against a file. Not verified in a browser on the live stack: clicking Change balance, which needs a login; it was verified by the unit tests, five deliberate breakages, and the real e2e run on the branch (17 of 17) before merging."
+**Context**: Release 1.2.2 complete: issue #57 fixed and closed (PR #62), release merged (#63), v1.2.2 tagged, frontend and API deployed. Zero open issues.
+
+---
