@@ -4288,3 +4288,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Bug/enhancement fix to the Frontend SPA unit's Balances tab (Epic 13), driven by issue #57. Inside existing component boundaries, so no new Functional Design stage; the approved design documents are amended in place instead. The user's instruction to resolve the issue stands in for plan approval; the PR is the review gate.
 
 ---
+
+## Release 1.2.2: Change Balance (Issue #57)
+**Timestamp**: 2026-10-26T04:00:25Z
+**User Input**: "Ok go ahead."
+**AI Response**: "Read as approval of what was proposed in the previous message: cut 1.2.2 for the issue #57 fix (merged as PR #62), update the guide with a line on changing a balance, and rebuild the live frontend. Release prepared on branch `release/1.2.2` per RELEASING.md: PATCH bump (VERSION 1.2.2); docs/index.html updated (guide-version stamp, banner, 'v1.2.2 is the release you are running', intro, footer; a new sub-bullet in the Balances section on pressing Change balance, with the form starting from the current amount and date and moving the date as the way to re-anchor; a new 'What's new in 1.2.2'; 1.2.1 folded into 'Earlier releases'); `scripts/guide.py snapshot` wrote docs/v1.2.2/index.html, docs/releases.json and docs/releases.html; `scripts/guide.py check` ok; the guide script's tests 54 pass. Known gap, not fixed: the guide's Balances screenshot is the real one taken for 1.2.0, so it does not show the new Change balance button; retaking it needs the dedicated scratch stack used for 1.2.0 and the text is accurate without it. Still to do after this PR merges: tag the merge commit v1.2.2, then rebuild the live frontend and, as RELEASING.md step 5 requires so that Settings does not warn of a version mismatch, the API (both with --no-deps; the worker, database and vector database are not touched), and verify."
+**Context**: Release 1.2.2 (feature: Change balance). Branch `release/1.2.2`. Merge, tag and deployment are recorded in a follow-up entry once done.
+
+---

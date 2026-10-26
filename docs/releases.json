@@ -1,5 +1,10 @@
 [
   {
+    "version": "1.2.2",
+    "date": "2026-10-26",
+    "summary": "A balance you entered can be changed from the Balances table"
+  },
+  {
     "version": "1.2.1",
     "date": "2026-10-25",
     "summary": "Reloading a page no longer signs you out"
