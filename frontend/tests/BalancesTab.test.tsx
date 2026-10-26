@@ -130,8 +130,26 @@ describe("BalancesTab: entering a balance from the prompt", () => {
     mockReads();
     setup();
     await userEvent.setup().click(await screen.findByTestId(`account-set-balance-${main}`));
-    expect(screen.getByTestId("balance-dialog")).toHaveTextContent("Replace the balance of “Main”");
+    expect(screen.getByTestId("balance-dialog")).toHaveTextContent("Change the balance of “Main”");
     expect(screen.getByTestId("balance-previous")).toHaveTextContent("Currently SGD 1,000.00 on 30 Jun 2026");
+  });
+
+  it("changes a balance from the balances table itself, starting from what is there (issue #57)", async () => {
+    mockReads();
+    vi.mocked(accountsApi.setAnchor).mockResolvedValue(anchorCreatedFixture());
+    setup();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId(`change-balance-${main}`));
+
+    expect(screen.getByTestId("balance-dialog")).toHaveTextContent("Change the balance of “Main”");
+    expect(screen.getByTestId("balance-input")).toHaveValue("1000.00");
+    expect(screen.getByTestId("balance-date-input")).toHaveValue("2026-06-30");
+
+    await user.clear(screen.getByTestId("balance-input"));
+    await user.type(screen.getByTestId("balance-input"), "1100");
+    await user.click(screen.getByTestId("balance-save"));
+    await waitFor(() => expect(screen.queryByTestId("balance-dialog")).not.toBeInTheDocument());
+    expect(accountsApi.setAnchor).toHaveBeenCalledWith(main, { balance: "1100.00", asOfDate: "2026-06-30" });
   });
 
   it("says so in the status line, and closes, when the account has gone", async () => {

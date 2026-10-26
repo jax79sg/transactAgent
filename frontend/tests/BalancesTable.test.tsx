@@ -54,6 +54,23 @@ describe("BalancesTable: rows", () => {
     expect(onSetBalance).toHaveBeenCalledWith(fresh);
   });
 
+  it("gives every row that has a balance a Change balance button, and a row without one only Set balance (issue #57)", async () => {
+    const response = balancesDateFixture();
+    const { onSetBalance } = show(response);
+    for (const account of response.accounts) {
+      const row = screen.getByTestId(`balance-row-${account.accountId}`);
+      if (account.status === "anchor_required") {
+        expect(within(row).getByTestId(`set-balance-${account.accountId}`)).toBeInTheDocument();
+        expect(within(row).queryByTestId(`change-balance-${account.accountId}`)).not.toBeInTheDocument();
+      } else {
+        expect(within(row).getByTestId(`change-balance-${account.accountId}`)).toHaveTextContent("Change balance");
+        expect(within(row).queryByTestId(`set-balance-${account.accountId}`)).not.toBeInTheDocument();
+      }
+    }
+    await userEvent.setup().click(screen.getByTestId(`change-balance-${main}`));
+    expect(onSetBalance).toHaveBeenCalledWith(main);
+  });
+
   it("shows an unavailable conversion in words, still giving the account's own-currency figure", () => {
     show();
     expect(screen.getByTestId(`balance-status-${eur}`)).toHaveTextContent("Unavailable: no exchange rate");
@@ -154,6 +171,7 @@ describe("BalancesTable: the total", () => {
     });
     // React Query tells its subscribers on the next tick, so the button follows a moment later.
     await waitFor(() => expect(screen.getByTestId(`set-balance-${fresh}`)).toBeDisabled());
+    expect(screen.getByTestId(`change-balance-${main}`)).toBeDisabled();
   });
 });
 

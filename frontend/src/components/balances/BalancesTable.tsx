@@ -32,6 +32,8 @@ function SgdCell({ account }: { account: AccountBalanceDTO }) {
 
 // Epic 13 (US-13.4): one row per deposit account with its state in words (and colour), the combined total, and every
 // exclusion stated beside it. A real table so the numbers align; it scrolls sideways inside its box on a phone.
+// `onSetBalance` opens the balance dialog for an account: from "Set balance" on a row that needs one, and (issue #57)
+// from "Change balance" on a row that has one, so a balance can be corrected where it is shown.
 export function BalancesTable({
   response,
   onSetBalance,
@@ -85,6 +87,17 @@ export function BalancesTable({
                 <td className="py-2 pr-3">
                   <div className="font-medium">{account.name}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">{account.bankName}</div>
+                  {account.status !== "anchor_required" && (
+                    <button
+                      type="button"
+                      data-testid={`change-balance-${account.accountId}`}
+                      disabled={writing}
+                      onClick={() => onSetBalance(account.accountId)}
+                      className="mt-1 min-h-[32px] rounded border border-slate-300 px-2 py-0.5 text-sm disabled:opacity-50 dark:border-slate-600"
+                    >
+                      Change balance
+                    </button>
+                  )}
                 </td>
                 {account.status === "anchor_required" ? (
                   <td colSpan={columnCount - 2} className="py-2 pr-3">

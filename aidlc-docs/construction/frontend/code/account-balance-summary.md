@@ -30,6 +30,10 @@ Design: `../functional-design/` (the Epic 13 sections of `frontend-components.md
 
 **End to end** (Step 14): `balances.spec.ts`, seeded by the extended `seed_e2e_fixtures.py` (idempotent, including over a database seeded before the accounts existed, 5 new database tests), run against the real nightly workflow dispatched on this branch — [run 39107017262](https://github.com/jax79sg/transactAgent/actions/runs/39107017262). All 6 new cases and the fixed Dashboard case passed; only the pre-existing Settings/Transactions spec-drift failures occurred (unrelated to this feature; offered to the user as a separate task, not fixed here).
 
+## Amendment: issue #57, "Balance cannot be set again" (2026-10-25)
+
+The owner could not change a balance once it was set. The API always allowed it (`PUT /accounts/{id}/anchor` is an upsert), but the approved design offered the way back only in the Accounts list and opened the dialog empty with a carried-over date. Changed: a **Change balance** button on every balances-table row that has a balance; the dialog starts with the current amount (selected) and date when changing; "Replace balance" became "Change balance" (dialog title "Change the balance of", button "Save change"). Files: `BalancesTable.tsx`, `BalanceDialog.tsx`, `AccountsSection.tsx`; six new unit cases and one e2e case. Not added: deleting a balance, or more than one balance per account.
+
 ## Deviations from the design, found while building
 
 - The "Currently replacing" line in `BalanceDialog` does not state when the previous balance was *entered* (only the date it applies to) — that timestamp would need a time zone decision the design did not make, so it was left out.

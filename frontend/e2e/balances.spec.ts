@@ -35,7 +35,7 @@ test.describe("Dashboard balances", () => {
 
     // the credit card is in the accounts list, with no balance action
     await expect(row(page, "E2E Card")).toContainText("Credit card");
-    await expect(row(page, "E2E Card").getByRole("button", { name: /(Set|Replace) balance/ })).toHaveCount(0);
+    await expect(row(page, "E2E Card").getByRole("button", { name: /(Set|Change) balance/ })).toHaveCount(0);
   });
 
   test("the lookup says which day it is for and how far the transactions go", async ({ page }) => {
@@ -46,7 +46,7 @@ test.describe("Dashboard balances", () => {
 
   test("entering a balance shows the figure, the total, and who is left out of it", async ({ page }) => {
     await openBalances(page);
-    await row(page, "E2E Savings").getByRole("button", { name: /(Set|Replace) balance/ }).click();
+    await row(page, "E2E Savings").getByRole("button", { name: /(Set|Change) balance/ }).click();
 
     const dialog = page.getByTestId("balance-dialog");
     await expect(dialog).toBeVisible();
@@ -59,6 +59,27 @@ test.describe("Dashboard balances", () => {
     await expect(page.getByTestId("balances-table").getByTestId(/^balance-row-/).filter({ hasText: "E2E Savings" })).toContainText("1,000.00");
     await expect(page.getByTestId("combined-total")).toContainText("SGD 1,000.00");
     await expect(page.getByTestId("combined-exclusions")).toContainText("E2E Current (anchor required)");
+  });
+
+  // Issue #57: a balance set wrongly, or to be set again, is changed from the table that shows it, and the dialog
+  // starts from the figure and date that are there.
+  test("a balance can be changed from the balances table, starting from the current figure and date", async ({ page }) => {
+    await openBalances(page);
+    const tableRow = page.getByTestId("balances-table").getByTestId(/^balance-row-/).filter({ hasText: "E2E Savings" });
+    await tableRow.getByRole("button", { name: "Change balance" }).click();
+
+    const dialog = page.getByTestId("balance-dialog");
+    await expect(dialog).toContainText("Change the balance of");
+    await expect(dialog.getByTestId("balance-input")).toHaveValue("1000.00");
+    await expect(dialog.getByTestId("balance-date-input")).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
+    await dialog.getByTestId("balance-input").fill("1250.50");
+    await dialog.getByTestId("balance-save").click();
+    await expect(dialog).toBeHidden();
+
+    await expect(page.getByTestId("account-status-message")).toContainText("Replaced");
+    await expect(page.getByTestId("account-status-message")).toContainText("1,250.50");
+    await expect(tableRow).toContainText("1,250.50");
+    await expect(page.getByTestId("combined-total")).toContainText("SGD 1,250.50");
   });
 
   test("the chart draws once an account has a balance", async ({ page }) => {

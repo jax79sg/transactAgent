@@ -33,8 +33,10 @@ function setup(options: { account?: AccountDTO; canSaveAndNext?: boolean; defaul
   return { ...view, account, onClose, onSaved, onGone, invalidate };
 }
 
+// Replaces whatever the field holds: a change starts with the current balance filled in (issue #57).
 async function enter(balance: string) {
   const user = userEvent.setup();
+  await user.clear(screen.getByTestId("balance-input"));
   await user.type(screen.getByTestId("balance-input"), balance);
   return user;
 }
@@ -58,9 +60,28 @@ describe("BalanceDialog: what it says", () => {
 
   it("shows the value being replaced before the owner confirms", () => {
     setup({ account: fixtureAccount("main") });
-    expect(screen.getByTestId("balance-dialog")).toHaveTextContent("Replace the balance of “Main”");
+    expect(screen.getByTestId("balance-dialog")).toHaveTextContent("Change the balance of “Main”");
     expect(screen.getByTestId("balance-previous")).toHaveTextContent("Currently SGD 1,000.00 on 30 Jun 2026. Saving replaces it.");
-    expect(screen.getByTestId("balance-save")).toHaveTextContent("Replace balance");
+    expect(screen.getByTestId("balance-save")).toHaveTextContent("Save change");
+  });
+
+  it("starts a change with the current amount and its own date, not the date it was offered (issue #57)", () => {
+    setup({ account: fixtureAccount("main"), defaultDate: "2026-10-18" });
+    expect(screen.getByTestId("balance-input")).toHaveValue("1000.00");
+    expect(screen.getByTestId("balance-date-input")).toHaveValue("2026-06-30");
+  });
+
+  it("selects the current amount, so typing overwrites it", () => {
+    setup({ account: fixtureAccount("main") });
+    const input = screen.getByTestId("balance-input") as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, input.value.length]);
+  });
+
+  it("starts a first balance empty, on the date it was offered", () => {
+    setup({ defaultDate: "2026-09-30" });
+    expect(screen.getByTestId("balance-input")).toHaveValue("");
+    expect(screen.getByTestId("balance-date-input")).toHaveValue("2026-09-30");
   });
 
   it("starts on the date it was given and allows nothing after today or before 2000", () => {
@@ -73,6 +94,16 @@ describe("BalanceDialog: what it says", () => {
 });
 
 describe("BalanceDialog: saving", () => {
+  it("fixes a mistyped amount without moving the balance to another date (issue #57)", async () => {
+    const { account, onSaved } = setup({ account: fixtureAccount("main"), defaultDate: "2026-10-18" });
+    const response = anchorReplacedFixture();
+    vi.mocked(accountsApi.setAnchor).mockResolvedValue(response);
+    const user = await enter("1,200.50");
+    await user.click(screen.getByTestId("balance-save"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ account, response, saveAndNext: false }));
+    expect(accountsApi.setAnchor).toHaveBeenCalledWith(account.id, { balance: "1200.50", asOfDate: "2026-06-30" });
+  });
+
   it("sends the canonical two-place balance and the date, then refreshes accounts and balances and reports", async () => {
     const { account, onSaved, invalidate } = setup();
     const response: AnchorResponse = anchorCreatedFixture();
