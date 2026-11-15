@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<meta name="guide-version" content="1.2.2">
+<meta name="guide-version" content="1.3.0">
 <title>Bank Transaction Insights — User Guide</title>
 <style>
   :root {
@@ -392,7 +392,7 @@
 <div class="page">
   <div class="cover">
     <p class="eyebrow">User Guide</p>
-    <!--version-banner--><p class="version-banner">Guide for <strong>version 1.2.2</strong>, the latest release. <a href="releases.html">All versions</a></p><!--/version-banner-->
+    <!--version-banner--><p class="version-banner">Guide for <strong>version 1.3.0</strong>, the latest release. <a href="releases.html">All versions</a></p><!--/version-banner-->
     <h1>Bank Transaction Insights</h1>
     <p class="lede">Turn a folder of bank statement PDFs into categorized transactions, spending charts, and plain-English answers about your own money — with a nightly backup running quietly in the background.</p>
     <div class="project-note">
@@ -469,7 +469,7 @@
           <li><strong>Dashboard</strong> — an amber number counts recurring payments that need attention: due soon, overdue, a charge waiting for your approval, or newly detected ones.</li>
           <li><strong>Review</strong> — an amber number counts category decisions waiting for you (suggested corrections and disagreements); a violet number counts probable duplicate statements waiting for your decision.</li>
           <li>The <strong>dot</strong> beside the theme button pulses green, with "Ingestion run in progress", while a run or a re-categorization is working. Click it to see the most recent finished jobs.</li>
-          <li><strong>v1.2.2</strong> is the release you are running — click it to open the About card in Settings. <a href="#releases">More on releases</a>.</li>
+          <li><strong>v1.3.0</strong> is the release you are running — click it to open the About card in Settings. <a href="#releases">More on releases</a>.</li>
           <li><strong>Light / Dark</strong> switches the colours. The first time, it follows your device's setting; after that, your choice is remembered in this browser.</li>
         </ul>
 
@@ -516,6 +516,7 @@
               <li>The <strong>balance over time</strong> chart plots the combined total and your largest accounts, with the rest folded into one <em>Other accounts</em> line; a gap in a line means no exchange rate was available for that day, not a guess.</li>
               <li>If a statement's printed balance doesn't agree with what the app computes, a notice says so and shows the difference — nothing is hidden or silently corrected.</li>
               <li>Accounts can be <strong>renamed</strong>, have their <strong>type</strong> corrected (savings/current, credit card, or other), or be <strong>merged</strong> when the app created two for one real account.</li>
+              <li>Each account in the balances table says what kind of account it is. If two accounts share an account number &mdash; for example one account that some statements call &ldquo;DBS&rdquo; and others &ldquo;DBS / POSB&rdquo; &mdash; a <strong>Possible duplicate accounts</strong> notice appears with a <strong>Review and merge</strong> button (new in 1.3.0). It matters because a balance entered on each would be counted twice in the total. If they are one account, merge them; the app never merges for you, and you choose which account and which balance to keep.</li>
             </ul></li>
         </ul>
 
@@ -550,6 +551,8 @@
 
         <ul class="feature-list">
           <li>Search by description, or filter by bank, category, or currency.</li>
+          <li><strong>Account</strong> (new in 1.3.0) shows only one account's transactions. The list is the same as on the <a href="#dashboard">Balances</a> tab: every account, each marked <em>Savings / current</em>, <em>Credit card</em> or <em>Type unknown</em>, with how many transactions it has. An account with no activity is listed too, as <em>no transactions</em>, and choosing it says so instead of showing an empty table. Every row also shows its account and type; a row shows &mdash; when it belongs to no account. The choice is kept in the page address, so a link opens the same view.</li>
+          <li>The <strong>Bank</strong> filter still lists the bank exactly as each statement printed it, so one bank can appear under more than one spelling (for example &ldquo;OCBC&rdquo; and &ldquo;OCBC Bank&rdquo;). Use <strong>Account</strong> to match what the dashboard shows.</li>
           <li>The <strong>UNSURE only</strong> shortcut jumps straight to anything the app couldn't confidently categorize.</li>
           <li>Click a transaction's category to correct it — the app remembers the correction and uses it as precedent for similar transactions from then on.</li>
           <li><strong>Export CSV</strong> exports exactly the rows your current filters and search are showing.</li>
@@ -691,7 +694,7 @@
         <p class="dek">Everything that's configured once and rarely touched again — plus, further down, every tunable value the app runs on.</p>
 
         <ul class="feature-list">
-          <li><strong>Google Drive</strong> shows whether the app is connected, and a button to connect or reconnect. Reconnecting doesn't lose anything — it's the same one-time consent step as the first time.</li>
+          <li><strong>Google Drive</strong> shows whether the app is connected, and a button to connect or reconnect. Reconnecting doesn't lose anything — it's the same one-time consent step as the first time. If Google stops accepting the saved connection (it can expire or be revoked), the card says <em>The Google Drive connection has expired</em> and what stops working: ingestion and the nightly backup cannot reach Drive until you press <strong>Reconnect Google Drive</strong> (new in 1.3.0).</li>
           <li><strong>Categories</strong> is your whitelist — add, rename, or remove any category. <code>UNSURE</code> is reserved by the app itself and can't be removed; it's where anything it couldn't confidently place ends up.</li>
           <li><strong>About this release</strong> (at the bottom of the page) shows the release of the interface and of the server, warns if they differ, and links to the guide for that release.</li>
         </ul>
@@ -781,7 +784,7 @@
       <section class="feature" id="releases">
         <p class="kicker">11 · Which version?</p>
         <h2>Releases</h2>
-        <p class="dek">The app has a release number, written MAJOR.MINOR.PATCH. This guide is for version <strong>1.2.2</strong>, and every release keeps its own copy of the guide.</p>
+        <p class="dek">The app has a release number, written MAJOR.MINOR.PATCH. This guide is for version <strong>1.3.0</strong>, and every release keeps its own copy of the guide.</p>
 
         <ul class="feature-list">
           <li>The number is shown on the sign-in screen, in the top bar of every page and in <strong>Settings → About this release</strong>, which also links to the guide for exactly that version.</li>
@@ -789,17 +792,21 @@
           <li>If the interface and the server report different releases, Settings says so — rebuild and restart both so they match.</li>
         </ul>
 
-        <h3>What's new in 1.2.2</h3>
+        <h3>What's new in 1.3.0</h3>
         <ul class="feature-list">
-          <li><strong>A balance you entered can be changed where you see it.</strong> Every account that has a balance now has a <strong>Change balance</strong> button in the Balances table. The form opens with the current amount (selected, so typing replaces it) and its own date, so fixing a mistyped figure no longer means retyping it or watching the date. It was <em>Replace balance</em> in the Accounts list before, which was easy to miss. See the <a href="#overview">Dashboard</a> section.</li>
+          <li><strong>Transactions can be filtered by account.</strong> The new <strong>Account</strong> filter lists the same accounts as the Balances tab, each with its type and how many transactions it has (including accounts with none), and every row shows its account. See <a href="#transactions">Transactions</a>.</li>
+          <li><strong>Account types are shown beside account names</strong> in the Balances table and on the Transactions page, so a credit card can no longer be mistaken for a current account at the same bank.</li>
+          <li><strong>Possible duplicate accounts are flagged.</strong> When two accounts share an account number, the Balances tab says so, because a balance entered on both would be counted twice, and offers the Merge dialog.</li>
+          <li><strong>Settings tells you when the Google Drive connection has expired.</strong> It used to say &ldquo;Connected&rdquo; while nightly backups and ingestion were failing.</li>
+          <li><strong>Accounts whose statement prints a name instead of a number</strong> (for example a GXS pocket) are now named from that name in words, instead of by its last four letters. Existing accounts with the old automatic name are renamed once, when you upgrade; a name you chose yourself is never touched.</li>
         </ul>
 
         <h3>Earlier releases</h3>
-        <p class="dek"><strong>1.2.1</strong> stopped reloading a page from signing you out. <strong>1.2.0</strong> added the <a href="#overview">Balances</a> tab to the Dashboard: your balance in each savings or current account on any date, worked out from one balance you tell the app. <strong>1.1.1</strong> made the Review page's suggested corrections sortable by Description, Current category and Proposed category. <strong>1.1.0</strong> added the <a href="#costs">Costs</a> page and the Model Costs prices in Settings, and made Transactions sortable by Description and by Converted (SGD). <strong>1.0.0</strong>, the first numbered release, added probable duplicate statements, the reworked recurring payments, sorting, dark mode, the activity indicator, Gemini as an option for categorization and embeddings, and release numbers with a guide for every release. Their guides are kept as they were: see the <a href="https://jax79sg.github.io/transactAgent/releases.html">list of all releases</a>.</p>
+        <p class="dek"><strong>1.2.2</strong> added a <strong>Change balance</strong> button to the Balances table, with the form starting from the current amount and date. <strong>1.2.1</strong> stopped reloading a page from signing you out. <strong>1.2.0</strong> added the <a href="#overview">Balances</a> tab to the Dashboard: your balance in each savings or current account on any date, worked out from one balance you tell the app. <strong>1.1.1</strong> made the Review page's suggested corrections sortable by Description, Current category and Proposed category. <strong>1.1.0</strong> added the <a href="#costs">Costs</a> page and the Model Costs prices in Settings, and made Transactions sortable by Description and by Converted (SGD). <strong>1.0.0</strong>, the first numbered release, added probable duplicate statements, the reworked recurring payments, sorting, dark mode, the activity indicator, Gemini as an option for categorization and embeddings, and release numbers with a guide for every release. Their guides are kept as they were: see the <a href="https://jax79sg.github.io/transactAgent/releases.html">list of all releases</a>.</p>
       </section>
 
       <footer class="manual-footer">
-        Bank Transaction Insights — User Guide, version 1.2.2. Screenshots use sample data for illustration. A learning project by jax79sg, made largely with Claude Code (Claude Opus and Sonnet).
+        Bank Transaction Insights — User Guide, version 1.3.0. Screenshots use sample data for illustration. A learning project by jax79sg, made largely with Claude Code (Claude Opus and Sonnet).
       </footer>
     </div>
   </div>

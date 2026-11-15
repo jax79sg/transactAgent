@@ -4320,3 +4320,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Process failure of mine, caught before any PR or comment; recorded here without repeating any of the values.
 
 ---
+
+## Merge and Deploy PR #71 as Release 1.3.0, Guide Updated First
+**Timestamp**: 2026-11-15T09:52:50Z
+**User Input**: "ok merge and deploy. Remember to update guide if you need, before merging."
+**AI Response**: "Read as approval to merge PR #71 and deploy it, with the guide updated first. The guide did need updating, and these are new features, so under RELEASING.md this is a MINOR release, 1.3.0. Done on the PR branch before merging: VERSION 1.3.0; docs/index.html updated (guide-version stamp, banner, 'v1.3.0 is the release you are running', intro, footer; the Transactions section gains the Account filter and column and a note that the Bank filter still shows bank text as printed; the Balances section gains the account-type tags and the Possible duplicate accounts notice; the Settings Google Drive entry explains the expired-connection message; a new 'What's new in 1.3.0'; 1.2.2 folded into 'Earlier releases'); scripts/guide.py snapshot wrote docs/v1.3.0/index.html, docs/releases.json and docs/releases.html; scripts/guide.py check ok; the guide script tests 54 pass; the added text was scanned for real identifiers and names and has none. Known gap, not fixed: the guide's screenshots are older ones and do not show the new Account filter or the notice. PR #64 (the 1.2.2 deploy record) was not part of the request and is left open; merging it after this PR will need its audit and state appends reconciled. Next, in order: wait for the PR's checks, merge PR #71, tag the merge commit v1.3.0, check that no ingestion run is active before touching the worker, rebuild and recreate the frontend, API and ingestion-worker containers with --no-deps (the database and vector database are not touched; migration 0022 runs when the API starts and renames the old automatic names of the two GXS pocket accounts), verify, and post a short deployed note on each of the six issues."
+**Context**: Release 1.3.0 (feature: accounts on the Transactions page and related). Branch issues-65-70. Merge, tag and deployment are recorded in a follow-up entry once done.
+
+---
