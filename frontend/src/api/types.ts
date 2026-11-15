@@ -35,6 +35,15 @@ export interface TransactionDTO {
    * does NOT indicate a precedent/match was found, just that the embedding step
    * has run for this transaction (FR-7). */
   embeddingStatus: "pending" | "completed";
+  /** The account this transaction belongs to; null for one that belongs to none (and wherever this type is reused,
+   * such as a recurring payment's match, which has never carried it). */
+  account?: TransactionAccountRef | null;
+}
+
+export interface TransactionAccountRef {
+  id: string;
+  name: string;
+  type: AccountType;
 }
 
 export interface GroupSummary {
@@ -57,6 +66,8 @@ export interface TransactionFilterState {
   dateFrom?: string;
   dateTo?: string;
   bank?: string;
+  /** The account (the same ones the Balances tab lists); an account with no transactions gives an empty page. */
+  accountId?: string;
   category?: string;
   flowDirection?: FlowDirection;
   currency?: string;
@@ -199,6 +210,9 @@ export interface ApiErrorBody {
 
 export interface DriveConnectionStatus {
   connected: boolean;
+  /** A credential is saved but Google refuses it: ingestion and the nightly backup cannot reach Drive until the
+   * owner reconnects. False when Google could not be asked (no network), so it never cries wolf. */
+  needsReconnect: boolean;
 }
 
 export interface DriveAuthorizationUrl {

@@ -12,9 +12,11 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, joinedload
 from transactagent_db.models import (
+    Account,
     Category,
     RecategorizationJob,
     RecategorizationJobStatus,
+    StatementAccount,
     Transaction,
 )
 
@@ -39,6 +41,12 @@ def _apply_filters(stmt: Select, query) -> Select:
         stmt = stmt.where(Transaction.transaction_date <= query.date_to)
     if query.bank is not None:
         stmt = stmt.where(Transaction.bank_name == query.bank)
+    if query.account_id is not None:
+        stmt = stmt.where(
+            Transaction.statement_account_id.in_(
+                select(StatementAccount.id).where(StatementAccount.account_id == query.account_id)
+            )
+        )
     if query.category is not None:
         stmt = stmt.join(Category, Transaction.category_id == Category.id).where(Category.name == query.category)
     if query.flow_direction == "in":
@@ -150,6 +158,25 @@ def query_group_summaries(db: Session, query) -> list[dict]:
         }
         for row in db.execute(stmt)
     ]
+
+
+def accounts_of(db: Session, transactions: list[Transaction]) -> dict[UUID, Account]:
+    """The account of each transaction that has one, keyed by the transaction's id, in one query for the whole page
+    (a transaction links to its account through its statement's section for that account)."""
+    section_ids = {t.statement_account_id for t in transactions if t.statement_account_id is not None}
+    if not section_ids:
+        return {}
+    rows = db.execute(
+        select(StatementAccount.id, Account)
+        .join(Account, Account.id == StatementAccount.account_id)
+        .where(StatementAccount.id.in_(section_ids))
+    )
+    account_of_section = dict(rows.all())
+    return {
+        t.id: account_of_section[t.statement_account_id]
+        for t in transactions
+        if t.statement_account_id in account_of_section
+    }
 
 
 def list_distinct_banks(db: Session) -> list[str]:

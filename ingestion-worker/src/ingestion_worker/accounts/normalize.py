@@ -42,10 +42,27 @@ def display_bank_name(raw: str) -> str:
     return " ".join(raw.split())
 
 
+def identifier_in_words(identifier: str) -> str:
+    """"AlphaBoostPocket" -> "Alpha Boost Pocket", "SavingsPocket2" -> "Savings Pocket 2". Three plain substitutions, kept
+    simple so migration 0022 can apply the very same ones in SQL to the names this fixed."""
+    spaced = re.sub(r"([a-z])([A-Z])", r"\1 \2", identifier)
+    spaced = re.sub(r"([A-Za-z])([0-9])", r"\1 \2", spaced)
+    return re.sub(r"([0-9])([A-Za-z])", r"\1 \2", spaced)
+
+
+def identifier_is_a_name(identifier: str) -> bool:
+    """True when the identifier is words, not an account number: it has lowercase letters and fewer than four digits.
+    GXS prints a pocket's name where other banks print a number. A real number has digits, a mask ("411111****1234",
+    "XXXXXXXX") has none of the lowercase letters a name has."""
+    return any(c.islower() for c in identifier) and sum(c.isdigit() for c in identifier) < 4
+
+
 def default_account_name(display_bank: str, identifier: str | None) -> str:
-    """`<bank> <last 4 characters of the identifier>`, or just the bank when the
-    statement printed no identifier. Shows only a short tail on screen even though the
-    full identifier is stored; the user can rename it."""
+    """`<bank> <last 4 characters of the identifier>` for an account number, `<bank> <the name in words>` when the
+    identifier is itself a name (issue #66: two GXS pockets were both "GXS Bank cket"), or just the bank when the
+    statement printed no identifier. The full identifier is stored either way; the user can rename it."""
     if identifier:
+        if identifier_is_a_name(identifier):
+            return f"{display_bank} {identifier_in_words(identifier)}"
         return f"{display_bank} {identifier[-4:]}"
     return display_bank

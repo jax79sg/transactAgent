@@ -9,7 +9,8 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 
 ## Transaction Management
 
-- `TransactionFilter` (query params): `{ dateFrom?, dateTo?, bank?, category?, flowDirection?: 'in'|'out', currency?, textSearch?, categorySource?: 'similarity'|'llm'|'manual'|'unsure', page?: int, pageSize?: int, groupBy?: 'category'|'bank'|'month'|'categorySource', sortBy?, sortDir? }`
+- `TransactionFilter` (query params): `{ dateFrom?, dateTo?, bank?, accountId?, category?, flowDirection?: 'in'|'out', currency?, textSearch?, categorySource?: 'similarity'|'llm'|'manual'|'unsure', page?: int, pageSize?: int, groupBy?: 'category'|'bank'|'month'|'categorySource', sortBy?, sortDir? }`
+  - **Amended for issues #65-#70**: `accountId` (a UUID) keeps only the transactions of that account, found through the statement section a transaction links to (`transactions.statement_account_id`); an account with no transactions, or an id nothing has, gives an empty page, never an error; a malformed id is a 422. It applies to the list, the group totals and the CSV export alike. Each `TransactionDTO` gains `account: { id, name, type } | null` (null for a transaction attributed to no account, and wherever the DTO is built for another purpose, such as a recurring payment's match), found for the whole page in one query.
 - `TransactionDTO`: `{ id, transactionDate, description, outFlow?, inFlow?, currency, bankName, category: { id, name }, categorySource, convertedAmountSgd?, conversionIsApproximate, conversionUnavailable, bankStatementId, embeddingStatus: 'pending'|'completed' }` — `embeddingStatus` added 2026-08-13 (Local Embedding-Based Semantic Similarity feature, Epic 9, AR-21), read-only
 - `TransactionPage`: `{ items: TransactionDTO[], page, pageSize, totalCount, groups?: GroupSummary[] }`
 - `GroupSummary`: `{ groupKey, groupLabel, subtotalOutFlowSgd, subtotalInFlowSgd, transactionCount }`

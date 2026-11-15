@@ -15,7 +15,7 @@ import type {
   TransactionFilterState,
 } from "../api/types";
 
-const STRING_KEYS = ["dateFrom", "dateTo", "bank", "category", "currency", "textSearch"] as const;
+const STRING_KEYS = ["dateFrom", "dateTo", "bank", "accountId", "category", "currency", "textSearch"] as const;
 const FLOW_DIRECTIONS: FlowDirection[] = ["in", "out"];
 const CATEGORY_SOURCES: CategorySourceValue[] = ["similarity", "llm", "manual", "unsure"];
 const GROUP_BY_OPTIONS: GroupByOption[] = ["category", "bank", "month", "categorySource"];

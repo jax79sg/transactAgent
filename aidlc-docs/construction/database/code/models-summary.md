@@ -116,3 +116,7 @@ The schema enforces BR-39 (one record per hash), BR-40 (evidence always present)
 ### Reopened 2026-10-04 — one column (`duplicate_pairs.removal_allowed`, BR-53)
 
 The Ingestion Worker's Functional Design Question 1 = C needed the worker's decision stored on the pair, because the API must not recompute it. Migration 0020, still unreleased, was reworked in place. Results: 188 Database tests pass (3 new: both values round-trip; a missing value is rejected); the live verification script, updated for the new column, passes 80 of 80 (two new checks: the column is boolean, not null, no default; a pair without it is rejected); `ruff check src tests` is clean.
+
+## Migration 0022 (issue #66, 2026-11-15)
+
+A data-only migration, `0022_rename_name_like_accounts.py`: no schema change. It renames an account whose name is still exactly the old default (`<bank_name> <last 4 of the identifier>`) when its only key's identifier is a name (a lowercase letter, fewer than four digits). Idempotent; the downgrade does nothing, since the old name was the bug. Its SQL lives in one function, `rename_name_like_accounts(connection)`, so `database/tests/test_migration_0022_rename_name_like_accounts.py` can run it on a real database. Applied automatically when the API or worker starts (`run_migrations_with_lock`), so deploying the next image renames the two "GXS Bank cket" accounts.

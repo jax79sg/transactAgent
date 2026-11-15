@@ -31,9 +31,20 @@ function DriveConnectionCard() {
   return (
     <div className="rounded border border-slate-200 p-4 dark:border-slate-700">
       <h2 className="mb-2 font-medium">Google Drive</h2>
-      <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
-        {status?.connected ? "Connected" : "Not connected"}
-      </p>
+      {status?.needsReconnect ? (
+        // Issue #70: a saved credential Google has refused used to read "Connected" while every Drive call failed.
+        <p
+          data-testid="drive-needs-reconnect"
+          role="alert"
+          className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+        >
+          <strong>The Google Drive connection has expired.</strong> Google no longer accepts the saved connection, so
+          ingestion and the nightly backup cannot reach Drive until you reconnect. Statements added to Drive since it
+          expired have not been read.
+        </p>
+      ) : (
+        <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{status?.connected ? "Connected" : "Not connected"}</p>
+      )}
       {/* Always shown, not just when disconnected: the only way to re-grant consent
           after a scope change (e.g. Epic 7 needing write access, not just read) is to
           run the connect flow again -- a "Connected" row from an old, narrower-scope

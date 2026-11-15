@@ -10,7 +10,7 @@ FastAPI application in `api-service/src/api_service/main.py`, routers per domain
 | `dashboards/router.py` | `/dashboards` | `GET /dashboards/category-trends`, `GET /dashboards/cash-flow`, `GET /dashboards/bank-breakdown` |
 | `ingestion/router.py` | `/ingestion` | `POST /ingestion/runs`, `GET /ingestion/runs`, `GET /ingestion/runs/{id}`, `GET /ingestion/runs/{id}/files` |
 | `categories/router.py` | `/categories` | `GET /categories`, `POST /categories`, `PUT /categories/{id}`, `DELETE /categories/{id}` |
-| `drive_connect/router.py` | `/drive` | `GET /drive/connect` (auth), `GET /drive/callback` (unauthenticated — hit by Google's redirect, CSRF-protected via `state`), `GET /drive/status` (auth). Added 2026-08-01 retroactively — see audit.md. |
+| `drive_connect/router.py` | `/drive` | `GET /drive/connect` (auth), `GET /drive/callback` (unauthenticated — hit by Google's redirect, CSRF-protected via `state`), `GET /drive/status` (auth). **Amended for issue #70**: the response is `{ connected, needsReconnect }`; when a credential is saved the API asks Google to refresh it (5-second timeout) and `needsReconnect` is true only if Google refuses it (`RefreshError`, the same `invalid_grant` the worker hits); no network, a timeout or anything unexpected is not reported as broken. Added 2026-08-01 retroactively — see audit.md. |
 | `recategorization/router.py` | `/recategorization` | `GET /recategorization/proposals`, `GET /recategorization/proposals/pending-count`, `POST /recategorization/proposals/{id}/approve`, `POST /recategorization/proposals/{id}/reject`, `POST /recategorization/proposals/bulk-approve`, `POST /recategorization/proposals/bulk-reject`. Added 2026-08-02 (Epic 6). |
 
 **Conventions**:
