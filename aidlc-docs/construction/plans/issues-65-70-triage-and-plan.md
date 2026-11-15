@@ -57,5 +57,5 @@ Test first for each; tick as done.
 - [x] 9. e2e: Transactions by account.
 - [x] 10. Amend the approved design documents and the code summaries in place.
 - [x] 11. Run every suite and lint; confirm the new tests fail without the change.
-- [ ] 12. Dispatch the e2e workflow on the branch and read it.
+- [x] 12. Dispatch the e2e workflow on the branch and read it.
 - [ ] 13. PR, bind, auto-fix; a comment on every issue (what was found, done, and left for the owner); update audit and state. Not merged, not released, not deployed.
