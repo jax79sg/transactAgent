@@ -22,6 +22,7 @@ const filterStateArbitrary: fc.Arbitrary<TransactionFilterState> = fc.record(
     dateFrom: fc.date({ min: new Date(2000, 0, 1), max: new Date(2100, 0, 1) }).map((d) => d.toISOString().slice(0, 10)),
     dateTo: fc.date({ min: new Date(2000, 0, 1), max: new Date(2100, 0, 1) }).map((d) => d.toISOString().slice(0, 10)),
     bank: fc.string({ minLength: 1, maxLength: 20 }),
+    accountId: fc.uuid(),
     category: fc.string({ minLength: 1, maxLength: 20 }),
     currency: fc.constantFrom("SGD", "USD", "EUR"),
     textSearch: fc.string({ minLength: 1, maxLength: 30 }),
@@ -45,6 +46,12 @@ describe("filter state <-> URL round-trip (PBT)", () => {
         expect(roundTripped).toEqual(state);
       }),
     );
+  });
+
+  it("carries the chosen account in the URL, so the view can be bookmarked and shared (issues #65-#70)", () => {
+    const accountId = "00000000-0000-0000-0000-000000000004";
+    expect(filterStateToSearchParams({ accountId }).get("accountId")).toBe(accountId);
+    expect(searchParamsToFilterState(new URLSearchParams({ accountId }))).toEqual({ accountId });
   });
 
   it("an empty filter state produces an empty query string", () => {

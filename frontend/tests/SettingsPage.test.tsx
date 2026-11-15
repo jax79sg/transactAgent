@@ -81,7 +81,7 @@ describe("SettingsPage Drive connection card", () => {
   });
 
   it("shows 'Connect Google Drive' and the button when not yet connected", async () => {
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     renderSettingsPage();
 
     await waitFor(() => {
@@ -95,7 +95,7 @@ describe("SettingsPage Drive connection card", () => {
     // an older, narrower OAuth scope) must still offer a way back into the connect
     // flow -- caught live when a scope change left no UI path to re-grant consent
     // (aidlc-docs/audit.md 2026-08-08).
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: true });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: true, needsReconnect: false });
     renderSettingsPage();
 
     await waitFor(() => {
@@ -105,13 +105,37 @@ describe("SettingsPage Drive connection card", () => {
   });
 });
 
+describe("SettingsPage Drive connection card when Google has refused the saved sign-in (issue #70)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("says the connection has expired and what stops working, instead of 'Connected'", async () => {
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: true, needsReconnect: true });
+    renderSettingsPage();
+
+    const warning = await screen.findByTestId("drive-needs-reconnect");
+    expect(warning).toHaveTextContent("Google no longer accepts the saved connection");
+    expect(warning).toHaveTextContent("ingestion and the nightly backup");
+    expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+    expect(screen.getByTestId("connect-drive-button")).toHaveTextContent("Reconnect Google Drive");
+  });
+
+  it("shows no warning for a connection Google still accepts, or for none at all", async () => {
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: true, needsReconnect: false });
+    renderSettingsPage();
+    await screen.findByText("Connected");
+    expect(screen.queryByTestId("drive-needs-reconnect")).not.toBeInTheDocument();
+  });
+});
+
 describe("SettingsPage Application Settings section", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it("groups settings by category, matching .env.example's own organization", async () => {
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     renderSettingsPage();
 
     await waitFor(() => {
@@ -127,7 +151,7 @@ describe("SettingsPage Application Settings section", () => {
 
   it("edit -> confirm -> save calls updateSetting and shows restart guidance", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     vi.spyOn(settingsApi, "updateSetting").mockResolvedValue({
       setting: { ...SIMILARITY_THRESHOLD_SETTING, value: "90.0", isOverridden: true },
       restartGuidance: [{ owningService: "ingestion-worker", restartCommand: "docker restart transactagent-worker" }],
@@ -156,7 +180,7 @@ describe("SettingsPage Application Settings section", () => {
 
   it("shows a busy message instead of the restart command when the worker is busy", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     vi.spyOn(settingsApi, "updateSetting").mockResolvedValue({
       setting: { ...SIMILARITY_THRESHOLD_SETTING, value: "90.0", isOverridden: true },
       restartGuidance: [{ owningService: "ingestion-worker", restartCommand: "docker restart transactagent-worker", workerBusy: true }],
@@ -181,7 +205,7 @@ describe("SettingsPage Application Settings section", () => {
   it("shows an inline validation error without closing the edit form on 400", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const { ApiError } = await import("../src/api/client");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     vi.spyOn(settingsApi, "updateSetting").mockRejectedValue(
       new ApiError(400, { error: "invalid_setting_value", message: "Invalid value for 'similarity_threshold': must be at most 100.0" }),
     );
@@ -200,7 +224,7 @@ describe("SettingsPage Application Settings section", () => {
 
   it("expands to show change history on demand", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     vi.spyOn(settingsApi, "listSettingHistory").mockResolvedValue([
       {
         id: "h1",
@@ -233,7 +257,7 @@ describe("SettingsPage enumerated settings (Epic 14 on/off switch)", () => {
   const SETTINGS = [SIMILARITY_THRESHOLD_SETTING, DUPLICATE_SWITCH_SETTING];
 
   it("shows the switch under its own 'Duplicate Statements' category, as false/true in lowercase", async () => {
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     renderSettingsPage(SETTINGS);
 
     await waitFor(() => expect(screen.getByTestId("setting-row-duplicate_detection_enabled")).toBeInTheDocument());
@@ -243,7 +267,7 @@ describe("SettingsPage enumerated settings (Epic 14 on/off switch)", () => {
 
   it("edits an enumerated setting with a dropdown of exactly its allowed values", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     renderSettingsPage(SETTINGS);
     const user = userEvent.setup();
 
@@ -258,7 +282,7 @@ describe("SettingsPage enumerated settings (Epic 14 on/off switch)", () => {
 
   it("still edits a numeric setting with a text box", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     renderSettingsPage(SETTINGS);
     const user = userEvent.setup();
 
@@ -270,7 +294,7 @@ describe("SettingsPage enumerated settings (Epic 14 on/off switch)", () => {
 
   it("chooses a value from the dropdown, confirms, and saves exactly that string", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     vi.spyOn(settingsApi, "updateSetting").mockResolvedValue({
       setting: { ...DUPLICATE_SWITCH_SETTING, value: "true", isOverridden: true },
       restartGuidance: [{ owningService: "ingestion-worker", restartCommand: "docker restart transactagent-worker" }],
@@ -405,7 +429,7 @@ describe("SettingsPage Balances category (Epic 13)", () => {
   };
 
   it("shows both settings under Balances, placed after Duplicate Statements and before API & Access", async () => {
-    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false });
+    vi.spyOn(driveConnectApi, "getDriveStatus").mockResolvedValue({ connected: false, needsReconnect: false });
     renderSettingsPage([API_ACCESS_SETTING, TOLERANCE_SETTING, DUPLICATE_SWITCH_SETTING, TIME_ZONE_SETTING, SIMILARITY_THRESHOLD_SETTING]);
 
     await waitFor(() => expect(screen.getByTestId("setting-row-reporting_time_zone")).toBeInTheDocument());

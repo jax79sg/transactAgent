@@ -71,6 +71,12 @@ describe("BalancesTable: rows", () => {
     expect(onSetBalance).toHaveBeenCalledWith(main);
   });
 
+  it("says what kind of account each row is (issue #68)", () => {
+    show();
+    expect(screen.getByTestId(`account-type-${main}`)).toHaveTextContent("Savings / current");
+    expect(screen.getByTestId(`account-type-${fresh}`)).toHaveTextContent("Savings / current");
+  });
+
   it("shows an unavailable conversion in words, still giving the account's own-currency figure", () => {
     show();
     expect(screen.getByTestId(`balance-status-${eur}`)).toHaveTextContent("Unavailable: no exchange rate");
