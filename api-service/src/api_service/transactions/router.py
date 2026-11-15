@@ -11,6 +11,7 @@ from api_service.transactions.schemas import (
     CategoryCorrectionRequest,
     CategoryRef,
     GroupSummary,
+    TransactionAccountRef,
     TransactionDTO,
     TransactionFilter,
     TransactionListQuery,
@@ -21,7 +22,7 @@ from api_service.transactions.schemas import (
 router = APIRouter(prefix="/transactions", tags=["transactions"], dependencies=[Depends(get_current_user_id)])
 
 
-def _to_dto(txn) -> TransactionDTO:
+def _to_dto(txn, account=None) -> TransactionDTO:
     return TransactionDTO(
         id=txn.id,
         transaction_date=txn.transaction_date,
@@ -37,14 +38,18 @@ def _to_dto(txn) -> TransactionDTO:
         conversion_unavailable=txn.conversion_unavailable,
         bank_statement_id=txn.bank_statement_id,
         embedding_status=txn.embedding_status.value,
+        account=TransactionAccountRef(id=account.id, name=account.name, type=account.account_type.value)
+        if account is not None
+        else None,
     )
 
 
 @router.get("", response_model=TransactionPage)
 def list_transactions(query: TransactionListQuery = Depends(), db: Session = Depends(get_db)) -> TransactionPage:
     items, total_count, groups = service.list_transactions(db, query)
+    accounts = service.accounts_of(db, items)
     return TransactionPage(
-        items=[_to_dto(t) for t in items],
+        items=[_to_dto(t, accounts.get(t.id)) for t in items],
         page=query.page,
         page_size=query.page_size,
         total_count=total_count,
@@ -67,4 +72,4 @@ def correct_transaction_category(
     transaction_id: UUID, payload: CategoryCorrectionRequest, db: Session = Depends(get_db)
 ) -> TransactionUpdatedResponse:
     txn, job = service.correct_transaction_category(db, transaction_id, payload.category_id)
-    return TransactionUpdatedResponse(transaction=_to_dto(txn), recategorization_job_id=job.id)
+    return TransactionUpdatedResponse(transaction=_to_dto(txn, service.accounts_of(db, [txn]).get(txn.id)), recategorization_job_id=job.id)
