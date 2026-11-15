@@ -18,6 +18,9 @@ class TransactionFilter(BaseModel):
     date_from: date | None = None
     date_to: date | None = None
     bank: str | None = None
+    # Issues #65-#70: the account a transaction belongs to (the same accounts the Balances tab lists). An account with
+    # no transactions, or an id nothing has, gives an empty page rather than an error.
+    account_id: UUID | None = None
     category: str | None = None  # category name, "UNSURE" shortcut supported (US-3.5)
     flow_direction: FlowDirection | None = None
     currency: str | None = None
@@ -38,6 +41,12 @@ class CategoryRef(CamelModel):
     name: str
 
 
+class TransactionAccountRef(CamelModel):
+    id: UUID
+    name: str
+    type: str  # deposit | credit_card | unknown
+
+
 class TransactionDTO(CamelModel):
     id: UUID
     transaction_date: date
@@ -55,6 +64,9 @@ class TransactionDTO(CamelModel):
     # Epic 9 (Local Embedding-Based Semantic Similarity, AR-21): read-only, sourced
     # directly from Transaction.embedding_status -- this component never writes it.
     embedding_status: str
+    # None for a transaction that belongs to no account (one statement predating accounts was never attributed), and for
+    # the other places a TransactionDTO is built (recurring payments), which have never carried it.
+    account: TransactionAccountRef | None = None
 
 
 class GroupSummary(CamelModel):

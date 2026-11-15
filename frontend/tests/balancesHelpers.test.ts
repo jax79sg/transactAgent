@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/client";
 import type { AccountDTO, AccountType } from "../src/api/types";
 import {
+  accountOptionLabel,
   addDays,
   BALANCE_ERROR_MESSAGES,
   type BalanceErrorCode,
@@ -14,6 +15,7 @@ import {
   describeExclusions,
   describeUnlinked,
   describeLookup,
+  findPossibleDuplicates,
   isAccountGone,
   joinList,
   localToday,
@@ -21,6 +23,7 @@ import {
   monthOf,
   nextAccountNeedingBalance,
   pluralize,
+  TYPE_BADGE,
   TYPE_NOUNS,
 } from "../src/lib/balances";
 
@@ -318,5 +321,59 @@ describe("describeDiscrepancyCount", () => {
   it("says it in the singular and the plural", () => {
     expect(describeDiscrepancyCount(1)).toBe("1 account has differences with its statements.");
     expect(describeDiscrepancyCount(4)).toBe("4 accounts have differences with their statements.");
+  });
+});
+
+describe("TYPE_BADGE and accountOptionLabel (issues #65-#70)", () => {
+  it("has a short label for every account type", () => {
+    expect(TYPE_BADGE).toEqual({ deposit: "Savings / current", credit_card: "Credit card", unknown: "Type unknown" });
+  });
+
+  it("names the account, its type and its transaction count, so two accounts of one bank cannot be mistaken", () => {
+    expect(accountOptionLabel(account({ name: "OCBC Bank 5001", transactionCount: 1234 }))).toBe(
+      "OCBC Bank 5001 · Savings / current · 1234 transactions",
+    );
+    expect(accountOptionLabel(account({ name: "OCBC Bank 4002", type: "credit_card", transactionCount: 1 }))).toBe(
+      "OCBC Bank 4002 · Credit card · 1 transaction",
+    );
+    expect(accountOptionLabel(account({ name: "MariBank 8101", transactionCount: 0 }))).toBe(
+      "MariBank 8101 · Savings / current · no transactions",
+    );
+  });
+});
+
+describe("findPossibleDuplicates (issue #65)", () => {
+  // The real case: one DBS account under two bank spellings, "DBS" and "DBS / POSB", with the same account number.
+  const dbs = account({ id: "1", name: "DBS 6220", bankName: "DBS", accountIdentifier: "1234567890123", statementCount: 1 });
+  const posb = account({ id: "2", name: "DBS / POSB 6220", bankName: "DBS / POSB", accountIdentifier: "1234567890123", statementCount: 4 });
+
+  it("groups accounts that share an account number and currency, the one with the most statements first", () => {
+    const other = account({ id: "3", name: "OCBC Bank 5001", bankName: "OCBC Bank", accountIdentifier: "501123456001" });
+    expect(findPossibleDuplicates([dbs, other, posb]).map((group) => group.map((a) => a.name))).toEqual([
+      ["DBS / POSB 6220", "DBS 6220"],
+    ]);
+  });
+
+  it("finds nothing when every account number is different", () => {
+    expect(findPossibleDuplicates([dbs, account({ id: "3", accountIdentifier: "501123456001" })])).toEqual([]);
+  });
+
+  it("ignores an account with no number, a short number, and a name where a number would be", () => {
+    const none = (id: string) => account({ id, accountIdentifier: null });
+    const short = (id: string) => account({ id, accountIdentifier: "12345" });
+    const pocket = (id: string) => account({ id, accountIdentifier: "BoostPocket" });
+    expect(findPossibleDuplicates([none("1"), none("2"), short("3"), short("4"), pocket("5"), pocket("6")])).toEqual([]);
+  });
+
+  it("does not pair accounts in different currencies, which are different accounts even with one number", () => {
+    expect(findPossibleDuplicates([dbs, { ...posb, currency: "USD" }])).toEqual([]);
+  });
+
+  it("returns one group per shared number and keeps a three-way match together", () => {
+    const third = account({ id: "9", name: "POSB 6220", bankName: "POSB", accountIdentifier: "1234567890123", statementCount: 2 });
+    const unrelatedA = account({ id: "7", name: "A", accountIdentifier: "9999999999" });
+    const unrelatedB = account({ id: "8", name: "B", accountIdentifier: "9999999999" });
+    const groups = findPossibleDuplicates([dbs, posb, third, unrelatedA, unrelatedB]);
+    expect(groups.map((group) => group.length).sort()).toEqual([2, 3]);
   });
 });

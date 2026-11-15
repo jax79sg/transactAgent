@@ -95,6 +95,23 @@ class TestNames:
     def test_default_name_with_a_short_identifier_uses_all_of_it(self):
         assert default_account_name("DBS", "12") == "DBS 12"
 
+    def test_default_name_for_an_identifier_that_is_a_name_shows_the_name_in_words(self):
+        """Issue #66: GXS prints the pocket's name where other banks print a number. The last-four rule turned both of
+        the owner's pockets into "GXS Bank cket"."""
+        assert default_account_name("GXS Bank", "AlphaBoostPocket") == "GXS Bank Alpha Boost Pocket"
+        assert default_account_name("GXS Bank", "BetaBoostPocket") == "GXS Bank Beta Boost Pocket"
+        assert default_account_name("GXS Bank", "SavingsPocket2") == "GXS Bank Savings Pocket 2"
+
+    def test_two_different_pockets_never_get_the_same_default_name(self):
+        assert default_account_name("GXS Bank", "AlphaBoostPocket") != default_account_name("GXS Bank", "BetaBoostPocket")
+
+    def test_real_and_masked_account_numbers_keep_the_last_four_rule(self):
+        assert default_account_name("MariBank", "411111****1234") == "MariBank 1234"
+        assert default_account_name("OCBC Bank", "4111111111111111") == "OCBC Bank 1111"
+        assert default_account_name("DBS", "12") == "DBS 12"
+        # no lowercase letters, so it is a mask and not a name: left to the last-four rule
+        assert default_account_name("Some Bank", "XXXXXXXX") == "Some Bank XXXX"
+
     def test_default_name_without_an_identifier_is_just_the_bank(self):
         assert default_account_name("Trust Bank", None) == "Trust Bank"
 

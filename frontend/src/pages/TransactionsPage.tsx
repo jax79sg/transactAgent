@@ -3,11 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Fragment, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { listAccounts } from "../api/accounts";
 import { listCategories } from "../api/categories";
 import { correctTransactionCategory, downloadTransactionsCsv, listBanks, listTransactions } from "../api/transactions";
 import type { CategoryDTO, GroupSummary, SortByOption, TransactionDTO, TransactionFilterState } from "../api/types";
+import { AccountTypeTag } from "../components/balances/AccountTypeTag";
+import { ACCOUNT_LIST_KEY } from "../components/balances/queries";
 import { SortableTh } from "../components/SortableTh";
 import { useAuth } from "../context/AuthContext";
+import { accountOptionLabel } from "../lib/balances";
 import { filterStateToSearchParams, searchParamsToFilterState } from "../lib/urlFilterState";
 
 /** The 10 most-used categories first (ties broken alphabetically), so a manual
@@ -199,6 +203,16 @@ function TransactionRow({
       <td>{txn.outFlow ?? ""}</td>
       <td>{txn.inFlow ?? ""}</td>
       <td>{txn.bankName}</td>
+      <td data-testid={`txn-account-${txn.id}`} title={txn.account ? undefined : "Not linked to an account"}>
+        {txn.account ? (
+          <>
+            <div>{txn.account.name}</div>
+            <AccountTypeTag type={txn.account.type} />
+          </>
+        ) : (
+          "—"
+        )}
+      </td>
       <td>
         <CategorySelect transaction={txn} onCorrected={onCorrected} />
       </td>
@@ -224,7 +238,7 @@ function GroupHeaderRow({ group }: { group: GroupSummary }) {
       data-testid={`group-header-${group.groupKey}`}
       className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800"
     >
-      <td colSpan={8} className="py-2 font-medium">
+      <td colSpan={9} className="py-2 font-medium">
         <div className="flex items-center justify-between">
           <span>{group.groupLabel}</span>
           <span className="font-normal text-slate-500 dark:text-slate-400">
@@ -249,6 +263,11 @@ export function TransactionsPage() {
   });
 
   const { data: banks, refetch: refetchBanks } = useQuery({ queryKey: ["banks"], queryFn: listBanks });
+  // Issues #65-#70: the same accounts the Balances tab lists, so the two screens agree about what exists. Every account
+  // is offered, including one with no transactions (an idle account is real; it just has nothing to list).
+  const { data: accountList } = useQuery({ queryKey: ACCOUNT_LIST_KEY, queryFn: listAccounts });
+  const accounts = [...(accountList?.items ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const chosenAccount = accounts.find((account) => account.id === filter.accountId);
   // Same queryKey CategorySelect uses per-row -- react-query dedupes this into one
   // shared cached request rather than fetching the category list again.
   const { data: categories, refetch: refetchCategories } = useQuery({
@@ -301,6 +320,20 @@ export function TransactionsPage() {
         >
           UNSURE only
         </button>
+        <select
+          data-testid="account-filter-select"
+          aria-label="Account"
+          className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+          value={filter.accountId ?? ""}
+          onChange={(e) => updateFilter({ accountId: e.target.value || undefined })}
+        >
+          <option value="">All accounts</option>
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {accountOptionLabel(account)}
+            </option>
+          ))}
+        </select>
         <select
           data-testid="bank-filter-select"
           className="rounded border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
@@ -396,6 +429,7 @@ export function TransactionsPage() {
                 sortDir={filter.sortDir ?? "desc"}
                 onSort={handleSort}
               />
+              <th>Account</th>
               <SortableTh
                 label="Category"
                 sortKey="category"
@@ -434,7 +468,13 @@ export function TransactionsPage() {
         </table>
       )}
 
-      {data && data.items.length === 0 && (
+      {data && data.items.length === 0 && chosenAccount?.transactionCount === 0 && (
+        <p data-testid="account-has-no-transactions" className="text-slate-500 dark:text-slate-400">
+          “{chosenAccount.name}” has no transactions: none of its statements listed any, which is normal for an account
+          with no activity. Its statements are still counted on the Balances tab.
+        </p>
+      )}
+      {data && data.items.length === 0 && chosenAccount?.transactionCount !== 0 && (
         <p className="text-slate-500 dark:text-slate-400">No matching transactions.</p>
       )}
 

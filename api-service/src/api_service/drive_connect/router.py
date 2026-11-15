@@ -36,4 +36,5 @@ def callback(code: str, state: str, db: Session = Depends(get_db)) -> RedirectRe
 
 @router.get("/status", response_model=DriveConnectionStatus, dependencies=[Depends(get_current_user_id)])
 def status(db: Session = Depends(get_db)) -> DriveConnectionStatus:
-    return DriveConnectionStatus(connected=service.get_connection_status(db))
+    connected, needs_reconnect = service.get_connection_status(db)
+    return DriveConnectionStatus(connected=connected, needs_reconnect=needs_reconnect)

@@ -120,6 +120,40 @@ export function pluralize(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** A short label for a tag or a drop-down entry: what kind of account this is. */
+export const TYPE_BADGE: Record<AccountType, string> = {
+  deposit: "Savings / current",
+  credit_card: "Credit card",
+  unknown: "Type unknown",
+};
+
+/** "OCBC Bank 4002 · Credit card · 120 transactions": the account, what it is, and how much is in it, so two accounts
+ * of one bank can never be mistaken for each other in a list (issues #65-#70). */
+export function accountOptionLabel(account: Pick<AccountDTO, "name" | "type" | "transactionCount">): string {
+  const count =
+    account.transactionCount === 0 ? "no transactions" : pluralize(account.transactionCount, "transaction", "transactions");
+  return `${account.name} · ${TYPE_BADGE[account.type]} · ${count}`;
+}
+
+/**
+ * Accounts that look like one account listed twice: the same account number (at least six digits, so a name or a short
+ * code never matches) in the same currency. Matching is deliberately conservative (a bank written "DBS" on one
+ * statement and "DBS / POSB" on another stays two accounts until the owner merges them), so this is how the owner
+ * finds out (issue #65). Each group has the account with the most statements first.
+ */
+export function findPossibleDuplicates(accounts: readonly AccountDTO[]): AccountDTO[][] {
+  const byNumber = new Map<string, AccountDTO[]>();
+  for (const account of accounts) {
+    const identifier = account.accountIdentifier;
+    if (identifier === null || (identifier.match(/\d/g) ?? []).length < 6) continue;
+    const key = `${account.currency}|${identifier}`;
+    byNumber.set(key, [...(byNumber.get(key) ?? []), account]);
+  }
+  return [...byNumber.values()]
+    .filter((group) => group.length > 1)
+    .map((group) => [...group].sort((a, b) => b.statementCount - a.statementCount || a.name.localeCompare(b.name)));
+}
+
 /** The type as a noun phrase, for a sentence ("\u201cB\u201d becomes a credit card ..."). */
 export const TYPE_NOUNS: Record<AccountType, string> = {
   deposit: "a savings or current account",

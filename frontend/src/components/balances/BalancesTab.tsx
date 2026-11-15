@@ -8,6 +8,7 @@ import { BalanceChart } from "./BalanceChart";
 import { BalanceDialog, type BalanceSaveResult } from "./BalanceDialog";
 import { BalanceLookup } from "./BalanceLookup";
 import { DiscrepancyPanel } from "./DiscrepancyPanel";
+import { PossibleDuplicatesNotice } from "./PossibleDuplicatesNotice";
 import { ACCOUNT_LIST_KEY } from "./queries";
 
 /** One open balance dialog: which account, the date it starts on, and the accounts already done in this run. */
@@ -41,6 +42,7 @@ export function BalancesTab() {
   return (
     <div data-testid="balances-tab">
       <DiscrepancyPanel />
+      <PossibleDuplicatesNotice onMessage={setStatusMessage} />
       <BalanceLookup onSetBalance={openBalanceDialog} onToday={setServerToday} />
       <BalanceChart today={serverToday} />
       <AccountsSection statusMessage={statusMessage} onSetBalance={openBalanceDialog} onMessage={setStatusMessage} />

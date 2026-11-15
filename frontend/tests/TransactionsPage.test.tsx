@@ -2,16 +2,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as accountsApi from "../src/api/accounts";
 import * as categoriesApi from "../src/api/categories";
 import * as transactionsApi from "../src/api/transactions";
 import type { TransactionPage } from "../src/api/types";
 import { AuthProvider } from "../src/context/AuthContext";
 import { TransactionsPage } from "../src/pages/TransactionsPage";
+import { accountsListFixture, FIXTURE_ACCOUNT_IDS } from "./balancesFixtures";
 
 vi.mock("../src/api/transactions");
 vi.mock("../src/api/categories");
+vi.mock("../src/api/accounts");
+
+// The page lists the owner's accounts in its Account filter; tests about something else get "none".
+beforeEach(() => {
+  vi.mocked(accountsApi.listAccounts).mockResolvedValue({ items: [] });
+});
 
 function pageOf(page: number, totalCount = 100, embeddingStatus: "pending" | "completed" = "pending"): TransactionPage {
   return {
@@ -40,11 +48,11 @@ function pageOf(page: number, totalCount = 100, embeddingStatus: "pending" | "co
   };
 }
 
-function renderTransactionsPage() {
+function renderTransactionsPage(url = "/transactions") {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/transactions"]}>
+      <MemoryRouter initialEntries={[url]}>
         <AuthProvider>
           <TransactionsPage />
         </AuthProvider>
@@ -378,5 +386,91 @@ describe("TransactionsPage embedding status badge", () => {
 
     await waitFor(() => expect(screen.getByTestId("embedding-status-badge")).toBeInTheDocument());
     expect(screen.getByTestId("embedding-status-badge")).toHaveAttribute("title", "Embedding: computed");
+  });
+});
+
+describe("TransactionsPage accounts (issues #65-#70)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const { main, fresh, card } = FIXTURE_ACCOUNT_IDS;
+
+  function withAccounts() {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue(accountsListFixture());
+    vi.spyOn(categoriesApi, "listCategories").mockResolvedValue([]);
+    vi.spyOn(transactionsApi, "listBanks").mockResolvedValue([]);
+  }
+
+  it("lists every account in the Account filter, with its type and how many transactions it has, including one with none", async () => {
+    withAccounts();
+    vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue(pageOf(1));
+    renderTransactionsPage();
+
+    expect(await screen.findByRole("option", { name: "Main · Savings / current · 4 transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Trust USD · Savings / current · 1 transaction" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Visa Card · Credit card · no transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Fresh · Savings / current · no transactions" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "All accounts" })).toBeInTheDocument();
+  });
+
+  it("choosing an account asks for that account's transactions", async () => {
+    const user = userEvent.setup();
+    withAccounts();
+    const listSpy = vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue(pageOf(1));
+    renderTransactionsPage();
+    await screen.findByRole("option", { name: "Main · Savings / current · 4 transactions" });
+
+    await user.selectOptions(screen.getByTestId("account-filter-select"), main);
+
+    await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith(expect.objectContaining({ accountId: main })));
+  });
+
+  it("starts on the account in the address, so a link or a bookmark opens the same view", async () => {
+    withAccounts();
+    const listSpy = vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue(pageOf(1));
+    renderTransactionsPage(`/transactions?accountId=${card}`);
+
+    await waitFor(() => expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ accountId: card })));
+    await screen.findByRole("option", { name: "Visa Card · Credit card · no transactions" });
+    expect(screen.getByTestId("account-filter-select")).toHaveValue(card);
+  });
+
+  it("names each transaction's account and its type, and shows a dash when it belongs to none", async () => {
+    withAccounts();
+    const page = pageOf(1);
+    page.items.push({
+      ...page.items[0],
+      id: "txn-on-a-card",
+      account: { id: card, name: "Visa Card", type: "credit_card" },
+    });
+    vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue(page);
+    renderTransactionsPage();
+
+    const onCard = await screen.findByTestId("txn-account-txn-on-a-card");
+    expect(onCard).toHaveTextContent("Visa Card");
+    expect(onCard).toHaveTextContent("Credit card");
+    const unlinked = screen.getByTestId("txn-account-txn-page-1");
+    expect(unlinked).toHaveTextContent("—");
+    expect(unlinked).toHaveAttribute("title", "Not linked to an account");
+  });
+
+  it("says plainly that an account has no transactions, rather than just 'No matching transactions' (issue #69)", async () => {
+    withAccounts();
+    vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue({ items: [], page: 1, pageSize: 50, totalCount: 0, groups: null });
+    renderTransactionsPage(`/transactions?accountId=${fresh}`);
+
+    const message = await screen.findByTestId("account-has-no-transactions");
+    expect(message).toHaveTextContent("“Fresh” has no transactions");
+    expect(message).toHaveTextContent("none of its statements listed any");
+  });
+
+  it("keeps the ordinary empty message when an account that does have transactions matches nothing", async () => {
+    withAccounts();
+    vi.spyOn(transactionsApi, "listTransactions").mockResolvedValue({ items: [], page: 1, pageSize: 50, totalCount: 0, groups: null });
+    renderTransactionsPage(`/transactions?accountId=${main}&textSearch=nothing`);
+
+    expect(await screen.findByText("No matching transactions.")).toBeInTheDocument();
+    expect(screen.queryByTestId("account-has-no-transactions")).not.toBeInTheDocument();
   });
 });

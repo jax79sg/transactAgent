@@ -20,9 +20,13 @@ re-authorized (Settings -> Connect Google Drive) for this broader scope to take
 effect; a previously-granted refresh token cannot retroactively gain scope.
 """
 
+import logging
 import secrets
 import time
 
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from sqlalchemy.orm import Session
 
@@ -111,5 +115,43 @@ def handle_callback(db: Session, *, code: str, state: str) -> None:
     )
 
 
-def get_connection_status(db: Session) -> bool:
-    return repository.find_credential(db) is not None
+logger = logging.getLogger(__name__)
+
+# Settings should not hang because Google is slow: a status check that cannot be answered quickly says nothing.
+_GOOGLE_TIMEOUT_SECONDS = 5
+
+
+class _QuickRequest(Request):
+    def __call__(self, *args, **kwargs):
+        kwargs["timeout"] = _GOOGLE_TIMEOUT_SECONDS
+        return super().__call__(*args, **kwargs)
+
+
+def _google_refuses(credential) -> bool:
+    """True only when Google itself answers that the saved sign-in no longer works (revoked, expired, or the client
+    changed): the same RefreshError the worker turns into "Drive refresh token is no longer valid" on every ingestion
+    download and nightly backup. A network failure, a timeout or anything unexpected says nothing about the credential,
+    so it is not reported as broken (a status screen that cries wolf is worse than one that is silent)."""
+    credentials = Credentials(
+        token=credential.access_token,
+        refresh_token=credential.refresh_token,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=settings.google_oauth_client_id,
+        client_secret=settings.google_oauth_client_secret,
+    )
+    try:
+        credentials.refresh(_QuickRequest())
+    except RefreshError:
+        return True
+    except Exception:  # includes the transport errors; see the docstring
+        logger.info("Could not check the Drive credential with Google; treating it as unknown", exc_info=True)
+    return False
+
+
+def get_connection_status(db: Session) -> tuple[bool, bool]:
+    """(connected, needs_reconnect). `connected` is whether a credential is saved; `needs_reconnect` is whether Google
+    refuses it (issue #70: Settings said "Connected" for weeks while every Drive call failed)."""
+    credential = repository.find_credential(db)
+    if credential is None:
+        return False, False
+    return True, _google_refuses(credential)

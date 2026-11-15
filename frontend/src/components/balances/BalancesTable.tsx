@@ -2,6 +2,7 @@ import type { AccountBalanceDTO, BalancesResponse } from "../../api/types";
 import { describeBasis, describeExclusions, pluralize } from "../../lib/balances";
 import { formatDay } from "../../lib/duplicates";
 import { formatAmount, isNegativeAmount } from "../../lib/money";
+import { AccountTypeTag } from "./AccountTypeTag";
 import { useIsWriting } from "./queries";
 
 const NEGATIVE = "text-red-700 dark:text-red-400";
@@ -87,6 +88,10 @@ export function BalancesTable({
                 <td className="py-2 pr-3">
                   <div className="font-medium">{account.name}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">{account.bankName}</div>
+                  {/* Only savings and current accounts are in this table (a credit card has no balance to work out) */}
+                  <div className="mt-0.5">
+                    <AccountTypeTag type="deposit" testId={`account-type-${account.accountId}`} />
+                  </div>
                   {account.status !== "anchor_required" && (
                     <button
                       type="button"

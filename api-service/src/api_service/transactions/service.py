@@ -45,6 +45,10 @@ def list_distinct_banks(db: Session) -> list[str]:
     return repository.list_distinct_banks(db)
 
 
+def accounts_of(db: Session, transactions: list[Transaction]) -> dict:
+    return repository.accounts_of(db, transactions)
+
+
 def export_transactions_csv(db: Session, filters: TransactionFilter) -> str:
     _validate_currency(filters.currency)
     rows = repository.query_all_for_export(db, filters, max_rows=settings.csv_export_max_rows)

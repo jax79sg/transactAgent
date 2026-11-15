@@ -163,3 +163,116 @@ class TestTransactionGrouping:
         response = client.get("/transactions", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["groups"] is None
+
+
+class TestTransactionsByAccount:
+    """Issues #65-#70: the Transactions page can name, and filter by, the same accounts the Balances tab lists."""
+
+    @staticmethod
+    def _world(db):
+        from account_helpers import (
+            make_account,
+            make_section,
+            make_tx,
+            make_unlinked_tx,
+        )
+        from transactagent_db.models import AccountType
+
+        savings = make_account(db, name="OCBC Bank 5001", bank="OCBC Bank", identifier="5001")
+        card = make_account(
+            db, name="OCBC Bank 4002", bank="OCBC Bank", identifier="4002", account_type=AccountType.CREDIT_CARD
+        )
+        idle = make_account(db, name="MariBank 8101", bank="MariBank", identifier="8101")
+        savings_section = make_section(db, savings)
+        card_section = make_section(db, card)
+        make_section(db, idle)  # on a statement, but with no transactions
+        make_tx(db, savings_section, date(2026, 1, 5), "-10.00", description="COFFEE", bank="OCBC Bank")
+        make_tx(db, savings_section, date(2026, 1, 6), "-20.00", description="LUNCH", bank="OCBC Bank")
+        make_tx(db, card_section, date(2026, 1, 7), "-30.00", description="BOOKS", bank="OCBC Bank")
+        make_unlinked_tx(db, date(2026, 1, 8), "-40.00", bank="GXS Bank")
+        return savings, card, idle
+
+    def test_each_transaction_names_its_account_and_type_and_an_unlinked_one_has_none(
+        self, client, auth_headers, db_session
+    ):
+        savings, card, _ = self._world(db_session)
+
+        items = client.get("/transactions", headers=auth_headers).json()["items"]
+        by_description = {item["description"]: item for item in items}
+
+        assert by_description["COFFEE"]["account"] == {"id": str(savings.id), "name": "OCBC Bank 5001", "type": "deposit"}
+        assert by_description["BOOKS"]["account"] == {"id": str(card.id), "name": "OCBC Bank 4002", "type": "credit_card"}
+        assert by_description["unlinked"]["account"] is None
+
+    def test_account_filter_returns_only_that_accounts_transactions(self, client, auth_headers, db_session):
+        savings, card, _ = self._world(db_session)
+
+        body = client.get("/transactions", params={"account_id": str(savings.id)}, headers=auth_headers).json()
+        assert body["totalCount"] == 2
+        assert {item["description"] for item in body["items"]} == {"COFFEE", "LUNCH"}
+
+        body = client.get("/transactions", params={"account_id": str(card.id)}, headers=auth_headers).json()
+        assert [item["description"] for item in body["items"]] == ["BOOKS"]
+
+    def test_an_account_with_no_transactions_gives_an_empty_page_not_an_error(self, client, auth_headers, db_session):
+        _, _, idle = self._world(db_session)
+
+        response = client.get("/transactions", params={"account_id": str(idle.id)}, headers=auth_headers)
+
+        assert response.status_code == 200
+        assert response.json()["totalCount"] == 0
+        assert response.json()["items"] == []
+
+    def test_an_unknown_account_gives_an_empty_page_and_a_malformed_id_is_refused(self, client, auth_headers, db_session):
+        self._world(db_session)
+
+        unknown = client.get(
+            "/transactions", params={"account_id": "00000000-0000-0000-0000-000000000000"}, headers=auth_headers
+        )
+        assert unknown.status_code == 200
+        assert unknown.json()["totalCount"] == 0
+
+        malformed = client.get("/transactions", params={"account_id": "not-a-uuid"}, headers=auth_headers)
+        assert malformed.status_code == 422
+
+    def test_correcting_a_category_still_names_the_account(self, client, auth_headers, db_session):
+        from transactagent_db.models import Category, Transaction
+
+        savings, _, _ = self._world(db_session)
+        txn = db_session.query(Transaction).filter_by(description="COFFEE").one()
+        household = Category(name="Household", active=True, is_reserved=False)
+        db_session.add(household)
+        db_session.flush()
+
+        response = client.put(
+            f"/transactions/{txn.id}/category", json={"categoryId": str(household.id)}, headers=auth_headers
+        )
+
+        assert response.status_code == 200
+        assert response.json()["transaction"]["account"]["id"] == str(savings.id)
+
+    def test_account_filter_combines_with_the_other_filters(self, client, auth_headers, db_session):
+        savings, _, _ = self._world(db_session)
+
+        body = client.get(
+            "/transactions", params={"account_id": str(savings.id), "text_search": "LUNCH"}, headers=auth_headers
+        ).json()
+        assert [item["description"] for item in body["items"]] == ["LUNCH"]
+
+        body = client.get(
+            "/transactions", params={"account_id": str(savings.id), "bank": "GXS Bank"}, headers=auth_headers
+        ).json()
+        assert body["totalCount"] == 0
+
+    def test_account_filter_applies_to_group_totals_and_the_csv_export(self, client, auth_headers, db_session):
+        savings, _, _ = self._world(db_session)
+
+        grouped = client.get(
+            "/transactions", params={"account_id": str(savings.id), "group_by": "bank"}, headers=auth_headers
+        ).json()
+        assert [(g["groupKey"], g["transactionCount"]) for g in grouped["groups"]] == [("OCBC Bank", 2)]
+
+        csv_lines = client.get(
+            "/transactions/export.csv", params={"account_id": str(savings.id)}, headers=auth_headers
+        ).text.strip().splitlines()
+        assert len(csv_lines) == 1 + 2  # the header and the two transactions of that account
