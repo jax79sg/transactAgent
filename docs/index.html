@@ -398,7 +398,7 @@
     <div class="project-note">
       <span class="label">About this project</span>
       <p>This project is <strong>jax79sg</strong>'s means of learning and understanding the challenges of building software with a coding agent. <strong>Much of this entire repository — the code, the tests and the documentation — was made with Claude Code, using Anthropic's Claude Opus and Sonnet models.</strong></p>
-      <p style="margin-top:8px">It is checked by automated tests and security scans on every change. Since the first push, <strong>90 vulnerabilities and code-scanning findings have been fixed and none are open on GitHub</strong> (11 Oct 2026), though one high-severity advisory in a build tool has no patch. <a href="#about-project">The full breakdown, and what this is not.</a></p>
+      <p style="margin-top:8px">It is checked by automated tests and security scans on every change. Since the first push, <strong>217 vulnerabilities and code-scanning findings have been fixed and none are open on GitHub</strong> (16 Nov 2026), though new ones keep arriving: 128 of them were raised between 20 October and 13 November. <a href="#about-project">The full breakdown, and what this is not.</a></p>
     </div>
   </div>
 
@@ -764,20 +764,20 @@
         <h3>Vulnerabilities since the first push</h3>
         <p class="dek">Dependency and code scanning began on 17 August 2026, so nothing before that was scanned.</p>
         <ul class="feature-list">
-          <li><strong>Dependencies (Dependabot):</strong> 80 raised, <strong>79 fixed</strong> (5 critical, 26 high, 47 medium, 1 low), <strong>none open</strong>, and 1 auto-dismissed by GitHub: a high-severity advisory in a development-only build tool for which no patched version has been released.</li>
+          <li><strong>Dependencies (Dependabot):</strong> 206 raised, <strong>206 fixed</strong> (19 critical, 88 high, 94 medium, 5 low), <strong>none open</strong>.</li>
           <li><strong>Code scanning (CodeQL):</strong> 11 raised, <strong>all 11 fixed</strong> (two in commits before merge: a CI-only fixture password echoed in a script's output, and a missing workflow permission; nine on 11 October: the same missing permission in nine more workflows), <strong>none open</strong>.</li>
           <li><strong>Leaked secrets:</strong> none flagged by GitHub.</li>
         </ul>
 
         <div class="callout warn">
-          <span class="label">90 fixed, none open, one unpatched</span>
-          <p>Fourteen of the dependency fixes landed between 17 August and 2 October. Another 49, including 4 critical and 22 high, were fixed on 9 October through four pull requests, and the last 16 dependency alerts and the 9 code-scanning warnings on 11 October through four more; most had been open for two to seven days. Automatic security updates are off and the CI dependency scan only reports, so all of them were fixed by hand. The running API and worker were already on the patched libraries, so nothing had to be redeployed.</p>
-          <p style="margin-top:8px">Some fixes are compromises or large jumps: the model-training tool now overrides two limits its own dependencies declare, and the frontend moved to React Router 7. The tests pass and the built frontend was loaded in a browser, but a real model fine-tuning run and the nightly browser tests were not run.</p>
+          <span class="label">217 fixed, none open</span>
+          <p>Fourteen of the dependency fixes landed between 17 August and 2 October. Another 49, including 4 critical and 22 high, were fixed on 9 October through four pull requests, and the next 15 dependency alerts and the 9 code-scanning warnings on 11 October through four more; most had been open for two to seven days. On 16 November the other 128 (14 critical), raised between 20 October and 13 November, were fixed through one more pull request: Pillow 13 and certifi in the Python lock files plus some smaller updates; they had been open for 3 to 27 days. Automatic security updates are off and the CI dependency scan only reports, so all of them were fixed by hand. The running API and worker were already on the patched libraries, so nothing had to be redeployed.</p>
+          <p style="margin-top:8px">Some fixes are compromises or large jumps: the model-training tool now overrides two limits its own dependencies declare, and the frontend moved to React Router 7. The tests pass and the built frontend was loaded in a browser, but a real model fine-tuning run and the nightly browser tests were not run. The same holds for the 16 November updates, which include major-version jumps (Pillow 13 and filelock 4 in model training, minimatch 11 in the frontend's development tools).</p>
         </div>
 
         <div class="callout warn">
           <span class="label">What this is not</span>
-          <p>Nothing open is not the same as secure: GitHub lists no open alerts, but that is only what its scanners know, and the high-severity advisory in the frontend's build tooling (<code>braces</code>) has no patch; fixing it would mean moving to Tailwind 4, which has not been done. No independent security review or penetration test has been done, and the workflow's security-baseline rules were not enabled: the hardening comes from the scanners, the tests and jax79sg's approvals. It is a single-user app designed to run on your own machine or network. Treat it as a learning project. The live numbers are on the repository's <a href="https://github.com/jax79sg/transactAgent/security">Security tab</a>.</p>
+          <p>Nothing open is not the same as secure: GitHub lists no open alerts, but that is only what its scanners know, and new advisories keep arriving (128 alerts were raised between 20 October and 13 November). The <code>braces</code> advisory this section used to describe as unpatched was withdrawn by GitHub on 23 October and is no longer listed. No independent security review or penetration test has been done, and the workflow's security-baseline rules were not enabled: the hardening comes from the scanners, the tests and jax79sg's approvals. It is a single-user app designed to run on your own machine or network. Treat it as a learning project. The live numbers are on the repository's <a href="https://github.com/jax79sg/transactAgent/security">Security tab</a>.</p>
         </div>
       </section>
 
