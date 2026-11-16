@@ -57,7 +57,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: B.
 
-[Answer]: 
+[Answer]: B
 
 ## Question 2
 Which attackers should the test assume? (several allowed)
@@ -83,7 +83,7 @@ Recommendation: A, C, D and E at least. Add B only if the application is, or may
 Also: how is the live application reached today? (one line, for example "this machine only", "phone over home
 Wi-Fi", "through a tunnel", "in Kubernetes")
 
-[Answer]: 
+[Answer]: A, B, C, D, E, F. Live app reached via a VPN from internet.
 
 ## Question 3
 Which parts of the system are in scope? (several allowed)
@@ -109,7 +109,7 @@ X) Other (please describe after [Answer]: tag below)
 Recommendation: G. Dependency and image vulnerabilities already have a continuous scan (Dependabot,
 pip-audit, npm audit, CodeQL), so they are only re-checked, not rebuilt.
 
-[Answer]: 
+[Answer]: G
 
 ## Question 4
 Which tools?
@@ -128,7 +128,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: B.
 
-[Answer]: 
+[Answer]: B
 
 ## Question 5
 How should the model-facing parts be tested? These are the AI assistant (your transactions are sent to a
@@ -148,7 +148,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A.
 
-[Answer]: 
+[Answer]: A
 
 ## Question 6
 May the test include bounded resource-exhaustion checks (oversized request bodies, the largest allowed page
@@ -164,7 +164,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A.
 
-[Answer]: 
+[Answer]: A
 
 ## Question 7
 Where should findings be recorded? The repository is **public**, so a written list of unfixed weaknesses is
@@ -185,7 +185,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: B.
 
-[Answer]: 
+[Answer]: A
 
 ## Question 8
 What should happen to what the test finds?
@@ -201,7 +201,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A first, then C once you have read the report. Some fixes are design decisions that are yours.
 
-[Answer]: 
+[Answer]: A first, then C once you have read the report. Some fixes are design decisions that are yours.
 
 ## Question 9
 Should the test be repeatable on demand and in CI?
@@ -218,7 +218,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: B. A nightly schedule is easy to add later once the suite is stable.
 
-[Answer]: 
+[Answer]: B
 
 ## Question 10
 You pointed me at [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) (MIT
@@ -247,7 +247,7 @@ X) Other (please describe after [Answer]: tag below)
 Recommendation: A. It gets the useful discipline (threat model per finding, proof against unmodified code,
 separate states) without executing a third party's code, and B can still be added later.
 
-[Answer]: 
+[Answer]: A
 
 ## Question 11
 The skill and Cloudflare's write-up get their quality from **independence**: a different agent than the one
@@ -270,7 +270,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A.
 
-[Answer]: 
+[Answer]: B
 
 ## Question 12
 "Glasswing": the sources I could find describe
@@ -292,4 +292,4 @@ X) Other, or a link to what you meant (please describe after [Answer]: tag below
 
 Recommendation: A, unless you already have access.
 
-[Answer]: 
+[Answer]: A
