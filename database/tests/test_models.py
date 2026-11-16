@@ -2425,3 +2425,47 @@ class TestModelUsage:
 
     def test_the_table_has_no_foreign_keys(self):
         assert not ModelUsage.__table__.foreign_keys
+
+
+class TestIngestionRunFileSkipReason:
+    """BR-54: a file skipped as 'no activity' or 'not a PDF' says why; every other outcome is unchanged."""
+
+    def _run_file(self, session, outcome, skip_reason):
+        from transactagent_db.models import IngestionRun, IngestionRunStatus, User
+
+        user = User(username=f"u-{uuid.uuid4().hex[:8]}", password_hash="x")
+        session.add(user)
+        session.flush()
+        run = IngestionRun(triggered_by_user_id=user.id, status=IngestionRunStatus.COMPLETED)
+        session.add(run)
+        session.flush()
+        run_file = IngestionRunFile(
+            ingestion_run_id=run.id,
+            drive_file_id=f"drive-{uuid.uuid4().hex[:8]}",
+            drive_file_name="an item in the folder",
+            outcome=outcome,
+            skip_reason=skip_reason,
+        )
+        session.add(run_file)
+        session.flush()
+        return run_file
+
+    @pytest.mark.parametrize(
+        "outcome", [IngestionRunFileOutcome.SKIPPED_NO_ACTIVITY, IngestionRunFileOutcome.SKIPPED_NOT_A_PDF]
+    )
+    def test_the_new_skip_outcomes_without_a_reason_are_rejected(self, db_session, outcome):
+        with pytest.raises(IntegrityError):
+            self._run_file(db_session, outcome, None)
+
+    @pytest.mark.parametrize(
+        "outcome", [IngestionRunFileOutcome.SKIPPED_NO_ACTIVITY, IngestionRunFileOutcome.SKIPPED_NOT_A_PDF]
+    )
+    def test_the_new_skip_outcomes_with_a_reason_are_valid_and_round_trip(self, db_session, outcome):
+        run_file = self._run_file(db_session, outcome, "Because of a stated reason")
+        db_session.expire(run_file)
+        assert run_file.outcome == outcome
+        assert run_file.skip_reason == "Because of a stated reason"
+
+    def test_other_outcomes_do_not_need_a_reason(self, db_session):
+        for outcome in (IngestionRunFileOutcome.PROCESSED, IngestionRunFileOutcome.SKIPPED_DUPLICATE):
+            assert self._run_file(db_session, outcome, None).skip_reason is None

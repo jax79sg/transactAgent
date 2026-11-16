@@ -82,6 +82,10 @@ class IngestionRunFileOutcome(str, enum.Enum):
     PROCESSED = "processed"
     SKIPPED_DUPLICATE = "skipped_duplicate"
     SKIPPED_PROBABLE_DUPLICATE = "skipped_probable_duplicate"  # Epic 14, BR-49
+    # BR-54 (2026-11): neither is a failure. The statement was read and has no transactions at all, or the item in the
+    # watched Drive folder is not a PDF the scan reads (a subfolder, a shortcut, an image...). Both carry a skip_reason.
+    SKIPPED_NO_ACTIVITY = "skipped_no_activity"
+    SKIPPED_NOT_A_PDF = "skipped_not_a_pdf"
     FAILED = "failed"
 
 
@@ -473,6 +477,11 @@ class IngestionRunFile(Base):
             name="ck_ingestion_run_files_probable_duplicate_has_no_statement",
         ),
         Index("ix_ingestion_run_files_duplicate_comparison_id", "duplicate_comparison_id"),
+        # BR-54: a file skipped as "no activity" or "not a PDF" says why (failure_reason stays for failures only).
+        CheckConstraint(
+            "outcome NOT IN ('skipped_no_activity', 'skipped_not_a_pdf') OR skip_reason IS NOT NULL",
+            name="ck_ingestion_run_files_skip_requires_reason",
+        ),
     )
 
     id: Mapped[uuid.UUID] = _uuid_pk()
@@ -487,6 +496,7 @@ class IngestionRunFile(Base):
     duplicate_comparison_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("duplicate_comparisons.id", ondelete="RESTRICT"), nullable=True
     )  # Epic 14, BR-49
+    skip_reason: Mapped[str | None] = mapped_column(Text, nullable=True)  # BR-54
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     ingestion_run: Mapped["IngestionRun"] = relationship(back_populates="files")
