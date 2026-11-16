@@ -51,6 +51,24 @@ class TestCheckExtraction:
 
         assert {r.status for r in results if r.drive_file_id in ("pdf-1", "pdf-2")} == {"extraction_failed"}
 
+    def test_a_no_activity_read_of_a_statement_we_hold_transactions_for_is_reported_not_raised(self, db_session):
+        # WR-70: the extractor can now answer "no activity" instead of failing. Against a stored statement WITH
+        # transactions that is a disagreement the checker must report, not an unhandled result type.
+        import json
+
+        quiet = json.dumps({
+            "bank_name": "OCBC Bank", "currency": "SGD", "confidence": "high",
+            "sections": [{"account_identifier": "1234-5678", "account_type": "deposit", "transactions": []}],
+        })
+        drive = FakeDrive()
+        seed_legacy(db_session, drive)
+
+        results, _ = _run(db_session, drive, [quiet, quiet])
+
+        statuses = {r.drive_file_id: r for r in results if r.drive_file_id in ("pdf-1", "pdf-2")}
+        assert {r.status for r in statuses.values()} == {"extraction_failed"}
+        assert all("No transactions on this statement" in r.detail for r in statuses.values())
+
     def test_writes_nothing_to_the_database(self, db_session):
         drive = FakeDrive()
         seed_legacy(db_session, drive)

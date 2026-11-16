@@ -215,3 +215,58 @@ class TestEnsureSubfolder:
 
         query = service.files.return_value.list.call_args.kwargs["q"]
         assert "name = 'o\\'brien'" in query
+
+
+class TestListFolderIgnoredItems:
+    """The scan reads only PDFs directly inside one folder; everything else in that folder is listed here so the
+    run can say what it ignored (owner request after issue #70)."""
+
+    def _list(self, *pages):
+        from ingestion_worker.clients.drive_client import list_folder_ignored_items
+
+        service = _mock_service_with_pages(*pages)
+        with patch("ingestion_worker.clients.drive_client._load_credentials", return_value=MagicMock()), patch(
+            "ingestion_worker.clients.drive_client.build", return_value=service
+        ):
+            return list_folder_ignored_items(db=MagicMock()), service
+
+    def test_asks_drive_for_the_folders_non_pdf_children_that_are_not_trashed(self):
+        _, service = self._list([])
+
+        query = service.files.return_value.list.call_args.kwargs["q"]
+        assert "in parents" in query
+        assert "mimeType != 'application/pdf'" in query
+        assert "trashed=false" in query
+        assert "mimeType" in service.files.return_value.list.call_args.kwargs["fields"]
+
+    def test_each_item_comes_back_with_a_reason_that_says_why_it_is_ignored(self):
+        items, _ = self._list(
+            [
+                {"id": "f1", "name": "Old statements", "mimeType": "application/vnd.google-apps.folder"},
+                {"id": "s1", "name": "Alpha", "mimeType": "application/vnd.google-apps.shortcut"},
+                {"id": "i1", "name": "scan.jpg", "mimeType": "image/jpeg"},
+                {"id": "d1", "name": "notes", "mimeType": "application/vnd.google-apps.document"},
+                {"id": "z1", "name": "data.bin", "mimeType": "application/octet-stream"},
+            ]
+        )
+
+        by_id = {item.id: item for item in items}
+        assert [item.name for item in items] == ["Old statements", "Alpha", "scan.jpg", "notes", "data.bin"]
+        assert "subfolder" in by_id["f1"].reason.lower()
+        assert "shortcut" in by_id["s1"].reason.lower()
+        assert "not a pdf" in by_id["i1"].reason.lower() and "image" in by_id["i1"].reason.lower()
+        assert "not a pdf" in by_id["d1"].reason.lower() and "google doc" in by_id["d1"].reason.lower()
+        # An unknown type still says what it was, so the owner can tell what to do about it.
+        assert "application/octet-stream" in by_id["z1"].reason
+
+    def test_pages_through_more_than_one_page(self):
+        page1 = [{"id": f"id{i}", "name": f"n{i}", "mimeType": "image/png"} for i in range(100)]
+        page2 = [{"id": f"id{i}", "name": f"n{i}", "mimeType": "image/png"} for i in range(100, 130)]
+        items, service = self._list(page1, page2)
+
+        assert len(items) == 130
+        assert service.files.return_value.list.call_args_list[1].kwargs["pageToken"] == "token-0"
+
+    def test_an_empty_folder_gives_an_empty_list(self):
+        items, _ = self._list([])
+        assert items == []

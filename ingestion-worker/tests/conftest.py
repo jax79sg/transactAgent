@@ -59,3 +59,15 @@ def recorded_usage(monkeypatch):
     collected: list[dict] = []
     monkeypatch.setattr(usage, "record_model_usage", lambda session_factory, **fields: collected.append(fields))
     return collected
+
+
+@pytest.fixture(autouse=True)
+def _never_list_the_real_drive_folder_for_ignored_items(request, monkeypatch):
+    """The pipeline also lists what the watched folder holds but the scan does not read (BR-54). Tests that run the
+    pipeline patch the PDF listing only; without this they would reach for real Drive credentials. test_drive_client
+    exercises the real function and is left alone; a test that wants ignored items patches it itself."""
+    if request.module.__name__.rsplit(".", 1)[-1] == "test_drive_client":
+        return
+    from ingestion_worker.clients import drive_client
+
+    monkeypatch.setattr(drive_client, "list_folder_ignored_items", lambda db: [])

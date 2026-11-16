@@ -32,6 +32,19 @@ class ExtractionFailure:
     raw_response: str | None = None
 
 
+@dataclass
+class NoActivity:
+    """The statement was read with confidence, the bank and at least one account were identified, and there are no
+    transactions at all: a quiet account, not a failed read (BR-54 / WR-70). Nothing is imported for it."""
+
+    bank_name: str
+    raw_response: str | None = None
+
+    @property
+    def reason(self) -> str:
+        return "No transactions on this statement"
+
+
 def _pdf_to_page_images(pdf_bytes: bytes) -> list[bytes]:
     images = convert_from_bytes(pdf_bytes, fmt="png")
     page_bytes = []
@@ -304,7 +317,7 @@ def _correct_ambiguous_transaction_dates(transactions: list, raw_statement_date:
         last_date = chosen_date
 
 
-def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFailure:
+def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFailure | NoActivity:
     try:
         page_images = _pdf_to_page_images(pdf_bytes)
     except Exception as exc:  # noqa: BLE001 - any PDF-rendering failure is an extraction failure
@@ -359,6 +372,12 @@ def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFai
     for section in statement.sections:
         section.transactions = [t for t in section.transactions if not _is_non_transaction_line(t.description)]
 
+    # WR-70: what the read itself found, captured BEFORE the future-date drop and the empty-section drop below, so a
+    # quiet account (the model saw an account and no activity) can be told apart from a bad read (no account found,
+    # or transactions that were seen and then thrown away for impossible dates).
+    returned_transaction_count = len(statement.transactions)
+    identified_an_account = any((s.account_identifier or "").strip() for s in statement.sections)
+
     # Last-resort safety net: a bank statement documents transactions that have
     # already happened, so a transaction_date after today should never reach the
     # database even if the correction above couldn't resolve it (e.g. the excluded
@@ -393,15 +412,20 @@ def extract_statement(pdf_bytes: bytes) -> RawExtractedStatement | ExtractionFai
             reason="Could not identify bank name and/or currency", raw_response=raw_response
         )
 
-    # WR-1c: zero transactions extracted is treated as a failure (a statement with
-    # genuinely no transactions is a rare edge case for this app's use case; simpler
-    # and safer to flag for manual review than to silently commit an empty statement).
+    threshold = ConfidenceLevel(settings.extraction_confidence_threshold)
+
+    # WR-1c: zero transactions extracted is treated as a failure, because that is what a bad read looks like.
     # Epic 13: counted across the WHOLE statement -- one account with no activity is fine.
+    # WR-70 (amends WR-1c, 2026-11): EXCEPT a statement that was read with confidence, whose bank and at least one
+    # account were identified, and from which the model returned no transactions at all. That is a quiet account
+    # (the owner's folder had dozens), so it is reported as NoActivity and counted as skipped, not failed. Anything
+    # less certain stays a failure.
     if len(statement.transactions) == 0:
+        if returned_transaction_count == 0 and identified_an_account and statement.confidence.rank >= threshold.rank:
+            return NoActivity(bank_name=statement.bank_name, raw_response=raw_response)
         return ExtractionFailure(reason="Zero transactions extracted", raw_response=raw_response)
 
     # WR-1d: confidence must clear the configured threshold
-    threshold = ConfidenceLevel(settings.extraction_confidence_threshold)
     if statement.confidence.rank < threshold.rank:
         return ExtractionFailure(
             reason=f"Extraction confidence '{statement.confidence.value}' below threshold "
