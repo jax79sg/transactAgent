@@ -138,6 +138,7 @@ def record_run_file(
     bank_statement_id=None,
     transactions_extracted_count: int | None = None,
     duplicate_comparison_id=None,
+    skip_reason: str | None = None,
 ) -> IngestionRunFile:
     row = IngestionRunFile(
         ingestion_run_id=run.id,
@@ -149,6 +150,7 @@ def record_run_file(
         bank_statement_id=bank_statement_id,
         transactions_extracted_count=transactions_extracted_count,
         duplicate_comparison_id=duplicate_comparison_id,
+        skip_reason=skip_reason,
     )
     db.add(row)
     db.flush()

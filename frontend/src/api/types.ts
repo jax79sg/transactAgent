@@ -171,13 +171,23 @@ export interface RunHistoryPage {
   totalCount: number;
 }
 
-export type RunFileOutcome = "processed" | "skipped_duplicate" | "skipped_probable_duplicate" | "failed";
+export type RunFileOutcome =
+  | "processed"
+  | "skipped_duplicate"
+  | "skipped_probable_duplicate"
+  // BR-54: neither is a failure. The statement was read and has no transactions, or the item in the watched Drive
+  // folder is not a PDF the scan reads (a subfolder, a shortcut, an image...). Both carry a skipReason.
+  | "skipped_no_activity"
+  | "skipped_not_a_pdf"
+  | "failed";
 
 export interface RunFileDetail {
   id: string;
   driveFileName: string;
   outcome: RunFileOutcome;
   failureReason: string | null;
+  // BR-54: why a file was skipped as no-activity or not-a-PDF. Optional so older fixtures still type-check.
+  skipReason?: string | null;
   transactionsExtractedCount: number | null;
   processedAt: string;
   // Epic 14 (AR-47): set only for a file skipped as a probable duplicate. Optional so a run-file object built

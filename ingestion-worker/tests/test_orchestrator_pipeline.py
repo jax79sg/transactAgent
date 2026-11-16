@@ -21,7 +21,7 @@ from transactagent_db.models import (
     User,
 )
 
-from ingestion_worker.clients.drive_client import DriveFileRef
+from ingestion_worker.clients.drive_client import DriveFileRef, IgnoredItem
 from ingestion_worker.orchestrator import pipeline
 
 _VALID_EXTRACTION_RESPONSE = json.dumps(
@@ -411,10 +411,11 @@ def _sectioned_response(*sections, bank="OCBC Bank", currency="SGD"):
     return json.dumps({"bank_name": bank, "currency": currency, "confidence": "high", "sections": list(sections)})
 
 
-def _ingest(db_session, files, responses, *, classify=None):
+def _ingest(db_session, files, responses, *, classify=None, ignored=(), run=None):
     """Run the pipeline over `files` with one extraction response per file (different PDF bytes
-    each, so duplicate detection treats them as distinct statements)."""
-    run = _make_run(db_session)
+    each, so duplicate detection treats them as distinct statements). `ignored` is what the Drive
+    folder holds that the scan does not read (a list of IgnoredItem), or an exception to raise."""
+    run = run or _make_run(db_session)
     counter = {"n": 0}
 
     def fake_download(db, file_ref):
@@ -424,6 +425,10 @@ def _ingest(db_session, files, responses, *, classify=None):
     classify = classify or (lambda db, items: {description: "Groceries" for description, _ in items})
     with (
         patch("ingestion_worker.clients.drive_client.list_folder_pdf_files", return_value=files),
+        patch(
+            "ingestion_worker.clients.drive_client.list_folder_ignored_items",
+            **({"side_effect": ignored} if isinstance(ignored, Exception) else {"return_value": list(ignored)}),
+        ),
         patch("ingestion_worker.clients.drive_client.download_file", side_effect=fake_download),
         patch("ingestion_worker.extraction.service._pdf_to_page_images", return_value=[b"page"]),
         patch("ingestion_worker.extraction.service.extract_statement_raw", side_effect=responses),
@@ -839,3 +844,123 @@ class TestBackfillMode:
         run, _ = _run_files(db_session, [("copy.pdf", b"second-copy", _extracted_statement(_june(5)))], backfill_mode=True)
 
         assert db_session.query(BankStatement).count() == 1 and run.files_skipped_count == 1
+
+
+_QUIET_ACCOUNT = {"account_identifier": "1234-5678", "account_type": "credit_card", "transactions": []}
+
+
+def _files_of(db_session, run):
+    db_session.expire_all()
+    return {f.drive_file_name: f for f in db_session.query(IngestionRunFile).filter_by(ingestion_run_id=run.id)}
+
+
+class TestWhatTheScanIgnores:
+    """Owner request after issue #70: the scan reports what it skips instead of leaving it invisible. BR-54."""
+
+    def test_ignored_items_are_recorded_counted_as_skipped_and_do_not_fail_the_run(self, db_session):
+        run = _ingest(
+            db_session,
+            [],
+            [],
+            ignored=[
+                IgnoredItem(id="d1", name="Old statements", mime_type="application/vnd.google-apps.folder", reason="A subfolder."),
+                IgnoredItem(id="d2", name="scan.jpg", mime_type="image/jpeg", reason="Not a PDF: this is an image."),
+            ],
+        )
+
+        files = _files_of(db_session, run)
+        assert run.status == IngestionRunStatus.COMPLETED
+        assert (run.files_found_count, run.files_skipped_count, run.files_failed_count) == (2, 2, 0)
+        assert files["Old statements"].outcome == IngestionRunFileOutcome.SKIPPED_NOT_A_PDF
+        assert files["Old statements"].skip_reason == "A subfolder."
+        assert files["scan.jpg"].skip_reason == "Not a PDF: this is an image."
+
+    def test_ignored_items_sit_alongside_the_pdfs_that_are_read(self, db_session):
+        _seed_whitelist(db_session)
+        run = _ingest(
+            db_session,
+            [DriveFileRef(id="p1", name="jan.pdf")],
+            [_VALID_EXTRACTION_RESPONSE],
+            ignored=[IgnoredItem(id="d1", name="Old", mime_type="application/vnd.google-apps.folder", reason="A subfolder.")],
+        )
+
+        assert run.status == IngestionRunStatus.COMPLETED
+        # found = processed + skipped + failed still holds.
+        assert (run.files_found_count, run.files_processed_count, run.files_skipped_count, run.files_failed_count) == (
+            2, 1, 1, 0,
+        )
+
+    def test_failing_to_list_the_ignored_items_never_stops_the_run(self, db_session):
+        _seed_whitelist(db_session)
+        run = _ingest(
+            db_session,
+            [DriveFileRef(id="p1", name="jan.pdf")],
+            [_VALID_EXTRACTION_RESPONSE],
+            ignored=RuntimeError("Drive said no"),
+        )
+
+        assert run.status == IngestionRunStatus.COMPLETED
+        assert (run.files_found_count, run.files_processed_count) == (1, 1)
+
+    def test_the_run_log_names_each_ignored_item_and_why(self, db_session, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO):
+            _ingest(
+                db_session, [], [],
+                ignored=[IgnoredItem(id="d1", name="Old statements", mime_type="x", reason="A subfolder.")],
+            )
+
+        assert any("Old statements" in r.getMessage() and "A subfolder." in r.getMessage() for r in caplog.records)
+
+
+class TestStatementsWithNoActivity:
+    """BR-54 / WR-70: a quiet account's statement is skipped with a reason, never failed."""
+
+    def test_a_confident_zero_transaction_statement_is_skipped_as_no_activity_not_failed(self, db_session):
+        run = _ingest(
+            db_session,
+            [DriveFileRef(id="p1", name="quiet.pdf")],
+            [_sectioned_response(_QUIET_ACCOUNT, bank="CIMB Bank")],
+        )
+
+        row = _files_of(db_session, run)["quiet.pdf"]
+        assert row.outcome == IngestionRunFileOutcome.SKIPPED_NO_ACTIVITY
+        assert row.skip_reason and "no transactions" in row.skip_reason.lower()
+        assert row.failure_reason is None
+        assert row.transactions_extracted_count == 0
+        assert row.raw_extracted_text and "1234-5678" in row.raw_extracted_text  # the decision can be audited
+        assert run.status == IngestionRunStatus.COMPLETED  # not completed_with_failures
+        assert (run.files_processed_count, run.files_skipped_count, run.files_failed_count) == (0, 1, 0)
+
+    def test_it_creates_nothing(self, db_session):
+        before = (db_session.query(BankStatement).count(), db_session.query(Account).count())
+
+        _ingest(db_session, [DriveFileRef(id="p1", name="quiet.pdf")], [_sectioned_response(_QUIET_ACCOUNT)])
+
+        assert (db_session.query(BankStatement).count(), db_session.query(Account).count()) == before
+
+    def test_zero_transactions_with_no_account_found_is_still_a_failure(self, db_session):
+        run = _ingest(
+            db_session,
+            [DriveFileRef(id="p1", name="unreadable.pdf")],
+            [_sectioned_response({"transactions": []})],
+        )
+
+        row = _files_of(db_session, run)["unreadable.pdf"]
+        assert row.outcome == IngestionRunFileOutcome.FAILED
+        assert row.failure_reason == "Zero transactions extracted"
+        assert run.status == IngestionRunStatus.COMPLETED_WITH_FAILURES
+
+    def test_a_no_activity_statement_is_read_again_on_the_next_run(self, db_session):
+        # Deliberately NOT remembered: a one-off bad read must not become permanent.
+        _seed_whitelist(db_session)
+        first = _ingest(db_session, [DriveFileRef(id="p1", name="quiet.pdf")], [_sectioned_response(_QUIET_ACCOUNT)])
+        second = _ingest(
+            db_session,
+            [DriveFileRef(id="p1", name="quiet.pdf")],
+            [_sectioned_response({**_QUIET_ACCOUNT, "transactions": [_txn_json("COFFEE")]})],
+        )
+
+        assert _files_of(db_session, first)["quiet.pdf"].outcome == IngestionRunFileOutcome.SKIPPED_NO_ACTIVITY
+        assert _files_of(db_session, second)["quiet.pdf"].outcome == IngestionRunFileOutcome.PROCESSED

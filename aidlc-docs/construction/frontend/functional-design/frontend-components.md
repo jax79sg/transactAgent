@@ -77,7 +77,7 @@ App
 - **TriggerRunButton**: disabled while `ActiveRunProgress` shows a run in `queued`/`running` state; on click, `POST /ingestion/runs`; on `409` (AR-6), shows "A run is already in progress" and switches to showing that run's progress instead of erroring uselessly
 - **ActiveRunProgress**: polls `GET /ingestion/runs/{id}` every 3 seconds while `status` is `queued` or `running`; stops polling once `completed`/`completed_with_failures`/`failed`; displays `filesFoundCount/filesProcessedCount/filesSkippedCount/filesFailedCount` as a live progress readout (US-1.2's "near-live" requirement)
 - **RunHistoryTable**: paginated list from `GET /ingestion/runs`, most recent first
-- **RunFileDrilldown**: expanding a run row calls `GET /ingestion/runs/{id}/files`, shows per-file outcome and `failureReason` when present (US-1.5)
+- **RunFileDrilldown**: expanding a run row calls `GET /ingestion/runs/{id}/files`, shows per-file outcome and `failureReason` when present (US-1.5). **2026-11-16 (BR-54):** the Reason column shows `failureReason`, else `skipReason` (why a file was skipped as `skipped_no_activity` or `skipped_not_a_pdf`); when any file is `skipped_not_a_pdf` a notice (`run-ignored-notice`) says how many items in the Drive folder were not read and that the scan reads only PDF files directly inside the folder
 - **API**: `POST /ingestion/runs`, `GET /ingestion/runs`, `GET /ingestion/runs/{id}`, `GET /ingestion/runs/{id}/files`
 
 ## SettingsPage / CategoryManagement / DriveConnectionCard

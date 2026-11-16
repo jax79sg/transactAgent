@@ -33,6 +33,8 @@ class RunFileDetail(CamelModel):
     drive_file_name: str
     outcome: str
     failure_reason: str | None
+    # BR-54: why a file was skipped as "no activity" or "not a PDF the scan reads"; null for every other outcome.
+    skip_reason: str | None = None
     transactions_extracted_count: int | None
     processed_at: datetime
     # Epic 14 (AR-47): set only for a file skipped as a probable duplicate -- its stored comparison and

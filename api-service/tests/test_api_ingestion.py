@@ -117,3 +117,59 @@ class TestIngestionRunLogsApi:
         assert response.status_code == 200
         messages = [line["message"] for line in response.json()]
         assert messages == ["This run's log"]
+
+
+class TestRunFilesCarrySkipReasons:
+    """BR-54: the files of a run say WHY a file was skipped (no activity, or not a PDF the scan reads)."""
+
+    def _run_with_files(self, db_session, test_user, *specs):
+        from transactagent_db.models import (
+            IngestionRun,
+            IngestionRunFile,
+            IngestionRunFileOutcome,
+            IngestionRunStatus,
+        )
+
+        run = IngestionRun(triggered_by_user_id=test_user.id, status=IngestionRunStatus.COMPLETED)
+        db_session.add(run)
+        db_session.flush()
+        for name, outcome, reason in specs:
+            db_session.add(
+                IngestionRunFile(
+                    ingestion_run_id=run.id,
+                    drive_file_id=f"id-{name}",
+                    drive_file_name=name,
+                    outcome=IngestionRunFileOutcome(outcome),
+                    skip_reason=reason,
+                    failure_reason="Zero transactions extracted" if outcome == "failed" else None,
+                )
+            )
+        db_session.flush()
+        return run
+
+    def test_the_new_skip_outcomes_and_their_reasons_are_returned(self, client, auth_headers, db_session, test_user):
+        run = self._run_with_files(
+            db_session,
+            test_user,
+            ("quiet.pdf", "skipped_no_activity", "No transactions on this statement."),
+            ("Old statements", "skipped_not_a_pdf", "A subfolder."),
+        )
+
+        response = client.get(f"/ingestion/runs/{run.id}/files", headers=auth_headers)
+
+        assert response.status_code == 200
+        by_name = {f["driveFileName"]: f for f in response.json()}
+        assert by_name["quiet.pdf"]["outcome"] == "skipped_no_activity"
+        assert by_name["quiet.pdf"]["skipReason"] == "No transactions on this statement."
+        assert by_name["quiet.pdf"]["failureReason"] is None
+        assert by_name["Old statements"]["outcome"] == "skipped_not_a_pdf"
+        assert by_name["Old statements"]["skipReason"] == "A subfolder."
+
+    def test_other_outcomes_have_no_skip_reason(self, client, auth_headers, db_session, test_user):
+        run = self._run_with_files(
+            db_session, test_user, ("broken.pdf", "failed", None), ("done.pdf", "processed", None)
+        )
+
+        body = client.get(f"/ingestion/runs/{run.id}/files", headers=auth_headers).json()
+
+        assert {f["driveFileName"]: f["skipReason"] for f in body} == {"broken.pdf": None, "done.pdf": None}

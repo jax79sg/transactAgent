@@ -109,6 +109,13 @@ def upgrade() -> None:
     op.drop_constraint("ck_ingestion_run_files_probable_duplicate_has_no_statement", "ingestion_run_files", type_="check")
     op.drop_table("duplicate_comparisons")
 
+    # Same fix for 0023: ingestion_run_files' current definition also carries `skip_reason`
+    # and the CHECK that requires it for two outcomes, both added by 0023. The CHECK
+    # mentions the column, so dropping the column removes it too. (The outcome enum was
+    # created above with its current values, so 0023's ADD VALUE IF NOT EXISTS is a safe
+    # no-op on a fresh database.)
+    op.drop_column("ingestion_run_files", "skip_reason")  # actually added by 0023
+
     # BR-10: at most one ingestion_runs row may have status 'queued' or 'running' at a
     # time. Expressed as a Postgres partial unique index on a constant expression (all
     # qualifying rows index to the same value "true", so a second one collides) — not

@@ -16,7 +16,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ingestion_worker.clients import drive_client
-from ingestion_worker.extraction.service import ExtractionFailure, extract_statement
+from ingestion_worker.extraction.service import (
+    ExtractionFailure,
+    NoActivity,
+    extract_statement,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +80,7 @@ def check_extraction(
             results.append(Comparison(statement.bank_name, statement.drive_file_id, "pdf_missing_from_drive"))
             continue
         extracted = extract_statement(drive_client.download_file(db, ref))
-        if isinstance(extracted, ExtractionFailure):
+        if isinstance(extracted, ExtractionFailure | NoActivity):  # NoActivity: WR-70, nothing to compare with
             results.append(Comparison(statement.bank_name, statement.drive_file_id, "extraction_failed", detail=extracted.reason))
             continue
         stored = _stored_transactions(db, statement.id)

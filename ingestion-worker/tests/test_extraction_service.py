@@ -9,7 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
-from ingestion_worker.extraction.service import ExtractionFailure, extract_statement
+from ingestion_worker.extraction.service import (
+    ExtractionFailure,
+    NoActivity,
+    extract_statement,
+)
 
 _VALID_RESPONSE = {
     "bank_name": "DBS",
@@ -758,3 +762,70 @@ class TestPerSectionDateCorrection:
 
         by_description = {t.description: str(t.transaction_date) for t in result.transactions}
         assert by_description == {"A1": "2026-01-02", "A2": "2026-01-20", "B1": "2026-01-03", "B2": "2026-01-05"}
+
+
+class TestNoActivityStatements:
+    """BR-54 / WR-70: a statement with no transactions at all is "no activity", not a failure, but only when the read
+    clearly found the bank and at least one account; otherwise it is still a failure, because that is what a bad read
+    looks like (WR-1c)."""
+
+    _ACCOUNT: ClassVar[dict] = {"account_identifier": "1234-5678", "account_type": "credit_card", "transactions": []}
+
+    def test_a_confident_read_that_found_an_account_but_no_transactions_is_no_activity(self):
+        result = _extract(_sectioned(self._ACCOUNT, bank_name="CIMB Bank"))
+
+        assert isinstance(result, NoActivity)
+        assert result.bank_name == "CIMB Bank"
+
+    def test_an_account_with_a_closing_balance_and_no_transactions_is_no_activity(self):
+        account = {**self._ACCOUNT, "account_type": "deposit", "closing_balance": 0.0, "closing_balance_date": "2026-01-31"}
+        result = _extract(_sectioned(account, statement_date="2026-01-31"))
+
+        assert isinstance(result, NoActivity)
+
+    def test_several_empty_accounts_are_still_no_activity(self):
+        other = {**self._ACCOUNT, "account_identifier": "8765-4321"}
+        assert isinstance(_extract(_sectioned(self._ACCOUNT, other)), NoActivity)
+
+    def test_the_raw_reply_is_kept_so_the_decision_can_be_audited(self):
+        result = _extract(_sectioned(self._ACCOUNT))
+        assert isinstance(result, NoActivity) and "1234-5678" in result.raw_response
+
+    def test_a_statement_with_only_a_balance_carried_forward_line_is_no_activity(self):
+        account = {**self._ACCOUNT, "transactions": [_txn("2026-01-02", "Balance carried forward")]}
+        assert isinstance(_extract(_sectioned(account)), NoActivity)
+
+    # --- the cases that must STAY failures ---
+
+    def test_no_account_identified_is_still_a_failure(self):
+        # The model found no account at all (an empty section with no identifier): indistinguishable from a bad read.
+        result = _extract(_sectioned({"transactions": []}))
+
+        assert isinstance(result, ExtractionFailure)
+        assert "Zero transactions" in result.reason
+
+    def test_a_blank_account_identifier_does_not_count_as_identified(self):
+        result = _extract(_sectioned({**self._ACCOUNT, "account_identifier": "   "}))
+        assert isinstance(result, ExtractionFailure)
+
+    def test_low_confidence_with_an_account_but_no_transactions_is_still_a_failure(self):
+        result = _extract(_sectioned(self._ACCOUNT, confidence="low"))
+
+        assert isinstance(result, ExtractionFailure)
+        assert "Zero transactions" in result.reason
+
+    def test_transactions_that_were_all_dropped_as_future_dated_are_still_a_failure(self):
+        # The model DID return transactions; discarding them all for impossible dates points to a misread date, not
+        # to a quiet account.
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        account = {**self._ACCOUNT, "transactions": [_txn(tomorrow, "FUTURE")]}
+        result = _extract(_sectioned(account))
+
+        assert isinstance(result, ExtractionFailure)
+        assert "Zero transactions" in result.reason
+
+    def test_a_statement_with_no_bank_is_a_failure_even_with_an_account(self):
+        result = _extract(_sectioned(self._ACCOUNT, bank_name=None))
+
+        assert isinstance(result, ExtractionFailure)
+        assert "bank name" in result.reason.lower()

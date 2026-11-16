@@ -91,6 +91,79 @@ def list_folder_pdf_files(db: Session) -> list[DriveFileRef]:
         raise
 
 
+_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+_SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut"
+_GOOGLE_NATIVE_LABELS = {
+    "application/vnd.google-apps.document": "a Google Doc",
+    "application/vnd.google-apps.spreadsheet": "a Google Sheet",
+    "application/vnd.google-apps.presentation": "a Google Slides deck",
+}
+
+
+@dataclass(frozen=True)
+class IgnoredItem:
+    """Something directly inside the watched folder that the scan does not read, and why (BR-54)."""
+
+    id: str
+    name: str
+    mime_type: str
+    reason: str
+
+
+def describe_ignored_item(mime_type: str) -> str:
+    """The sentence shown to the owner for an item the scan skipped. Says what the item is AND what to do about it,
+    since the usual cause is a statement kept somewhere the scan does not look."""
+    if mime_type == _FOLDER_MIME_TYPE:
+        return (
+            "A subfolder. The scan reads only the PDF files directly inside the watched folder, not inside "
+            "subfolders; move the PDF into the watched folder to have it read."
+        )
+    if mime_type == _SHORTCUT_MIME_TYPE:
+        return (
+            "A Drive shortcut. The scan does not follow shortcuts; put the PDF itself in the watched folder "
+            "to have it read."
+        )
+    if mime_type in _GOOGLE_NATIVE_LABELS:
+        label = _GOOGLE_NATIVE_LABELS[mime_type]
+    elif mime_type.startswith("image/"):
+        label = "an image"
+    else:
+        label = f"a file of type {mime_type}"
+    return f"Not a PDF: this is {label}. Only PDF files are read; export or save it as a PDF to have it read."
+
+
+@retry_with_backoff()
+def list_folder_ignored_items(db: Session) -> list[IgnoredItem]:
+    """Everything directly inside the watched folder that list_folder_pdf_files does NOT return: the other half of
+    the same folder listing, so a statement kept as a subfolder, shortcut, image or Google document is reported
+    instead of silently invisible. Same paging as list_folder_pdf_files."""
+    credentials = _load_credentials(db)
+    try:
+        service = build("drive", "v3", credentials=credentials)
+        query = f"'{settings.google_drive_folder_id}' in parents and mimeType != 'application/pdf' and trashed=false"
+        items: list[IgnoredItem] = []
+        page_token = None
+        while True:
+            results = (
+                service.files()
+                .list(q=query, fields="nextPageToken, files(id, name, mimeType)", pageSize=1000, pageToken=page_token)
+                .execute()
+            )
+            for f in results.get("files", []):
+                mime_type = f.get("mimeType", "")
+                items.append(
+                    IgnoredItem(id=f["id"], name=f["name"], mime_type=mime_type, reason=describe_ignored_item(mime_type))
+                )
+            page_token = results.get("nextPageToken")
+            if not page_token:
+                break
+        return items
+    except HttpError as exc:
+        if exc.resp.status in _TRANSIENT_HTTP_STATUS:
+            raise TransientError(f"Drive list ignored items transient error: {exc}") from exc
+        raise
+
+
 @retry_with_backoff()
 def download_file(db: Session, file_ref: DriveFileRef) -> bytes:
     credentials = _load_credentials(db)

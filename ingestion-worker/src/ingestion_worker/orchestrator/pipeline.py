@@ -26,13 +26,23 @@ from ingestion_worker.clients.retry import TransientError
 from ingestion_worker.currency.service import resolve_converted_amount
 from ingestion_worker.duplicate_detection import service as duplicate_detection
 from ingestion_worker.duplicates import service as duplicates_service
-from ingestion_worker.extraction.service import ExtractionFailure, extract_statement
+from ingestion_worker.extraction.service import (
+    ExtractionFailure,
+    NoActivity,
+    extract_statement,
+)
 from ingestion_worker.heartbeat import touch_heartbeat
 from ingestion_worker.logging_capture import set_current_run
 from ingestion_worker.orchestrator import repository as orchestrator_repository
 from ingestion_worker.recurring_payments import service as recurring_payments_service
 
 logger = logging.getLogger(__name__)
+
+# BR-54 / WR-70: shown against a statement that was read but has no transactions on it. Not a failure.
+NO_ACTIVITY_REASON = (
+    "No transactions on this statement, so there was nothing to import. This is not a failure: the statement was "
+    "read, the account was found, and it had no activity in the period."
+)
 
 
 def process_run(db: Session, run, *, backfill_mode: bool = False) -> None:
@@ -66,8 +76,24 @@ def _process_run(db: Session, run, *, backfill_mode: bool = False) -> None:
         orchestrator_repository.fail_run(db, run)
         return
 
-    logger.info("Ingestion run %s: found %d file(s)", run.id, len(files))
-    orchestrator_repository.update_run_progress(db, run, files_found=len(files))
+    # BR-54: what is in the folder but is not read (subfolders, shortcuts, images...) is listed too, so a statement kept
+    # somewhere the scan does not look is reported instead of silently invisible. Best effort: a failure here is logged
+    # and the run carries on, because reporting must never stop ingestion.
+    ignored = _list_ignored_items(db, run)
+    logger.info(
+        "Ingestion run %s: found %d PDF file(s) to read and %d other item(s) the scan does not read",
+        run.id, len(files), len(ignored),
+    )
+    for item in ignored:
+        logger.info("Ingestion run %s: not reading %r: %s", run.id, item.name, item.reason)
+        orchestrator_repository.record_run_file(
+            db, run,
+            drive_file_id=item.id, drive_file_name=item.name,
+            outcome=IngestionRunFileOutcome.SKIPPED_NOT_A_PDF, skip_reason=item.reason,
+        )
+    orchestrator_repository.update_run_progress(
+        db, run, files_found=len(files) + len(ignored), skipped_delta=len(ignored)
+    )
 
     try:
         for index, file_ref in enumerate(files, start=1):
@@ -121,6 +147,17 @@ def _process_run(db: Session, run, *, backfill_mode: bool = False) -> None:
     orchestrator_repository.complete_run(db, run)
 
 
+def _list_ignored_items(db: Session, run) -> list:
+    try:
+        return drive_client.list_folder_ignored_items(db)
+    except Exception as exc:  # noqa: BLE001 - reporting only; never lets a failure here stop the run
+        logger.warning(
+            "Ingestion run %s: could not list what the scan ignores in the Drive folder (%s); carrying on without it",
+            run.id, exc,
+        )
+        return []
+
+
 def _process_one_file(db: Session, run, file_ref, *, backfill_mode: bool = False) -> None:
     try:
         pdf_bytes = drive_client.download_file(db, file_ref)
@@ -169,6 +206,18 @@ def _process_one_file(db: Session, run, file_ref, *, backfill_mode: bool = False
 
     logger.info("%s: extracting statement contents", file_ref.name)
     result = extract_statement(pdf_bytes)
+    if isinstance(result, NoActivity):
+        # BR-54 / WR-70: read with confidence, an account found, no transactions. Skipped with a reason, never failed,
+        # and nothing is created. Not remembered: the next run reads it again, so a one-off bad read cannot stick.
+        logger.info("%s: read, but there are no transactions on it -- skipped as no activity (not a failure)", file_ref.name)
+        orchestrator_repository.record_run_file(
+            db, run,
+            drive_file_id=file_ref.id, drive_file_name=file_ref.name,
+            outcome=IngestionRunFileOutcome.SKIPPED_NO_ACTIVITY, skip_reason=NO_ACTIVITY_REASON,
+            raw_extracted_text=result.raw_response, transactions_extracted_count=0,
+        )
+        orchestrator_repository.update_run_progress(db, run, skipped_delta=1)
+        return
     if isinstance(result, ExtractionFailure):
         logger.warning("%s: extraction failed: %s", file_ref.name, result.reason)
         orchestrator_repository.record_run_file(
