@@ -71,6 +71,7 @@ def list_run_files(run_id: UUID, db: Session = Depends(get_db)) -> list[RunFileD
             drive_file_name=f.drive_file_name,
             outcome=f.outcome.value,
             failure_reason=f.failure_reason,
+            skip_reason=f.skip_reason,
             transactions_extracted_count=f.transactions_extracted_count,
             processed_at=f.processed_at,
             duplicate_comparison_id=f.duplicate_comparison_id,

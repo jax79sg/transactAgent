@@ -177,3 +177,70 @@ describe("IngestionPage probable-duplicate files (Epic 14)", () => {
     expect(screen.queryByTestId("run-file-duplicate-link-file-1")).not.toBeInTheDocument();
   });
 });
+
+describe("IngestionPage files the scan skipped (BR-54)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function openRunWith(files: RunFileDetail[]) {
+    const done = runOf({ status: "completed", filesProcessedCount: files.length });
+    vi.spyOn(ingestionApi, "listRunHistory").mockResolvedValue({ items: [done], page: 1, pageSize: 20, totalCount: 1 });
+    vi.spyOn(ingestionApi, "listRunFiles").mockResolvedValue(files);
+    vi.spyOn(ingestionApi, "listRunLogs").mockResolvedValue([]);
+    renderIngestionPage();
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("run-history-row-run-1"));
+  }
+
+  const folder = () =>
+    fileOf({
+      id: "f1",
+      driveFileName: "Old statements",
+      outcome: "skipped_not_a_pdf",
+      skipReason: "A subfolder. The scan reads only the PDF files directly inside the watched folder.",
+      transactionsExtractedCount: null,
+    });
+  const quiet = () =>
+    fileOf({
+      id: "q1",
+      driveFileName: "quiet.pdf",
+      outcome: "skipped_no_activity",
+      skipReason: "No transactions on this statement, so there was nothing to import.",
+      transactionsExtractedCount: 0,
+    });
+
+  it("shows why a file was skipped in the Reason column", async () => {
+    await openRunWith([folder(), quiet()]);
+
+    expect(await screen.findByTestId("run-file-reason-f1")).toHaveTextContent("A subfolder.");
+    expect(screen.getByTestId("run-file-reason-q1")).toHaveTextContent("nothing to import");
+  });
+
+  it("still shows a failure reason for a failed file", async () => {
+    await openRunWith([fileOf({ id: "x", outcome: "failed", failureReason: "Zero transactions extracted" })]);
+
+    expect(await screen.findByTestId("run-file-reason-x")).toHaveTextContent("Zero transactions extracted");
+  });
+
+  it("tells the owner how many items the scan did not read, and why", async () => {
+    await openRunWith([folder(), folder(), quiet()].map((f, i) => ({ ...f, id: `i${i}` })));
+
+    const notice = await screen.findByTestId("run-ignored-notice");
+    expect(notice).toHaveTextContent("2 items in the Drive folder were not read");
+    expect(notice).toHaveTextContent("only PDF files directly inside the folder");
+  });
+
+  it("says 'item' for exactly one", async () => {
+    await openRunWith([folder()]);
+
+    expect(await screen.findByTestId("run-ignored-notice")).toHaveTextContent("1 item in the Drive folder was not read");
+  });
+
+  it("shows no notice when everything in the folder was a PDF the scan reads", async () => {
+    await openRunWith([quiet(), fileOf({ id: "ok" })]);
+
+    await screen.findByTestId("run-file-reason-q1");
+    expect(screen.queryByTestId("run-ignored-notice")).not.toBeInTheDocument();
+  });
+});

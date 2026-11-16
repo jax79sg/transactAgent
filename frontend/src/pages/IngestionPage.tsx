@@ -78,7 +78,12 @@ export function RunLiveLogs({ runId, isActive }: { runId: string; isActive: bool
   );
 }
 
-type RunFileSortKey = "driveFileName" | "outcome" | "failureReason" | "transactionsExtractedCount";
+type RunFileSortKey = "driveFileName" | "outcome" | "reason" | "transactionsExtractedCount";
+
+// A failed file's failure reason, else why it was skipped (no activity, not a PDF the scan reads), else nothing.
+function reasonOf(f: RunFileDetail): string {
+  return f.failureReason ?? f.skipReason ?? "";
+}
 
 function sortRunFiles(files: RunFileDetail[], sortKey: RunFileSortKey, sortDir: "asc" | "desc"): RunFileDetail[] {
   const sorted = [...files].sort((a, b) => {
@@ -87,8 +92,8 @@ function sortRunFiles(files: RunFileDetail[], sortKey: RunFileSortKey, sortDir: 
         return a.driveFileName.localeCompare(b.driveFileName);
       case "outcome":
         return a.outcome.localeCompare(b.outcome);
-      case "failureReason":
-        return (a.failureReason ?? "").localeCompare(b.failureReason ?? "");
+      case "reason":
+        return reasonOf(a).localeCompare(reasonOf(b));
       case "transactionsExtractedCount":
         return (a.transactionsExtractedCount ?? 0) - (b.transactionsExtractedCount ?? 0);
     }
@@ -111,54 +116,70 @@ function RunFiles({ runId }: { runId: string }) {
 
   if (isPending) return <p className="text-sm text-slate-500 dark:text-slate-400">Loading files...</p>;
 
+  // BR-54: the scan reads only PDF files directly inside the watched folder. Say plainly when it ignored something,
+  // because a statement kept as a subfolder, shortcut or image would otherwise just be invisible.
+  const ignoredCount = (files ?? []).filter((f) => f.outcome === "skipped_not_a_pdf").length;
+
   return (
-    <table className="mt-2 w-full text-xs">
-      <thead>
-        <tr className="text-left text-slate-500 dark:text-slate-400">
-          <SortableTh label="File" sortKey="driveFileName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-          <SortableTh label="Outcome" sortKey="outcome" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-          <SortableTh
-            label="Reason"
-            sortKey="failureReason"
-            activeSortKey={sortKey}
-            sortDir={sortDir}
-            onSort={handleSort}
-          />
-          <SortableTh
-            label="Transactions"
-            sortKey="transactionsExtractedCount"
-            activeSortKey={sortKey}
-            sortDir={sortDir}
-            onSort={handleSort}
-          />
-        </tr>
-      </thead>
-      <tbody>
-        {files && sortRunFiles(files, sortKey, sortDir).map((f) => (
-          <tr key={f.id}>
-            <td>{f.driveFileName}</td>
-            <td>
-              {f.outcome === "skipped_probable_duplicate" && f.duplicateComparisonId ? (
-                // Epic 14 (US-14.1/14.2): the file was judged a probable duplicate; the link opens the stored comparison.
-                // The same text appears in every later run that meets the file again (US-14.4).
-                <Link
-                  data-testid={`run-file-duplicate-link-${f.id}`}
-                  to={`/duplicates/${f.duplicateComparisonId}`}
-                  className="underline"
-                >
-                  Probable duplicate of{" "}
-                  {f.matchedStatement ? formatStatementLabel(f.matchedStatement) : "a statement you already have"}
-                </Link>
-              ) : (
-                f.outcome
-              )}
-            </td>
-            <td>{f.failureReason ?? ""}</td>
-            <td>{f.transactionsExtractedCount ?? ""}</td>
+    <>
+      {ignoredCount > 0 && (
+        <p
+          data-testid="run-ignored-notice"
+          className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+        >
+          {ignoredCount} {ignoredCount === 1 ? "item in the Drive folder was" : "items in the Drive folder were"} not
+          read: the scan reads only PDF files directly inside the folder, not subfolders, shortcuts or other file types.
+          If a statement is among them, put it in the folder as a PDF. The Reason column says what each one is.
+        </p>
+      )}
+      <table className="mt-2 w-full text-xs">
+        <thead>
+          <tr className="text-left text-slate-500 dark:text-slate-400">
+            <SortableTh label="File" sortKey="driveFileName" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortableTh label="Outcome" sortKey="outcome" activeSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortableTh
+              label="Reason"
+              sortKey="reason"
+              activeSortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
+            <SortableTh
+              label="Transactions"
+              sortKey="transactionsExtractedCount"
+              activeSortKey={sortKey}
+              sortDir={sortDir}
+              onSort={handleSort}
+            />
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {files && sortRunFiles(files, sortKey, sortDir).map((f) => (
+            <tr key={f.id}>
+              <td>{f.driveFileName}</td>
+              <td>
+                {f.outcome === "skipped_probable_duplicate" && f.duplicateComparisonId ? (
+                  // Epic 14 (US-14.1/14.2): the file was judged a probable duplicate; the link opens the stored comparison.
+                  // The same text appears in every later run that meets the file again (US-14.4).
+                  <Link
+                    data-testid={`run-file-duplicate-link-${f.id}`}
+                    to={`/duplicates/${f.duplicateComparisonId}`}
+                    className="underline"
+                  >
+                    Probable duplicate of{" "}
+                    {f.matchedStatement ? formatStatementLabel(f.matchedStatement) : "a statement you already have"}
+                  </Link>
+                ) : (
+                  f.outcome
+                )}
+              </td>
+              <td data-testid={`run-file-reason-${f.id}`}>{reasonOf(f)}</td>
+              <td>{f.transactionsExtractedCount ?? ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }
 
