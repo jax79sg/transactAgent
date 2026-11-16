@@ -89,8 +89,9 @@ Technology-agnostic domain model. Exact column types/engine choice (PostgreSQL, 
 - `ingestion_run_id` (FK -> IngestionRun)
 - `drive_file_id`
 - `drive_file_name`
-- `outcome` (enum: `processed` | `skipped_duplicate` | `skipped_probable_duplicate` | `failed`) — `skipped_probable_duplicate` added 2026-10-03 (Epic 14)
+- `outcome` (enum: `processed` | `skipped_duplicate` | `skipped_probable_duplicate` | `skipped_no_activity` | `skipped_not_a_pdf` | `failed`) — `skipped_probable_duplicate` added 2026-10-03 (Epic 14); the two new skips added 2026-11-16 (BR-54)
 - `failure_reason` (nullable string)
+- `skip_reason` (nullable text — added 2026-11-16, BR-54; required exactly when `outcome` is `skipped_no_activity` or `skipped_not_a_pdf`)
 - `raw_extracted_text` (nullable, large text) — Question 2 = B
 - `bank_statement_id` (FK -> BankStatement, nullable — set when outcome = `processed`)
 - `transactions_extracted_count` (nullable int)

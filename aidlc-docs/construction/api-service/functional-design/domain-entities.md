@@ -30,7 +30,7 @@ Unit 2 introduces **no new persisted entities** — it reads/writes Unit 1's sch
 - `StartRunResponse`: `{ runId: uuid }` (`202 Accepted`) or `409 Conflict` with `{ existingRunId: uuid }`
 - `RunStatusResponse`: `{ runId, status, startedAt, completedAt?, filesFoundCount, filesProcessedCount, filesSkippedCount, filesFailedCount }`
 - `RunHistoryPage`: `{ items: RunStatusResponse[], page, pageSize, totalCount }`
-- `RunFileDetail`: `{ id, driveFileName, outcome, failureReason?, transactionsExtractedCount?, processedAt }` (list, per run — `raw_extracted_text` only included on an explicit single-file detail request, not this list)
+- `RunFileDetail`: `{ id, driveFileName, outcome, failureReason?, skipReason? (2026-11-16, BR-54: why a file was skipped as no-activity or not-a-PDF), transactionsExtractedCount?, processedAt }` (list, per run — `raw_extracted_text` only included on an explicit single-file detail request, not this list)
 
 ## Configuration
 
