@@ -1,7 +1,7 @@
 # Penetration Test — Execution Plan
 
-Status: awaiting the owner's approval (Workflow Planning gate). Requirements were approved 2026-11-17
-("ok approved."), which also confirmed assumptions A1 to A6 of `penetration-test-requirements.md`.
+Status: **approved 2026-11-17 ("Approved.")** at the Workflow Planning gate. Requirements were approved
+2026-11-17 ("ok approved."), which also confirmed assumptions A1 to A6 of `penetration-test-requirements.md`.
 
 ## Detailed analysis summary
 
@@ -73,7 +73,7 @@ flowchart TD
         WD["Workspace Detection<br/><b>COMPLETED</b>"]
         RA["Requirements Analysis<br/><b>COMPLETED</b>"]
         US["User Stories<br/><b>SKIP</b>"]
-        WP["Workflow Planning<br/><b>IN PROGRESS</b>"]
+        WP["Workflow Planning<br/><b>COMPLETED</b>"]
         AD["Application Design<br/><b>EXECUTE</b>"]
         UG["Units Generation<br/><b>EXECUTE</b>"]
     end
@@ -135,7 +135,7 @@ INCEPTION
   Workspace Detection ........ COMPLETED
   Requirements Analysis ...... COMPLETED (approved 2026-11-17)
   User Stories ............... SKIP
-  Workflow Planning .......... IN PROGRESS (this document)
+  Workflow Planning .......... COMPLETED (approved 2026-11-17)
   Application Design ......... EXECUTE
   Units Generation ........... EXECUTE
 CONSTRUCTION (each unit finished, with its own pull request, before the next)
@@ -157,7 +157,7 @@ OPERATIONS
 - [x] Reverse Engineering (SKIPPED: existing documentation in `aidlc-docs/` is current)
 - [x] Requirements Analysis (COMPLETED, approved 2026-11-17)
 - [x] User Stories (SKIPPED)
-- [x] Execution Plan (IN PROGRESS, this document)
+- [x] Execution Plan (COMPLETED, approved 2026-11-17)
 - [ ] Application Design - EXECUTE
   - **Rationale:** new components and interfaces to settle before any code.
 - [ ] Units Generation - EXECUTE
