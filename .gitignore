@@ -20,3 +20,6 @@ values-local.yaml
 model-training/dataset/
 model-training/output/
 *.parquet
+
+# Pen-test leak check: the local list of real values to refuse. Machine-local, never committed.
+pentest/.local/

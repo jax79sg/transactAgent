@@ -4534,3 +4534,19 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction, U0 Evidence core, Code Generation Part 1 (planning), at the plan-approval gate. Approval prompt (logged before asking): "Code generation plan complete. Review the plan in aidlc-docs/construction/plans/pentest-u0-evidence-core-code-generation-plan.md. Ready to proceed to generation?"
 
 ---
+
+## U0 Code Generation Plan Approved; Part 2 Begins
+**Timestamp**: 2026-11-22T13:33:30Z
+**User Input**: "continue"
+**AI Response**: "Read as approval of the U0 Evidence core Code Generation plan (24 steps in three parts, three owner stops, decisions CG-1 to CG-15) and as the explicit yes to the single download stated in section 3 of the plan (Python wheels from pypi.org, about 30 MB: uv 0.13.9, ruff 0.17.6, pydantic 2.14.4 with pydantic-core 2.50.5, pytest 9.2.0, hypothesis 6.170.17 and their small dependencies; anything else resolving stops the step and asks). No changes requested. Ticked 'Owner approves this plan' in the plan, marked Code Generation Part 1 complete in aidlc-state.md, and begin Part 2 at Step 1 (skeleton and ignore rule). Stops: Owner Stop 1 after Step 9, Stop 2 after Step 16, Stop 3 after Step 24."
+**Context**: Construction, U0 Evidence core, Code Generation Part 2 (generation) starting.
+
+---
+
+## U0 Code Generation Part A Complete; Owner Stop 1 Requested
+**Timestamp**: 2026-11-22T14:07:00Z
+**User Input**: (none new; continuation after "continue", logged above)
+**AI Response**: "Executed Steps 1 to 9 of the U0 Code Generation plan. Created the pentest/ project (pyproject, uv.lock with 14 packages all on the approved download list plus pytest's Windows-only colorama which is recorded but never downloaded, README stub), the .gitignore rule for pentest/.local/ (confirmed with git check-ignore before the literals file existed), shared types and typed errors, read-only git access, the shape detectors S-01 to S-07, the literals-file and allow-list loaders with the LK-1/LK-2/LK-7 refusals, whole-file and diff scanning with the result type that cannot hold matched text, the leak-check command and config. 324 tests pass; ruff is clean. The only download was the approved Python packages from pypi.org (uv 0.13.9 14.7 MB because the old scratch environment had lost its uv binary; ruff 0.17.6 9.1 MiB; pydantic, pydantic-core, pytest, hypothesis and their small dependencies). Created the local literals file by a script that located the values by structure without printing them (owner-only, folder 700, ignored, untracked); no count recorded, per the owner's standing instruction; one slip noted in code-summary.md (a grep I ran typed one name once, in the session tool call only). The first real tool run found three things: a ten-digit alphabet string in my own test (fixed by building it at run time) and a four-digit literal inside two hash-addressed URLs of uv.lock, which led to one design refinement (generated lock files get shape detectors but no literal matching, and the result names them). After that the real tool is clean over the owned files, over this unit's commits and over the whole stack (main..HEAD), agreeing with the hand-run scan (grep over the same added lines, status only). Other refinements are listed in aidlc-docs/construction/pentest/u0-evidence-core/code/code-summary.md and appended as an addendum to business-rules.md section 12. Code summary part 1 written. Nothing outside pentest/, .gitignore and aidlc-docs/ was changed; no target touched."
+**Context**: Construction, U0 Evidence core, Code Generation Part 2, Part A complete. Approval prompt (logged before asking): "Owner Stop 1. Review Part A (skeleton and Leak Check): aidlc-docs/construction/pentest/u0-evidence-core/code/code-summary.md and pentest/. Options: Request Changes; Continue to Part B (the register, Steps 10 to 16)."
+
+---
