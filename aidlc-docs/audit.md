@@ -4502,3 +4502,19 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction, U0 Evidence core, Functional Design, Part 1 (plan and questions), awaiting answers.
 
 ---
+
+## U0 Functional Design Questions Answered
+**Timestamp**: 2026-11-22T11:19:13Z
+**User Input**: "done"
+**AI Response**: "Read the two answers in pentest-u0-evidence-core-functional-design-plan.md: Q1 A, Q2 B. Each is a single letter; neither is combined, conditional or contradictory, so no follow-up questions. Q1 A: severity is decided by a written two-axis table (what the attacker ends up able to do against what the attacker needs first) giving informational, low, medium, high or critical; the table is printed in the report; a finding that does not fit is rated by hand with the reason recorded. Q2 B: I create the local leak-check literals file from the values my pre-push scan already uses; one git-ignored file on this machine; never printed, committed or sent anywhere; the owner may then add or remove lines. Creating the file belongs to U0 Code Generation (the ignore rule is added first), not to this design stage. Proceeding to generate the three Functional Design artifacts."
+**Context**: Construction, U0 Evidence core, Functional Design, Part 1 complete, starting Part 2 (artifact generation).
+
+---
+
+## U0 Functional Design Artifacts Generated; Approval Requested
+**Timestamp**: 2026-11-22T11:23:23Z
+**User Input**: (none new; continuation after "done", logged above)
+**AI Response**: "Generated the three Functional Design artifacts for U0 Evidence core in aidlc-docs/construction/pentest/u0-evidence-core/functional-design/. domain-entities.md: Register, Target, Finding (every PT-FR-7 field plus source, raised_by, checked_by, triage, owner_notified, dedupe key, history), SeverityRating, Proof, AffectedFile, HistoryEntry, RunResults, SuiteIndex, Problem, Funnel and the leak-check entities (patterns, Hit with no field for matched text, allow-list entry, result, diff spec), twelve enumerations, typed errors and invariants. business-rules.md: register handling RG-1 to RG-9, state moves SM-1 to SM-5 with the full move table, evidence rule ER-1 to ER-9, severity SV-1 to SV-6 with the 24-cell two-axis table (Q1 = A, monotonic in both directions, tested), owner notice ON-1 and ON-2, fix tracking FX-1 to FX-6, validator V-01 to V-18, funnel FN-1 to FN-4, leak check shape detectors S-01 to S-07 and rules LK-1 to LK-12, provisioning of the local literals file LP-1 to LP-5 (Q2 = B, done at Code Generation with the ignore rule first and no value ever echoed), requirement coverage. business-logic-model.md: five Mermaid diagrams (finding lifecycle, fix status, confirm, validate, leak check), all validated valid:true, each with a text alternative; operations save and load, funnel, provisioning; the table of refinements to the approved component methods (a pointer paragraph appended to component-methods.md; no component, dependency or unit boundary changed); validation against PT-FR-7 and PT-NFR-1, 5, 6, 7. Two design additions beyond the plan's twelve decisions are flagged for the owner: S-07 credential-shaped detector (PT-NFR-1 names keys and tokens) and diff-mode scanning of file names and commit messages. Cross-check: 83 rule ids defined and 83 referenced, none missing. Real-data scan clean, and the documents also pass the new shape detectors' equivalents (no long digit run, email or credential shape). Nothing was built, downloaded or run, and no target was touched."
+**Context**: Construction, U0 Evidence core, Functional Design, Part 2 complete, at the approval gate. Approval prompt (logged before asking): "Functional Design Complete - U0 Evidence core. Please examine the functional design artifacts at aidlc-docs/construction/pentest/u0-evidence-core/functional-design/. Options: Request Changes; Continue to Next Stage (Code Generation plan for U0)."
+
+---

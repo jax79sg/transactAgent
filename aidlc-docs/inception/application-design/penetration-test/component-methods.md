@@ -148,3 +148,13 @@ class Severity(Enum): INFORMATIONAL, LOW, MEDIUM, HIGH, CRITICAL
 | `LiveGate(allow_paths: frozenset[str], methods: frozenset[str] = {"GET","OPTIONS"}, cap: int = 20)` | The only gate for the live target |
 | `LiveGate.send(method: str, path: str) -> Observation` | Raises `GateRefusal` for any other method, path, credential or over the cap |
 | `run(target: str) -> ExposureReport` | Target supplied at run time; prints what a neighbour could see |
+
+## Refinements made in Functional Design (U0, 2026-11-22)
+
+Signatures for C8 (Findings Register and Validator) and C10 (Leak Check) were refined when their business rules were
+written, as this file's header allows: optional attacker and boundary on `Candidate`, `AddResult` from
+`add_candidate`, `confirm` taking the suite index and a `SeverityRating`, `save` taking the leak patterns, the
+validator taking patterns, today's date and optional run results, new mutators (`reopen`, `rerate`, `record_triage`,
+`mark_fixed`, `reopen_fix`), and the leak check split into `scan_files`, `scan_added_lines` and `scan_text`. No
+component, dependency or unit boundary changed. The full table is in
+`aidlc-docs/construction/pentest/u0-evidence-core/functional-design/business-logic-model.md` section 8.
