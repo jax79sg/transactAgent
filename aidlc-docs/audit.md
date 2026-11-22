@@ -4518,3 +4518,19 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction, U0 Evidence core, Functional Design, Part 2 complete, at the approval gate. Approval prompt (logged before asking): "Functional Design Complete - U0 Evidence core. Please examine the functional design artifacts at aidlc-docs/construction/pentest/u0-evidence-core/functional-design/. Options: Request Changes; Continue to Next Stage (Code Generation plan for U0)."
 
 ---
+
+## U0 Functional Design Approved; Code Generation Planning Begins
+**Timestamp**: 2026-11-22T11:26:29Z
+**User Input**: "continue."
+**AI Response**: "Read as approval of the U0 Evidence core Functional Design (domain-entities.md, business-rules.md, business-logic-model.md), including the two flagged additions (credential-shaped detector S-07 and diff-mode scanning of file names and commit messages); no changes requested. Marked Functional Design (U0) complete in aidlc-state.md. Proceeding to Code Generation, Part 1 (planning) for U0: load code-generation.md, inspect the repository conventions, write the code generation plan with explicit numbered steps and checkboxes, and stop for the owner's approval before any code is written."
+**Context**: Construction, U0 Evidence core, Functional Design approved; Code Generation Part 1 (planning) starting.
+
+---
+
+## U0 Code Generation Plan Written; Approval Requested
+**Timestamp**: 2026-11-22T11:29:55Z
+**User Input**: (none new; continuation after "continue.", logged above)
+**AI Response**: "Loaded code-generation.md and inspected the repository conventions (the other Python projects use a setuptools src layout with uv.lock, uv sync, ruff and pytest; the shell default python3 is 3.9.6 while pyenv provides 3.12.14; uv is not installed). Wrote aidlc-docs/construction/plans/pentest-u0-evidence-core-code-generation-plan.md: 15 build decisions CG-1 to CG-15 explained (pydantic strict models with a generated schema.json, git reached only through one subprocess module with read commands, Leak Check built first and then used on everything after it, tests that build detector-shaped values at run time, a meta-test that every rule id has a test, config constants in one module, no findings.json created in U0, three command-line commands, CI in the existing style with full history and a shapes-only leak scan, Python 3.12 via pyenv, uv installed in a scratch venv outside the repository, only .gitignore and the new workflow changed outside pentest/ and aidlc-docs/, three owner stops); a download statement for the only download in the unit (Python wheels from pypi.org via pip and uv: uv 0.13.9 14.66 MB, ruff 0.17.6 9.58 MB, pydantic 2.14.4 and pydantic-core 2.50.5 about 2.6 MB, pytest 9.2.0 and hypothesis 6.170.17 with their small dependencies about 2.7 MB, about 30 MB in total; looked up from the index metadata only; approving the plan is the yes; anything else that resolves stops the step); exact file paths; 24 numbered steps in three parts (A skeleton and Leak Check to Owner Stop 1, B register to Owner Stop 2, C validator, command line, CI and documents to Owner Stop 3) each with the rules it covers; a test plan by file; risks; requirement traceability. No questions: every choice is a build detail inside the approved design. Real-data scan clean; no long digit run, email or credential shape in the plan. Nothing was built, downloaded or run, and no target was touched."
+**Context**: Construction, U0 Evidence core, Code Generation Part 1 (planning), at the plan-approval gate. Approval prompt (logged before asking): "Code generation plan complete. Review the plan in aidlc-docs/construction/plans/pentest-u0-evidence-core-code-generation-plan.md. Ready to proceed to generation?"
+
+---
