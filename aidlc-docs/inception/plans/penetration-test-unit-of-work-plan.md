@@ -4,8 +4,8 @@ Units Generation, Part 1 (Planning). Source: the approved execution plan (six pr
 U6, U4, U5) and the approved Application Design (components C1 to C13). User Stories were skipped, so the "story map"
 artifact maps requirements (PT-FR and PT-NFR) to units instead.
 
-Status: **three questions need your answers** (section 3). The rest is decomposition decisions I made and explain
-(section 2). Nothing has been built.
+Status: the owner answered the three questions on 2026-11-22 (Q1 A, Q2 B, Q3 A); decomposition settled below; awaiting the
+owner's approval to proceed to generation. Nothing has been built.
 
 ## 1. What this stage had to resolve
 
@@ -58,7 +58,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A.
 
-[Answer]: 
+[Answer]: A
 
 ### Question 2
 There will be six or seven unit pull requests plus the inception one, each building on the last. Merging is yours
@@ -78,7 +78,7 @@ X) Other (please describe after [Answer]: tag below)
 Recommendation: B. Units depend directly on each other's code (U2 needs U1's stack), so waiting on each merge would
 stall the work, and a stacked set can still be merged one at a time.
 
-[Answer]: 
+[Answer]: B
 
 ### Question 3
 The project workflow stops for your approval at every stage of every unit: functional design, infrastructure design,
@@ -99,9 +99,9 @@ X) Other (please describe after [Answer]: tag below)
 Recommendation: A for U0 and U1 (the safety-critical units), then B once you have seen how they go.
 If you want one answer: A.
 
-[Answer]: 
+[Answer]: A
 
-## 4. Proposed decomposition (assumes Question 1 = A; the other options are shown beside it)
+## 4. Decomposition (Question 1 = A, as answered)
 
 | Unit | Content (components) | Requirements | Depends on | Functional Design | Infrastructure Design |
 |---|---|---|---|---|---|
@@ -113,18 +113,26 @@ If you want one answer: A.
 | **U4 Track A code audit** | C9 Audit Kit; the audit run (reconnaissance, waves, disproof, proofs added to the suite, record verification) | PT-FR-4; A1 | U0, U1, U2, U3 | EXECUTE (audit procedure, ledger, work-package format, budget rules) | SKIP |
 | **U5 Report, runner, CI** | C11 Report Generator; Run Orchestrator completion (report phase, exit statuses); `pentest.yml` | PT-FR-8, 9; PT-NFR-3 | all | SKIP | EXECUTE (the hand-started workflow) |
 
-If Question 1 = B: no U0; U1 also takes C8 and C10, the skeleton and `test-pentest.yml`; its Functional Design also
-covers the register. If Question 1 = C: no U0; U1 takes the skeleton, `test-pentest.yml` and C10; U3 takes C8 and its
-Functional Design; U2's findings wait in a scratch list.
+Alternatives not chosen (Question 1 B and C: no U0, register and leak check in U1 or U3) are described in section 3.
 
-Execution order if Q1 = A: **U0, U1, U2, U3, U6, U4, U5**, then Build and Test. (Otherwise the same without U0.)
+Execution order: **U0, U1, U2, U3, U6, U4, U5**, then Build and Test.
+
+## 4a. Answers analysed (2026-11-22)
+
+| Question | Answer | Reading and effect |
+|---|---|---|
+| Q1 | A | Add **U0 Evidence core** first (skeleton, register and validator, leak check, `test-pentest.yml`). Seven units, order U0, U1, U2, U3, U6, U4, U5. U4 keeps the code audit only. |
+| Q2 | B | **Stacked branches.** Each unit branch starts from the previous one and its pull request targets that branch: `docs/release-1.4.0-record` (#77) then `security/pentest-inception` (inception records) then `security/pentest-u0-evidence-core` then U1 and so on. The repository merges with merge commits (for example #76), so a stack merges cleanly in order; GitHub retargets each pull request when its base is merged. Merging stays the owner's call, one at a time. |
+| Q3 | A | **Every stop**, exactly as the project workflow says (about 23). My recommendation was A for U0 and U1 and then B; the owner chose A without the conditional, so A applies to every unit. I may offer B again later, but I will not apply it without a new instruction. |
+
+No answer is ambiguous, combined or conditional, so there are no follow-up questions.
 
 ## 5. Execution checklist
 
 - [x] Read the approved execution plan, requirements and application design; map components to units
 - [x] Write this plan with decisions (section 2), questions (section 3) and the proposed decomposition (section 4)
-- [ ] Owner answers the three questions
-- [ ] Analyse the answers for ambiguity; ask follow-ups if any
+- [x] Owner answers the three questions (2026-11-22: Q1 A, Q2 B, Q3 A)
+- [x] Analyse the answers for ambiguity; ask follow-ups if any (none needed, section 4a)
 - [ ] Log the approval prompt ("Unit of work plan complete. Review the plan in aidlc-docs/inception/plans/penetration-test-unit-of-work-plan.md. Ready to proceed to generation?") and get approval
 - [ ] Generate `aidlc-docs/inception/application-design/penetration-test/unit-of-work.md` (unit definitions and responsibilities)
 - [ ] Generate `.../penetration-test/unit-of-work-dependency.md` (dependency matrix and order)
