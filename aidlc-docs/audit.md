@@ -4550,3 +4550,19 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Construction, U0 Evidence core, Code Generation Part 2, Part A complete. Approval prompt (logged before asking): "Owner Stop 1. Review Part A (skeleton and Leak Check): aidlc-docs/construction/pentest/u0-evidence-core/code/code-summary.md and pentest/. Options: Request Changes; Continue to Part B (the register, Steps 10 to 16)."
 
 ---
+
+## U0 Owner Stop 1 Approved; Part B (Register) Begins
+**Timestamp**: 2026-11-22T14:02:42Z
+**User Input**: "continue"
+**AI Response**: "Read as approval of Part A (skeleton and Leak Check, Steps 1 to 9, commit 836e18a) including the refinements listed in code-summary.md (generated lock files get shape detectors but no literal matching; S-06 no-person addresses; S-07 minimum lengths; per-commit range scanning; literal line numbers). No changes requested. Proceeding to Part B: Steps 10 to 16 (severity table, models and suite inputs, load and save, candidates and state moves, confirm / rerate / owner notice, fix tracking, funnel), stopping at Owner Stop 2."
+**Context**: Construction, U0 Evidence core, Code Generation Part 2, Part B starting.
+
+---
+
+## U0 Code Generation Part B Complete; Owner Stop 2 Requested
+**Timestamp**: 2026-11-22T14:16:26Z
+**User Input**: (none new; continuation after "continue", logged above)
+**AI Response**: "Executed Steps 10 to 16 of the U0 Code Generation plan: severity.py (the 24-cell table as one constant with the rating checks SV-1 to SV-5), suite.py (run results and the suite index as plain records), models.py (strict immutable models with unknown fields forbidden, the RG-8 limits, canonical serialisation, schema problems that carry a field path and an error type but never a value), and register.py (new, load, atomic canonical save with a whole-text leak scan, add_candidate idempotent by dedupe key, reject, note_hardening, reopen, confirm under the evidence rule ER-1 to ER-9, rerate, record_owner_notice, record_triage, mark_fixed, reopen_fix, funnel). Every operation checks all its conditions, reports every unmet one together, scans every supplied text for leaks, and changes nothing when refused. 748 tests pass (up from 324); ruff is clean. The tests found one real defect (an over-limit value in reopen escaped as a raw library error; fixed). The real leak check flagged, twice, a ten-digit literal in my own test files; both are now generated at run time. After that the real check is clean over everything owned. Refinements made while building (history replay rule for V-12, triage reset when leaving a tracked state, V-14 enforced at rejection for every kind, reopen_fix needing a live proof, record_triage and record_owner_notice details, FunnelInconsistent, constructor taking patterns and clock) are listed in code-summary.md and in a Part B addendum to business-rules.md section 13. No download this part; no product file changed; no target touched."
+**Context**: Construction, U0 Evidence core, Code Generation Part 2, Part B complete. Approval prompt (logged before asking): "Owner Stop 2. Review Part B (the register): aidlc-docs/construction/pentest/u0-evidence-core/code/code-summary.md and pentest/src/pentest/register.py. Options: Request Changes; Continue to Part C (validator, command line, CI, documents, Steps 17 to 24)."
+
+---
