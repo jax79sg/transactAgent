@@ -72,7 +72,7 @@ These are my readings of the answers. They are not questions; approval of this d
 
 **PT-FR-1 Throwaway stack.** A compose definition of its own (`pentest/`), not an override of the live one:
 its own project name; no `container_name` (so nothing can collide with `transactagent-*`); named volumes
-only, no `./data/...` path; ports bound to `127.0.0.1` in a range the live stack does not use; an
+only, no `./data/...` path; no published ports (amended 2026-11-22, see section 9; originally "ports bound to `127.0.0.1` in a range the live stack does not use"); an
 internal-only network with no route out; a fresh database built by running the real migrations from empty;
 generated JWT and database secrets; fake Google and Gemini credentials; local stubs for the Google, Gemini
 and embedding endpoints. `docker compose config` is checked before anything starts. It is torn down,
@@ -179,3 +179,13 @@ Proposed units of work, to be confirmed there: (1) throwaway stack, seed, stubs 
 (3) scanners and findings normalisation; (4) Track A code audit and register; (5) report, one-command
 runner and CI workflow; (6) the live exposure check. Open for planning: the sub-agent cap (A1), the unit
 order, and the port range.
+
+## 9. Amendments after approval
+
+- **2026-11-22, application-design Question 4 = A (owner).** The throwaway stack publishes **no ports**.
+  Reason found during design: Docker cannot publish a port from a network with no route out, so loopback ports
+  would need a second, ordinary network. The runner, browser and scanners are containers on the internal network
+  and reach the stack by service name. This replaces the loopback-port wording in PT-FR-1 and in ground rule 1 of
+  `penetration-test-questions.md`; everything else in them stands. "Which ports does the real deployment
+  publish?" is answered by a static test of the real `docker-compose.yml` and by the live exposure check
+  (PT-FR-10). The open item in section 8 about "the port range" is therefore moot.

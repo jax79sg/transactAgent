@@ -56,7 +56,7 @@ Status: **approved 2026-11-17 ("Approved.")** at the Workflow Planning gate. Req
 | Functional Design | **EXECUTE** for U1, U2, U3, U4; **SKIP** for U5, U6 | Guard rules and seed (U1), the test catalogue and caps (U2), the normaliser mapping (U3) and the register schema and audit procedure (U4) are business-rule heavy. U5 and U6 are thin wrappers over those. |
 | NFR Requirements | **SKIP** | Already specified in PT-NFR-1 to PT-NFR-8; the technology stack is fixed (Python, pytest, httpx, Playwright, Docker, pinned scanner images). |
 | NFR Design | **SKIP** | Follows NFR Requirements. The isolation, caps and egress proof are designed inside U1 and U2. |
-| Infrastructure Design | **EXECUTE** for U1, U3, U5; **SKIP** for U2, U4, U6 | U1: compose project, internal network, named volumes, loopback port range (the hazard-prone part). U3: scanner images, pinned by digest, attached to the internal network. U5: the hand-started CI workflow. |
+| Infrastructure Design | **EXECUTE** for U1, U3, U5; **SKIP** for U2, U4, U6 | U1: compose project, internal network, named volumes, no published ports (amended 2026-11-22; the hazard-prone part). U3: scanner images, pinned by digest, attached to the internal network. U5: the hand-started CI workflow. |
 | Code Generation | **EXECUTE** for all six units | Always. For U4 the "code" is the audit procedure, the register validator and the proof tests; the audit itself is run as part of the unit. |
 | Build and Test | **EXECUTE** | Always: run the guard tests, the suite, the scanners and the validator from a clean checkout; one full end-to-end run and one run in CI. |
 | Operations | Placeholder | |
@@ -178,7 +178,7 @@ OPERATIONS
 
 | Unit | Content | Requirements | Depends on | Done when |
 |---|---|---|---|---|
-| U1 Harness core | Throwaway stack (own project, internal network, named volumes, loopback port range, no `container_name`, no `./data`); synthetic seed; Google, Gemini and embedding stubs; safety guard; teardown. | PT-FR-1, 2, 3; PT-NFR-1, 2, 3 | none | Stack comes up from empty, migrations run, guard refuses every live port and name (tested), the runner proves no route out, teardown leaves no volume. |
+| U1 Harness core | Throwaway stack (own project, internal network, named volumes, no published ports (amended 2026-11-22), no `container_name`, no `./data`); synthetic seed; Google, Gemini and embedding stubs; safety guard; teardown. | PT-FR-1, 2, 3; PT-NFR-1, 2, 3 | none | Stack comes up from empty, migrations run, guard refuses every live port and name (tested), the runner proves no route out, teardown leaves no volume. |
 | U2 Baseline Track B suite | Test catalogue and tests for each area in PT-FR-5, with fixed caps. | PT-FR-5 | U1 | Every area has tests; open findings are strict expected-to-fail; the suite is deterministic on two runs. |
 | U3 Scanners | OWASP ZAP (baseline and API scan) and Trivy (images, filesystem, rendered Helm chart) from pinned digests; normaliser into the register. | PT-FR-6 | U1 | Both scanners run against the throwaway stack only; output lands in the register. Exact image references and sizes are stated before any pull. |
 | U6 Live exposure check | Opt-in script, allowlisted read-only requests, one run. | PT-FR-10; A5 | U1 (guard) | Script has tests for its allowlist and request cap; one run, result recorded. Announced before it runs. |

@@ -4,8 +4,8 @@ Role: software architect, identifying the components, interfaces, services and d
 harness. Scope: the new `pentest/` project only. No existing application component changes (execution plan,
 "Change type for every existing component: none").
 
-Status: **four questions need your answers** (section 3). The rest is decisions I made and explain (section 2),
-in the same way earlier application-design plans here did. Nothing has been built.
+Status: the owner answered the four questions on 2026-11-22 (Q1 A, Q2 B, Q3 C, Q4 A); design artifacts generated in
+`aidlc-docs/inception/application-design/penetration-test/`, awaiting approval. Nothing has been built.
 
 ## 1. What I looked at before writing this
 
@@ -79,7 +79,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A.
 
-[Answer]: 
+[Answer]: A
 
 ### Question 2
 Some web-app checks need a real browser (does injected text run as a script, can the app be framed, where the
@@ -101,7 +101,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A.
 
-[Answer]: 
+[Answer]: B
 
 ### Question 3
 The throwaway stack and the live stack share one Docker engine on this machine. The bounded resource-exhaustion
@@ -121,7 +121,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: C for the first full runs, then A once you trust it. If you want one answer: C.
 
-[Answer]: 
+[Answer]: C
 
 ### Question 4
 Approved ground rule 1 says the throwaway stack's ports are bound to `127.0.0.1` on a range the live stack
@@ -144,7 +144,7 @@ X) Other (please describe after [Answer]: tag below)
 
 Recommendation: A. It is the smaller and stricter design, and nothing in the test needs a door from the host.
 
-[Answer]: 
+[Answer]: A
 
 ## 4. Execution checklist
 
@@ -152,14 +152,14 @@ Steps of this stage. Ticked as done.
 
 - [x] Read the execution plan, requirements, existing application-design documents and the code facts in section 1
 - [x] Write this plan with decisions (section 2) and questions (section 3)
-- [ ] Owner answers the four questions
-- [ ] Analyse the answers for ambiguity; ask follow-ups if any
-- [ ] Generate `aidlc-docs/inception/application-design/penetration-test/components.md`
-- [ ] Generate `.../penetration-test/component-methods.md` (signatures only; rules come in Functional Design)
-- [ ] Generate `.../penetration-test/services.md` (the Run Orchestrator and its phases)
-- [ ] Generate `.../penetration-test/component-dependency.md` (matrix, communication patterns, validated diagram and a text alternative)
-- [ ] Generate `.../penetration-test/application-design.md` (consolidated)
-- [ ] Validate completeness and consistency against PT-FR-1 to PT-FR-11 and PT-NFR-1 to PT-NFR-8
+- [x] Owner answers the four questions (2026-11-22: Q1 A, Q2 B, Q3 C, Q4 A)
+- [x] Analyse the answers for ambiguity (none: four single letters, no combined or conditional answers; Q2 B differs from my recommendation and is followed; Q4 A amends the approved requirements, recorded in `penetration-test-requirements.md` section 9 and the execution plan)
+- [x] Generate `aidlc-docs/inception/application-design/penetration-test/components.md`
+- [x] Generate `.../penetration-test/component-methods.md` (signatures only; rules come in Functional Design)
+- [x] Generate `.../penetration-test/services.md` (the Run Orchestrator and its phases)
+- [x] Generate `.../penetration-test/component-dependency.md` (matrix, communication patterns, two validated diagrams with text alternatives)
+- [x] Generate `.../penetration-test/application-design.md` (consolidated)
+- [x] Validate completeness and consistency against PT-FR-1 to PT-FR-11 and PT-NFR-1 to PT-NFR-8 (traceability table in `application-design.md`)
 - [ ] Log the approval prompt, present the completion message, wait for approval
 - [ ] Mark Application Design complete in `aidlc-state.md`
 
