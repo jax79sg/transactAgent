@@ -4494,3 +4494,11 @@ Most of these are Paynow payments in Singapore, which is rather common. ANd they
 **Context**: Inception phase complete. Transition to Construction, unit U0, Functional Design.
 
 ---
+
+## Inception Pull Request Opened (#78); Construction Begins With U0 Functional Design Plan
+**Timestamp**: 2026-11-22T10:35:00Z
+**User Input**: (none new; continuation after the owner's "approved" for Units Generation, logged above)
+**AI Response**: "Opened pull request 78 from security/pentest-inception targeting docs/release-1.4.0-record (stacked on PR 77, owner's Q2 = B), documents only, with a body that states what it contains and does not do and that the real-data scan was clean. The session's PR bar had already bound it. Its monitor shows auto-fix off; per the standing note that auto-fix is refused for pull requests authored by the agent account, no attempt was made, and the owner can switch it on in the pull request panel. Checks were not yet reported. Started the CONSTRUCTION PHASE on branch security/pentest-u0-evidence-core (from the inception branch): loaded functional-design.md and wrote aidlc-docs/construction/plans/pentest-u0-evidence-core-functional-design-plan.md with twelve decisions made and explained (record shape, identifiers, state moves, the evidence rule, fix tracking, the owner-notified date, the validator, the suite-binding interface, the funnel, leak-check detectors, leak-check discipline including the two modes, error handling and atomic save) and two questions: Q1 how severity is decided (recommended: a written two-axis table of attacker capability against what the attacker needs first; alternatives CVSS 4.0 vectors or plain judgement) and Q2 who fills the local leak-check literals file (recommended: B, I create it from the values I already use in my pre-push scan, in one git-ignored file never printed or committed; alternatives A the owner fills it, C shapes only). Noted for the U0 code plan: uv is not installed on this machine (Python 3.12.14 and pip are), so creating uv.lock like the other units needs uv installed into a project virtual environment, a download that will be stated to the owner first. Real-data scan clean. Nothing was built, downloaded or run, and no target was touched."
+**Context**: Construction, U0 Evidence core, Functional Design, Part 1 (plan and questions), awaiting answers.
+
+---
