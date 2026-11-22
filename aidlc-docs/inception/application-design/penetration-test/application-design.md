@@ -1,6 +1,6 @@
 # Application Design — Penetration Test (Consolidated)
 
-Status: awaiting the owner's approval (Application Design gate). Nothing described here has been built.
+Status: **approved 2026-11-22 ("approve")** at the Application Design gate. Nothing described here has been built.
 Source documents: `components.md`, `component-methods.md`, `services.md`, `component-dependency.md` (this directory) and
 `inception/plans/penetration-test-application-design-plan.md` (decisions D1 to D15, questions, answers).
 

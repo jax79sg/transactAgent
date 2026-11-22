@@ -4,8 +4,8 @@ Role: software architect, identifying the components, interfaces, services and d
 harness. Scope: the new `pentest/` project only. No existing application component changes (execution plan,
 "Change type for every existing component: none").
 
-Status: the owner answered the four questions on 2026-11-22 (Q1 A, Q2 B, Q3 C, Q4 A); design artifacts generated in
-`aidlc-docs/inception/application-design/penetration-test/`, awaiting approval. Nothing has been built.
+Status: **approved 2026-11-22 ("approve")**. The owner answered the four questions on 2026-11-22 (Q1 A, Q2 B, Q3 C, Q4 A); design
+artifacts are in `aidlc-docs/inception/application-design/penetration-test/`. Nothing has been built.
 
 ## 1. What I looked at before writing this
 
@@ -160,8 +160,8 @@ Steps of this stage. Ticked as done.
 - [x] Generate `.../penetration-test/component-dependency.md` (matrix, communication patterns, two validated diagrams with text alternatives)
 - [x] Generate `.../penetration-test/application-design.md` (consolidated)
 - [x] Validate completeness and consistency against PT-FR-1 to PT-FR-11 and PT-NFR-1 to PT-NFR-8 (traceability table in `application-design.md`)
-- [ ] Log the approval prompt, present the completion message, wait for approval
-- [ ] Mark Application Design complete in `aidlc-state.md`
+- [x] Log the approval prompt, present the completion message, wait for approval (approved 2026-11-22: "approve")
+- [x] Mark Application Design complete in `aidlc-state.md`
 
 The existing `application-design/*.md` files describe the product and are not edited. The pen-test design goes
 in its own subdirectory so the product's design record stays intact.
