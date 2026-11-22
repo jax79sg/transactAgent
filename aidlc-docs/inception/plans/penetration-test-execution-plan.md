@@ -174,15 +174,16 @@ OPERATIONS
 ### OPERATIONS PHASE
 - [ ] Operations - PLACEHOLDER
 
-## Units of work (proposed; confirmed in Units Generation)
+## Units of work (confirmed in Units Generation, 2026-11-22; see the amendment at the end)
 
 | Unit | Content | Requirements | Depends on | Done when |
 |---|---|---|---|---|
-| U1 Harness core | Throwaway stack (own project, internal network, named volumes, no published ports (amended 2026-11-22), no `container_name`, no `./data`); synthetic seed; Google, Gemini and embedding stubs; safety guard; teardown. | PT-FR-1, 2, 3; PT-NFR-1, 2, 3 | none | Stack comes up from empty, migrations run, guard refuses every live port and name (tested), the runner proves no route out, teardown leaves no volume. |
-| U2 Baseline Track B suite | Test catalogue and tests for each area in PT-FR-5, with fixed caps. | PT-FR-5 | U1 | Every area has tests; open findings are strict expected-to-fail; the suite is deterministic on two runs. |
-| U3 Scanners | OWASP ZAP (baseline and API scan) and Trivy (images, filesystem, rendered Helm chart) from pinned digests; normaliser into the register. | PT-FR-6 | U1 | Both scanners run against the throwaway stack only; output lands in the register. Exact image references and sizes are stated before any pull. |
+| U0 Evidence core (added 2026-11-22) | Project skeleton; findings register and validator; leak check; ordinary-CI workflow for the harness's own tests. | PT-FR-7; PT-NFR-1, 5, 6, 7 | none | Harness tests pass locally and in CI; the validator rejects each way a record can be wrong; `confirm()` refuses without a proof run; the leak check never prints matched text. |
+| U1 Harness core | Throwaway stack (own project, internal network, named volumes, no published ports (amended 2026-11-22), no `container_name`, no `./data`); synthetic seed; Google, Gemini and embedding stubs; safety guard; teardown. | PT-FR-1, 2, 3; PT-NFR-1, 2, 3 | U0 | Stack comes up from empty, migrations run, guard refuses every live port and name (tested), the runner proves no route out, teardown leaves no volume. |
+| U2 Baseline Track B suite | Test catalogue and tests for each area in PT-FR-5, with fixed caps. | PT-FR-5 | U0, U1 | Every area has tests; open findings are strict expected-to-fail; the suite is deterministic on two runs. |
+| U3 Scanners | OWASP ZAP (baseline and API scan) and Trivy (images, filesystem, rendered Helm chart) from pinned digests; normaliser into the register. | PT-FR-6 | U0, U1 | Both scanners run against the throwaway stack only; output lands in the register. Exact image references and sizes are stated before any pull. |
 | U6 Live exposure check | Opt-in script, allowlisted read-only requests, one run. | PT-FR-10; A5 | U1 (guard) | Script has tests for its allowlist and request cap; one run, result recorded. Announced before it runs. |
-| U4 Track A code audit | Procedure (adopted from the Cloudflare method), register schema and validator, reconnaissance and coverage ledger, hunting waves, disproof, record verification, proof tests added to the suite. | PT-FR-4, 7; A1 | U1, U2, U3 | Ledger covered; every confirmed finding has a failing proof against unmodified code; validator passes; funnel reported. |
+| U4 Track A code audit | Procedure (adopted from the Cloudflare method), reconnaissance and coverage ledger, hunting waves, disproof, record verification, proof tests added to the suite (the register and validator moved to U0). | PT-FR-4; A1 | U0, U1, U2, U3 | Ledger covered; every confirmed finding has a failing proof against unmodified code; validator passes; funnel reported. |
 | U5 Report, runner, CI | `REPORT.md` generator, one command, hand-started workflow. | PT-FR-8, 9 | all | One command produces the report from a clean checkout; the workflow runs green on the branch. |
 
 Fix stage (PT-FR-11) is **not** in this plan. It starts after the report is read and gets its own plan.
@@ -234,3 +235,17 @@ unknown until they run.
   confirmed finding fails against unmodified code; the validator passes; two consecutive runs agree;
   nothing real appears in anything committed.
 - **Not part of success:** fixing findings, a release, or a change to the live stack.
+
+## Amendment (Units Generation, approved 2026-11-22)
+
+- **Seven units, not six.** U0 Evidence core is added first (owner's answer Q1 = A). The register and validator move
+  from U4 to U0, and the leak check is built there too, because U2 and U3 produce findings and the repository is
+  public. Order: **U0, U1, U2, U3, U6, U4, U5**. The Mermaid diagram above shows the original six-unit order; U0
+  precedes U1.
+- **Functional Design** now executes for U0 to U4 (U0 for the register schema and validator rules; U4 for the audit
+  procedure and ledger). U5 and U6 still skip it.
+- **Branches:** stacked, each unit branched from the previous one (owner's answer Q2 = B); the plan in
+  `unit-of-work.md` lists the branch and base of every pull request.
+- **Approval stops:** every stop, as the workflow says, about 23 (owner's answer Q3 = A).
+- **Ports:** the throwaway stack publishes none (design Question 4 = A; requirements section 9).
+- Sources: `inception/plans/penetration-test-unit-of-work-plan.md`, `inception/application-design/penetration-test/unit-of-work*.md`.

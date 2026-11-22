@@ -4,8 +4,8 @@ Units Generation, Part 1 (Planning). Source: the approved execution plan (six pr
 U6, U4, U5) and the approved Application Design (components C1 to C13). User Stories were skipped, so the "story map"
 artifact maps requirements (PT-FR and PT-NFR) to units instead.
 
-Status: the owner answered the three questions on 2026-11-22 (Q1 A, Q2 B, Q3 A); decomposition settled below; awaiting the
-owner's approval to proceed to generation. Nothing has been built.
+Status: plan **approved 2026-11-22 ("Approve")**; the three unit documents are generated in
+`aidlc-docs/inception/application-design/penetration-test/`, awaiting approval of Units Generation. Nothing has been built.
 
 ## 1. What this stage had to resolve
 
@@ -105,7 +105,7 @@ If you want one answer: A.
 
 | Unit | Content (components) | Requirements | Depends on | Functional Design | Infrastructure Design |
 |---|---|---|---|---|---|
-| **U0 Evidence core** (new, if Q1 = A) | Project skeleton; C8 Findings Register and Validator; C10 Leak Check; `test-pentest.yml` | PT-FR-7 (register), PT-NFR-1 (leak), PT-NFR-6, PT-NFR-7 | none | EXECUTE (register schema, states, severity rubric, validator rules; leak-check rules) | SKIP |
+| **U0 Evidence core** (new) | Project skeleton; C8 Findings Register and Validator; C10 Leak Check; `test-pentest.yml` | PT-FR-7 (register), PT-NFR-1 (leak), PT-NFR-6, PT-NFR-7 | none | EXECUTE (register schema, states, severity rubric, validator rules; leak-check rules) | SKIP |
 | **U1 Harness core** | C1 Stack Manager, C2 Compose Linter, C3 Request Guard, C4 Synthetic Seed, C5 Stub Server; the stack definition and the runner, stub and seed images; Run Orchestrator start (preflight, build, up, seed, isolation, teardown) | PT-FR-1, 2, 3; PT-NFR-1, 2, 3 | U0 | EXECUTE (guard rules, linter rules, parity list, seed content, stub scenarios, the certificate spike) | EXECUTE (compose project, internal network, volumes, CPU/memory/process limits, image references and sizes) |
 | **U2 Baseline Track B suite** | C6 Track B Suite; orchestrator suite phase | PT-FR-5; PT-NFR-4 | U1, U0 | EXECUTE (catalogue, caps, the OWASP/ASVS mapping) | SKIP |
 | **U3 Scanners** | C7 Scanner Adapters and normaliser; orchestrator scanner and normalise phases | PT-FR-6 | U1, U0 | EXECUTE (normaliser mapping) | EXECUTE (ZAP and Trivy images, ZAP flags, Trivy database refresh) |
@@ -133,13 +133,13 @@ No answer is ambiguous, combined or conditional, so there are no follow-up quest
 - [x] Write this plan with decisions (section 2), questions (section 3) and the proposed decomposition (section 4)
 - [x] Owner answers the three questions (2026-11-22: Q1 A, Q2 B, Q3 A)
 - [x] Analyse the answers for ambiguity; ask follow-ups if any (none needed, section 4a)
-- [ ] Log the approval prompt ("Unit of work plan complete. Review the plan in aidlc-docs/inception/plans/penetration-test-unit-of-work-plan.md. Ready to proceed to generation?") and get approval
-- [ ] Generate `aidlc-docs/inception/application-design/penetration-test/unit-of-work.md` (unit definitions and responsibilities)
-- [ ] Generate `.../penetration-test/unit-of-work-dependency.md` (dependency matrix and order)
-- [ ] Generate `.../penetration-test/unit-of-work-story-map.md` (stories were skipped: maps PT-FR and PT-NFR items to units)
-- [ ] Document the code organisation (brownfield addition under `pentest/`) in `unit-of-work.md`
-- [ ] Validate unit boundaries and dependencies (no cycles; every requirement and component assigned to exactly one unit)
-- [ ] Update the execution plan's unit table and `aidlc-state.md`; present the completion message and wait for approval
+- [x] Log the approval prompt ("Unit of work plan complete. Review the plan in aidlc-docs/inception/plans/penetration-test-unit-of-work-plan.md. Ready to proceed to generation?") and get approval (approved 2026-11-22: "Approve")
+- [x] Generate `aidlc-docs/inception/application-design/penetration-test/unit-of-work.md` (unit definitions and responsibilities)
+- [x] Generate `.../penetration-test/unit-of-work-dependency.md` (dependency matrix and order; one Mermaid diagram, validated, with a text alternative)
+- [x] Generate `.../penetration-test/unit-of-work-story-map.md` (stories were skipped: maps PT-FR and PT-NFR items to units)
+- [x] Document the code organisation (brownfield addition under `pentest/`) in `unit-of-work.md`
+- [x] Validate unit boundaries and dependencies (no cycles; every requirement and component assigned to exactly one unit; validation lists in `unit-of-work-story-map.md`)
+- [x] Update the execution plan's unit table (done, amendment at its end) and `aidlc-state.md`; present the completion message and wait for approval (completion message presented 2026-11-22; awaiting approval)
 - [ ] Open the pull request for the inception records (`security/pentest-inception`), bind it, and report
 
 The product's existing `unit-of-work*.md` files describe the product and are not edited.
