@@ -5,7 +5,7 @@ U6, U4, U5) and the approved Application Design (components C1 to C13). User Sto
 artifact maps requirements (PT-FR and PT-NFR) to units instead.
 
 Status: plan **approved 2026-11-22 ("Approve")**; the three unit documents are generated in
-`aidlc-docs/inception/application-design/penetration-test/`, awaiting approval of Units Generation. Nothing has been built.
+`aidlc-docs/inception/application-design/penetration-test/`, **Units Generation approved 2026-11-22 ("approved")**. Nothing has been built.
 
 ## 1. What this stage had to resolve
 
@@ -139,7 +139,7 @@ No answer is ambiguous, combined or conditional, so there are no follow-up quest
 - [x] Generate `.../penetration-test/unit-of-work-story-map.md` (stories were skipped: maps PT-FR and PT-NFR items to units)
 - [x] Document the code organisation (brownfield addition under `pentest/`) in `unit-of-work.md`
 - [x] Validate unit boundaries and dependencies (no cycles; every requirement and component assigned to exactly one unit; validation lists in `unit-of-work-story-map.md`)
-- [x] Update the execution plan's unit table (done, amendment at its end) and `aidlc-state.md`; present the completion message and wait for approval (completion message presented 2026-11-22; awaiting approval)
+- [x] Update the execution plan's unit table (done, amendment at its end) and `aidlc-state.md`; present the completion message and wait for approval (completion message presented 2026-11-22; approved 2026-11-22: "approved")
 - [ ] Open the pull request for the inception records (`security/pentest-inception`), bind it, and report
 
 The product's existing `unit-of-work*.md` files describe the product and are not edited.
